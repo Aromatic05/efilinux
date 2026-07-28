@@ -49,6 +49,10 @@ initramfs_source=$(grep '^CONFIG_INITRAMFS_SOURCE=' "$kernel_config")
     die "obsolete external kernel layer remains in initramfs configuration"
 [[ "$initramfs_source" != *"initramfs-root"* ]] || \
     die "a second initramfs root is configured"
+grep -qx "CONFIG_INITRAMFS_ROOT_UID=$EFILINUX_INITRAMFS_ROOT_UID" "$kernel_config" || \
+    die "initramfs build-user UID is not mapped to root"
+grep -qx "CONFIG_INITRAMFS_ROOT_GID=$EFILINUX_INITRAMFS_ROOT_GID" "$kernel_config" || \
+    die "initramfs build-user GID is not mapped to root"
 
 require_kernel_option() {
     local option=$1
@@ -69,6 +73,13 @@ for option in \
     CONFIG_TMPFS \
     CONFIG_CGROUPS \
     CONFIG_NAMESPACES \
+    CONFIG_FUTEX \
+    CONFIG_FUTEX_PI \
+    CONFIG_EPOLL \
+    CONFIG_EVENTFD \
+    CONFIG_SIGNALFD \
+    CONFIG_TIMERFD \
+    CONFIG_FILE_LOCKING \
     CONFIG_SECCOMP_FILTER \
     CONFIG_INOTIFY_USER \
     CONFIG_FANOTIFY \

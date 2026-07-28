@@ -139,11 +139,11 @@ root = Path(sys.argv[1])
 library_directory = root / "usr/lib"
 missing: list[tuple[str, str]] = []
 
-for program in sorted((root / "usr/bin").iterdir()):
-    if not program.is_file() or program.is_symlink():
+for artifact in sorted(root.rglob("*")):
+    if artifact.is_symlink() or not artifact.is_file():
         continue
     result = subprocess.run(
-        ["readelf", "-d", str(program)],
+        ["readelf", "-d", str(artifact)],
         text=True,
         capture_output=True,
         env={**os.environ, "LC_ALL": "C"},
@@ -152,11 +152,11 @@ for program in sorted((root / "usr/bin").iterdir()):
         continue
     for soname in re.findall(r"Shared library: \[(.*?)\]", result.stdout):
         if not (library_directory / soname).exists():
-            missing.append((program.name, soname))
+            missing.append((str(artifact.relative_to(root)), soname))
 
 if missing:
-    for program, soname in missing:
-        print(f"{program}: missing {soname}", file=sys.stderr)
+    for artifact, soname in missing:
+        print(f"{artifact}: missing {soname}", file=sys.stderr)
     raise SystemExit(1)
 PY
 
@@ -173,4 +173,4 @@ else
     die "rootfs ownership manifest contains duplicate paths"
 fi
 
-log "001-runtime maintenance tools and filesystem round trips passed"
+log "Runtime tools, filesystem round trips, and full rootfs ELF closure passed"

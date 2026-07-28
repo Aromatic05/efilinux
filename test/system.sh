@@ -40,9 +40,10 @@ require_service() {
 
 for file in \
     /etc/inittab /etc/rc.d/rcS /etc/rc.d/rc /etc/rc.d/rc.shutdown \
-    /etc/sysconfig/hostname /etc/sysconfig/network \
+    /etc/sysconfig/hostname /etc/sysconfig/network /etc/sysconfig/clock \
     /etc/syslog.conf /etc/crontab /etc/dbus-1/system.conf \
     /etc/dhcpcd.conf /etc/ssh/sshd_config \
+    /etc/pam.d/system-auth /etc/pam.d/login /etc/pam.d/sshd \
     /etc/passwd /etc/group /etc/shadow /etc/gshadow; do
     require_file "$file"
 done
@@ -53,7 +54,7 @@ for directory in \
     require_directory "$directory"
 done
 
-for service in mountvirtfs udev localnet syslog dbus cron dhcpcd sshd; do
+for service in mountvirtfs udev localnet setclock syslog dbus cron dhcpcd sshd; do
     require_service "$service"
 done
 
@@ -61,11 +62,12 @@ require_program init sysvinit
 require_program telinit sysvinit
 require_program shutdown sysvinit
 require_program udevadm udev
+require_program '[' busybox
+require_program hwclock "util-linux-$UTIL_LINUX_VERSION"
 require_program login shadow
 require_program passwd shadow
 require_program useradd shadow
 require_program syslogd sysklogd
-require_program klogd sysklogd
 require_program crond cronie
 require_program crontab cronie
 require_program dbus-daemon dbus
@@ -78,9 +80,25 @@ require_program ssh openssh
 require_program sshd openssh
 require_program ssh-keygen openssh
 
+for helper in ata_id cdrom_id dmi_memory_id fido_id iocost mtd_probe scsi_id v4l_id; do
+    [[ -x "$rootfs/usr/lib/udev/$helper" ]] || die "Udev helper is missing: $helper"
+done
+[[ -x "$rootfs/usr/lib/ssh/sftp-server" ]] || die "OpenSSH SFTP server is missing"
+
 [[ $(stat -c '%a' "$rootfs/etc/shadow") == 600 ]] || die "/etc/shadow permissions are not 0600"
 [[ $(stat -c '%a' "$rootfs/etc/gshadow") == 600 ]] || die "/etc/gshadow permissions are not 0600"
 [[ $(stat -c '%a' "$rootfs/root/.ssh") == 700 ]] || die "/root/.ssh permissions are not 0700"
+for privileged_file in \
+    /usr/bin/passwd /usr/bin/su /usr/bin/newgrp /usr/bin/crontab \
+    /usr/libexec/dbus-daemon-launch-helper; do
+    [[ $(stat -c '%a' "$rootfs$privileged_file") == 4755 ]] || \
+        die "$privileged_file permissions are not 4755"
+done
+
+[[ -L "$rootfs/var/run" && $(readlink -- "$rootfs/var/run") == /run ]] || \
+    die "/var/run does not point to /run"
+[[ -L "$rootfs/etc/rc.d/rc3.d/S60sshd" ]] || die "runlevel 3 does not start sshd"
+[[ -L "$rootfs/etc/rc.d/rc6.d/K10sshd" ]] || die "runlevel 6 does not stop sshd"
 
 grep -Eq '^root:[!*]:' "$rootfs/etc/shadow" || die "root password is not locked by default"
 grep -q '^sshd:' "$rootfs/etc/passwd" || die "sshd user is missing"
@@ -89,6 +107,25 @@ grep -Eq '^PermitRootLogin[[:space:]]+prohibit-password$' "$rootfs/etc/ssh/sshd_
     die "sshd root-login policy is unsafe"
 grep -Eq '^PasswordAuthentication[[:space:]]+no$' "$rootfs/etc/ssh/sshd_config" || \
     die "sshd password authentication is enabled"
+
+if find "$rootfs/etc/ssh" -maxdepth 1 -name 'ssh_host_*' -print -quit | grep -q .; then
+    die "shared OpenSSH host keys were embedded in the rootfs"
+fi
+[[ ! -e "$rootfs/etc/machine-id" ]] || die "a shared machine ID was embedded in the rootfs"
+[[ -L "$rootfs/var/lib/dbus/machine-id" && \
+   $(readlink -- "$rootfs/var/lib/dbus/machine-id") == /etc/machine-id ]] || \
+    die "D-Bus machine ID does not follow the runtime-generated machine ID"
+[[ ! -e "$rootfs/usr/lib/udev/rules.d/99-systemd.rules" ]] || \
+    die "systemd activation rules leaked into standalone Udev"
+[[ ! -e "$rootfs/usr/bin/systemd" && ! -d "$rootfs/usr/lib/systemd" ]] || \
+    die "systemd runtime artifacts leaked into the SysVinit rootfs"
+grep -Fq 'PAGER=${PAGER:-cat}' "$rootfs/etc/profile" || \
+    die "profile selects a pager that is not guaranteed to exist"
+if grep -R -nE '(^|[[:space:];])\[[[:space:]]' "$rootfs/etc/rc.d" >/dev/null; then
+    die "boot scripts use the unavailable [ command instead of test"
+fi
+grep -Fq 'start_daemon sshd /usr/bin/sshd ' "$rootfs/etc/rc.d/init.d/sshd" || \
+    die "sshd is not started with an absolute executable path"
 
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/init" --version 2>&1 | grep -q 'init version'
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/udevadm" --version >/dev/null
