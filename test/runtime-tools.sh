@@ -6,6 +6,8 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
+require_command python3 readelf
+
 rootfs="$EFILINUX_ROOTFS"
 loader="$rootfs/usr/lib/ld-linux-x86-64.so.2"
 library_path="$rootfs/usr/lib"
@@ -36,7 +38,9 @@ done
 
 for library in \
     libattr.so.1 libacl.so.1 libcap.so.2 libcrypt.so.2 libkmod.so.2 \
-    libblkid.so.1 libmount.so.1 libuuid.so.1 liblzo2.so.2; do
+    libblkid.so.1 libmount.so.1 libuuid.so.1 liblzo2.so.2 \
+    libext2fs.so.2 libinih.so.0 liburcu.so.8 libhandle.so.1 \
+    libntfs-3g.so.90; do
     [[ -e "$rootfs/usr/lib/$library" ]] || die "runtime library is missing: $library"
 done
 
@@ -55,7 +59,61 @@ done
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/findmnt" --version >/dev/null
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/btrfs" version >/dev/null
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/xfs_repair" -V >/dev/null
-"$loader" --library-path "$library_path" "$rootfs/usr/bin/mkfs.exfat" -V >/dev/null
-"$loader" --library-path "$library_path" "$rootfs/usr/bin/ntfsfix" --help >/dev/null 2>&1 || true
+set +e
+exfat_version=$(
+    "$loader" --library-path "$library_path" \
+        "$rootfs/usr/bin/mkfs.exfat" -V 2>&1
+)
+exfat_status=$?
+set -e
+[[ "$exfat_status" -eq 1 && "$exfat_version" == *"exfatprogs version"* ]] || \
+    die "mkfs.exfat version probe failed"
+"$loader" --library-path "$library_path" \
+    "$rootfs/usr/bin/ntfsfix" --help >/dev/null 2>&1
+
+python3 - "$rootfs" <<'PY'
+from pathlib import Path
+import os
+import re
+import subprocess
+import sys
+
+root = Path(sys.argv[1])
+library_directory = root / "usr/lib"
+missing: list[tuple[str, str]] = []
+
+for program in sorted((root / "usr/bin").iterdir()):
+    if not program.is_file() or program.is_symlink():
+        continue
+    result = subprocess.run(
+        ["readelf", "-d", str(program)],
+        text=True,
+        capture_output=True,
+        env={**os.environ, "LC_ALL": "C"},
+    )
+    if result.returncode:
+        continue
+    for soname in re.findall(r"Shared library: \[(.*?)\]", result.stdout):
+        if not (library_directory / soname).exists():
+            missing.append((program.name, soname))
+
+if missing:
+    for program, soname in missing:
+        print(f"{program}: missing {soname}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+if find "$rootfs" -type f \( -name '*.a' -o -name '*.la' -o -name '*.pc' \) \
+    -print -quit | grep -q .; then
+    die "development artifact leaked into target rootfs"
+fi
+[[ ! -d "$rootfs/usr/include" ]] || die "target headers leaked into rootfs"
+
+if awk -F '\t' '{ count[$1]++ } END { for (path in count) if (count[path] > 1) exit 1 }' \
+    "$EFILINUX_ROOTFS_OWNERS"; then
+    :
+else
+    die "rootfs ownership manifest contains duplicate paths"
+fi
 
 log "001-runtime maintenance tools and filesystem policy passed"

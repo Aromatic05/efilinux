@@ -37,6 +37,7 @@ PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/sha
         --without-systemd \
         --without-udev \
         --without-ncursesw \
+        --without-tinfo \
         --without-readline \
         --without-selinux \
         --without-audit \
