@@ -150,7 +150,7 @@ The suite verifies:
 - modules, curated firmware, and regulatory data under `target/rootfs`;
 - `target/rootfs` as the sole `CONFIG_INITRAMFS_SOURCE` directory;
 - real OVMF boot with a `Nehalem` CPU model through to the BusyBox `ash` prompt;
-- target BusyBox loading a Zstd-compressed module from the embedded rootfs.
+- target Kmod loading a Zstd-compressed module from the embedded rootfs.
 
 The removable-media EFI path is:
 

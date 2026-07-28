@@ -28,7 +28,7 @@ set +e
 {
     sleep 60
     printf '%s\n' \
-        "/usr/bin/modprobe loop && /usr/bin/lsmod && /usr/bin/printf 'EFILINUX_MODULE_LOAD_OK\\n' && /usr/bin/poweroff -f"
+        "/usr/bin/modprobe --version && /usr/bin/modprobe loop && /usr/bin/lsmod && /usr/bin/printf 'EFILINUX_MODULE_LOAD_OK\\n' && /usr/bin/poweroff -f"
 } | timeout --signal=TERM 120s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \
@@ -61,11 +61,12 @@ if ! grep -q 'EFI Linux initial runtime' "$boot_log" || \
     die "BusyBox shell boot markers were not found"
 fi
 
-if ! grep -q 'EFILINUX_MODULE_LOAD_OK' "$boot_log" || \
+if ! grep -q 'kmod version' "$boot_log" || \
+   ! grep -q 'EFILINUX_MODULE_LOAD_OK' "$boot_log" || \
    ! grep -Eq '^loop[[:space:]]' "$boot_log"; then
     tail -n 120 "$boot_log" >&2
-    die "BusyBox failed to load a compressed kernel module from rootfs"
+    die "Kmod failed to load a compressed kernel module from rootfs"
 fi
 
-log "OVMF boot reached BusyBox and loaded a rootfs kernel module"
+log "OVMF boot reached BusyBox and Kmod loaded a rootfs kernel module"
 printf 'Boot log: %s\n' "$boot_log"
