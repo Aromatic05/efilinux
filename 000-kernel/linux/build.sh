@@ -72,7 +72,9 @@ build_efi() {
     local scripts_config="$source_directory/scripts/config"
     "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
         --set-str INITRAMFS_SOURCE \
-            "$rootfs_directory $EFILINUX_INITRAMFS_DEVICES"
+            "$rootfs_directory $EFILINUX_INITRAMFS_DEVICES" \
+        --set-val INITRAMFS_ROOT_UID "$EFILINUX_INITRAMFS_ROOT_UID" \
+        --set-val INITRAMFS_ROOT_GID "$EFILINUX_INITRAMFS_ROOT_GID"
     make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" olddefconfig
 
     log "Building EFI-stub kernel with embedded rootfs"

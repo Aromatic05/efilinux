@@ -1,0 +1,62 @@
+#!/usr/bin/sh
+
+PATH=/usr/bin
+SERVICE_RUNTIME=/run/efilinux
+
+service_pidfile() {
+    printf '%s/%s.pid' "$SERVICE_RUNTIME" "$1"
+}
+
+service_running() {
+    pidfile=$(service_pidfile "$1")
+    test -s "$pidfile" || return 1
+    pid=$(cat "$pidfile")
+    test -n "$pid" && kill -0 "$pid" 2>/dev/null
+}
+
+start_daemon() {
+    name=$1
+    shift
+    pidfile=$(service_pidfile "$name")
+
+    mkdir -p "$SERVICE_RUNTIME"
+    if service_running "$name"; then
+        printf '%s is already running\n' "$name"
+        return 0
+    fi
+
+    rm -f "$pidfile"
+    "$@" </dev/null &
+    pid=$!
+    printf '%s\n' "$pid" > "$pidfile"
+    sleep 1
+    if ! kill -0 "$pid" 2>/dev/null; then
+        wait "$pid" 2>/dev/null || true
+        rm -f "$pidfile"
+        printf 'failed to start %s\n' "$name" >&2
+        return 1
+    fi
+}
+
+stop_daemon() {
+    name=$1
+    pidfile=$(service_pidfile "$name")
+
+    if ! service_running "$name"; then
+        rm -f "$pidfile"
+        return 0
+    fi
+
+    pid=$(cat "$pidfile")
+    kill "$pid" 2>/dev/null || true
+    attempts=0
+    while kill -0 "$pid" 2>/dev/null; do
+        attempts=$((attempts + 1))
+        if test "$attempts" -ge 10; then
+            kill -KILL "$pid" 2>/dev/null || true
+            break
+        fi
+        sleep 1
+    done
+    rm -f "$pidfile"
+}

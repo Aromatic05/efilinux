@@ -1,0 +1,12 @@
+#!/usr/bin/sh
+set -eu
+
+export PATH=/usr/bin
+export HOME=/root
+export TERM="${TERM:-linux}"
+
+/etc/rc.d/init.d/mountvirtfs start
+/etc/rc.d/init.d/udev start
+/etc/rc.d/init.d/localnet start
+
+printf '\nEFI Linux multi-user system\n\n'

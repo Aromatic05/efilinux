@@ -113,7 +113,6 @@ log "Installing runtime shared-library closure"
 install_soname_family "attr-$ATTR_VERSION" 'libattr.so.*'
 install_soname_family "acl-$ACL_VERSION" 'libacl.so.*'
 install_soname_family "libcap-$LIBCAP_VERSION" 'libcap.so.*'
-install_soname_family "libcap-$LIBCAP_VERSION" 'libpsx.so.*'
 install_soname_family "libxcrypt-$LIBXCRYPT_VERSION" 'libcrypt.so.*'
 install_soname_family "lzo-$LZO_VERSION" 'liblzo2.so.*'
 install_soname_family "kmod-$KMOD_VERSION" 'libkmod.so.*'

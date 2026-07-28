@@ -1,0 +1,13 @@
+#!/usr/bin/sh
+set -eu
+
+case ${1:-} in
+    start)
+        hostname "$(cat /etc/sysconfig/hostname)"
+        ip link set lo up
+        ;;
+    stop)
+        ip link set lo down 2>/dev/null || true
+        ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

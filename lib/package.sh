@@ -29,7 +29,7 @@ prepare_package() {
 
 merge_sysroot() {
     local staging=$1
-    cp -a "$staging/." "$EFILINUX_SYSROOT/"
+    cp -a --remove-destination "$staging/." "$EFILINUX_SYSROOT/"
 }
 
 remove_rootfs_owner() {
@@ -96,6 +96,33 @@ install_rootfs_file() {
     record_rootfs_owner "$package" "$relative_path"
 }
 
+replace_rootfs_file() {
+    local package=$1
+    local expected_owner=$2
+    local source=$3
+    local relative_path=$4
+    local destination="$EFILINUX_ROOTFS$relative_path"
+    local owner
+
+    owner=$(rootfs_owner "$relative_path")
+    [[ "$owner" == "$expected_owner" ]] || \
+        die "$package cannot replace $relative_path owned by ${owner:-an untracked source}"
+    rm -f -- "$destination"
+    remove_rootfs_owner "$relative_path"
+    install_rootfs_file "$package" "$source" "$relative_path"
+}
+
+install_rootfs_symlink() {
+    local package=$1
+    local target=$2
+    local relative_path=$3
+    local destination="$EFILINUX_ROOTFS$relative_path"
+
+    prepare_rootfs_destination "$package" "$relative_path"
+    ln -s -- "$target" "$destination"
+    record_rootfs_owner "$package" "$relative_path"
+}
+
 install_rootfs_program() {
     local package=$1
     local source=$2
@@ -145,8 +172,5 @@ strip_rootfs_elf() {
         if LC_ALL=C readelf --file-header "$file" >/dev/null 2>&1; then
             strip --strip-unneeded "$file" 2>/dev/null || true
         fi
-    done < <(
-        find "$EFILINUX_ROOTFS/usr/bin" "$EFILINUX_ROOTFS/usr/lib" \
-            -type f -print0
-    )
+    done < <(find "$EFILINUX_ROOTFS/usr" -type f -print0)
 }

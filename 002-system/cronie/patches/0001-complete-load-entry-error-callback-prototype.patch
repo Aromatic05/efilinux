@@ -1,0 +1,16 @@
+# Backport of upstream commit 09c630c654b2aeff06a90a412cce0a60ab4955a4.
+# Fixes upstream issue #193.
+diff --git a/src/entry.c b/src/entry.c
+index 586eb9d..a2077e8 100644
+--- a/src/entry.c
++++ b/src/entry.c
+@@ -93 +93 @@ void free_entry(entry * e) {
+-entry *load_entry(FILE * file, void (*error_func) (), struct passwd *pw,
++entry *load_entry(FILE * file, void (*error_func) (const char *), struct passwd *pw,
+diff --git a/src/funcs.h b/src/funcs.h
+index 427e027..f28d634 100644
+--- a/src/funcs.h
++++ b/src/funcs.h
+@@ -92 +92 @@ user		*load_user(int, struct passwd *, const char *, const char *, const char *),
+-entry		*load_entry(FILE *, void (*)(), struct passwd *, char **);
++entry		*load_entry(FILE *, void (*)(const char *), struct passwd *, char **);

@@ -1,0 +1,24 @@
+#!/usr/bin/sh
+set -eu
+
+runlevel=${1:?runlevel is required}
+runlevel_directory=/etc/rc.d/rc${runlevel}.d
+
+test -d "$runlevel_directory" || exit 0
+
+for link in "$runlevel_directory"/K*; do
+    test -e "$link" || continue
+    "$link" stop
+done
+
+for link in "$runlevel_directory"/S*; do
+    test -e "$link" || continue
+    "$link" start
+done
+
+mkdir -p /run/efilinux
+printf '%s\n' "$runlevel" > /run/efilinux/runlevel
+
+case "$runlevel" in
+    0|6) exec /etc/rc.d/rc.shutdown "$runlevel" ;;
+esac

@@ -1,0 +1,12 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /var/spool/cron /etc/cron.d
+        start_daemon crond crond -n -s
+        ;;
+    stop) stop_daemon crond ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

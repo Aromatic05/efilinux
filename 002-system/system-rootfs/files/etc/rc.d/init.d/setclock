@@ -1,0 +1,22 @@
+#!/usr/bin/sh
+set -eu
+
+. /etc/sysconfig/clock
+
+case ${1:-} in
+    start)
+        if test "${UTC:-1}" = 1; then
+            hwclock --hctosys --utc
+        else
+            hwclock --hctosys --localtime
+        fi
+        ;;
+    stop)
+        if test "${UTC:-1}" = 1; then
+            hwclock --systohc --utc
+        else
+            hwclock --systohc --localtime
+        fi
+        ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

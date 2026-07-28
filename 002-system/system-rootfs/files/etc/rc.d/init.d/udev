@@ -1,0 +1,24 @@
+#!/usr/bin/sh
+set -eu
+
+case ${1:-} in
+    start)
+        if udevadm control --ping 2>/dev/null; then
+            exit 0
+        fi
+        udevd --daemon --resolve-names=never
+        attempts=0
+        until udevadm control --ping 2>/dev/null; do
+            attempts=$((attempts + 1))
+            test "$attempts" -lt 10 || exit 1
+            sleep 1
+        done
+        udevadm trigger --type=subsystems --action=add
+        udevadm trigger --type=devices --action=add
+        udevadm settle
+        ;;
+    stop)
+        udevadm control --exit 2>/dev/null || true
+        ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

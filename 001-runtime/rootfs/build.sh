@@ -119,6 +119,7 @@ export TERM=linux
 exec /usr/bin/setsid /usr/bin/cttyhack /usr/bin/sh
 INIT
 chmod 0755 "$rootfs_directory/init"
+record_rootfs_owner runtime-base /init
 
 cat > "$rootfs_directory/etc/passwd" <<'PASSWD'
 root:x:0:0:root:/root:/bin/sh
@@ -145,6 +146,12 @@ RESOLV
 cat > "$rootfs_directory/etc/mdev.conf" <<'MDEV'
 $MODALIAS=.* 0:0 660 @/usr/bin/modprobe "$MODALIAS"
 MDEV
+
+for base_file in \
+    /etc/passwd /etc/group /etc/nsswitch.conf /etc/hosts \
+    /etc/host.conf /etc/resolv.conf /etc/mdev.conf; do
+    record_rootfs_owner runtime-base "$base_file"
+done
 
 log "Writing initramfs device manifest"
 cat > "$EFILINUX_INITRAMFS_DEVICES" <<'DEVICES'

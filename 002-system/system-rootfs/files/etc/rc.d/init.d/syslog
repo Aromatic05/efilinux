@@ -1,0 +1,13 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /var/log
+        touch /var/log/messages /var/log/secure /var/log/cron
+        start_daemon syslogd syslogd -F -s -f /etc/syslog.conf -P /run/efilinux/syslogd.pid
+        ;;
+    stop) stop_daemon syslogd ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

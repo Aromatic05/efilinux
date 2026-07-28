@@ -1,0 +1,5 @@
+export PATH=/usr/bin
+export HOME=${HOME:-/root}
+export TERM=${TERM:-linux}
+export PAGER=${PAGER:-cat}
+umask 022

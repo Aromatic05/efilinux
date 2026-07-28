@@ -1,0 +1,15 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /run/sshd /root/.ssh
+        chmod 0700 /root/.ssh
+        ssh-keygen -A
+        /usr/bin/sshd -t -f /etc/ssh/sshd_config
+        start_daemon sshd /usr/bin/sshd -D -e -f /etc/ssh/sshd_config
+        ;;
+    stop) stop_daemon sshd ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

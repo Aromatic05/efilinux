@@ -1,0 +1,5 @@
+SHELL=/usr/bin/sh
+PATH=/usr/bin
+MAILTO=""
+
+# minute hour day month weekday user command

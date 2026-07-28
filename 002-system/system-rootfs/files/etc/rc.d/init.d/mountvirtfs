@@ -1,0 +1,19 @@
+#!/usr/bin/sh
+set -eu
+
+case ${1:-} in
+    start)
+        mkdir -p /proc /sys /dev /dev/pts /dev/shm /run
+        mountpoint -q /proc || mount -t proc proc /proc
+        mountpoint -q /sys || mount -t sysfs sysfs /sys
+        mountpoint -q /dev || mount -t devtmpfs devtmpfs /dev
+        mkdir -p /dev/pts /dev/shm
+        mountpoint -q /dev/pts || mount -t devpts -o gid=5,mode=0620,nosuid,noexec devpts /dev/pts
+        mountpoint -q /run || mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run
+        mkdir -p /run/lock /run/efilinux /run/dbus /run/sshd
+        chmod 0755 /run/lock /run/efilinux /run/dbus /run/sshd
+        : > /run/utmp
+        ;;
+    stop) ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

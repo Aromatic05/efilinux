@@ -69,6 +69,8 @@ make -C "$source_directory" O="$build_directory" oldconfig < <(yes '')
 
 grep -qx 'CONFIG_FEATURE_MODUTILS_ALIAS=y' "$build_directory/.config" || \
     die "BusyBox module alias support is disabled"
+grep -qx 'CONFIG_TEST1=y' "$build_directory/.config" || \
+    die "BusyBox [ applet is disabled"
 grep -qx 'CONFIG_DEFAULT_MODULES_DIR="/lib/modules"' "$build_directory/.config" || \
     die "BusyBox default module directory is incorrect"
 grep -qx 'CONFIG_DEFAULT_DEPMOD_FILE="modules.dep"' "$build_directory/.config" || \

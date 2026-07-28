@@ -1,0 +1,11 @@
+#!/usr/bin/sh
+set -eu
+
+runlevel=${1:?runlevel is required}
+sync
+
+case "$runlevel" in
+    0) exec /usr/bin/halt -f -p ;;
+    6) exec /usr/bin/reboot -f ;;
+    *) printf 'unsupported shutdown runlevel: %s\n' "$runlevel" >&2; exit 1 ;;
+esac

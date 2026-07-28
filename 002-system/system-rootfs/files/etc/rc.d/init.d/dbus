@@ -1,0 +1,16 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /run/dbus /var/lib/dbus
+        if ! test -s /etc/machine-id; then
+            rm -f /etc/machine-id
+            dbus-uuidgen --ensure=/etc/machine-id
+        fi
+        start_daemon dbus dbus-daemon --system --nofork --nopidfile
+        ;;
+    stop) stop_daemon dbus ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac
