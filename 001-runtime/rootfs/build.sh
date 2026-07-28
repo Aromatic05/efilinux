@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
 
 require_command readelf
 ensure_directories
@@ -15,6 +16,8 @@ busybox_binary="$busybox_staging/bin/busybox"
 
 [[ -x "$busybox_binary" ]] || die "BusyBox staging tree does not exist"
 reset_directory "$rootfs_directory"
+mkdir -p "$(dirname -- "$EFILINUX_ROOTFS_OWNERS")"
+: > "$EFILINUX_ROOTFS_OWNERS"
 
 log "Creating merged-/usr target rootfs"
 mkdir -p \
@@ -36,9 +39,11 @@ ln -s bin "$rootfs_directory/usr/sbin"
 chmod 1777 "$rootfs_directory/tmp"
 
 cp "$busybox_binary" "$rootfs_directory/usr/bin/busybox"
+record_rootfs_owner busybox /usr/bin/busybox
 while IFS= read -r applet_name; do
     [[ "$applet_name" == busybox ]] && continue
     ln -s busybox "$rootfs_directory/usr/bin/$applet_name"
+    record_rootfs_owner busybox "/usr/bin/$applet_name"
 done < <(
     find "$busybox_staging" -type l -printf '%f\n' | sort -u
 )
@@ -47,24 +52,16 @@ copy_program() {
     local package=$1
     local program=$2
     local source="$EFILINUX_BUILD/staging/$package/usr/bin/$program"
-    [[ -e "$source" || -L "$source" ]] || die "$package program is missing: $program"
-    cp -a "$source" "$rootfs_directory/usr/bin/$program"
+    install_rootfs_program "$package" "$source" "$program"
 }
 
 copy_runtime_libraries() {
     local package=$1
     local pattern=$2
-    local source_directory="$EFILINUX_BUILD/staging/$package/usr/lib"
-    local source
-    local found=false
-
-    shopt -s nullglob
-    for source in "$source_directory"/$pattern; do
-        cp -a "$source" "$rootfs_directory/usr/lib/"
-        found=true
-    done
-    shopt -u nullglob
-    [[ "$found" == true ]] || die "$package runtime library is missing: $pattern"
+    install_rootfs_library_family \
+        "$package" \
+        "$EFILINUX_BUILD/staging/$package" \
+        "$pattern"
 }
 
 copy_runtime_libraries zlib 'libz.so.1*'
@@ -83,7 +80,10 @@ copy_glibc_runtime_file() {
     local source_file="$EFILINUX_SYSROOT/usr/lib/$file_name"
 
     [[ -e "$source_file" ]] || die "glibc runtime file is missing: $file_name"
-    cp -aL "$source_file" "$rootfs_directory/usr/lib/$file_name"
+    local resolved="$EFILINUX_BUILD/staging/rootfs-glibc/$file_name"
+    mkdir -p "$(dirname -- "$resolved")"
+    cp -aL "$source_file" "$resolved"
+    install_rootfs_file glibc "$resolved" "/usr/lib/$file_name"
 }
 
 for runtime_file in \
