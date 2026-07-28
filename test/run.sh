@@ -6,5 +6,6 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 
 "$ROOT/test/runtime.sh"
 "$ROOT/test/runtime-tools.sh"
+"$ROOT/test/system.sh"
 "$ROOT/test/kernel.sh"
 "$ROOT/test/boot-qemu.sh"
