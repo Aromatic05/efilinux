@@ -64,12 +64,18 @@ def load_links(path: Path) -> dict[str, str]:
     return links
 
 
-def expand_link_targets(selection: Selection, links: dict[str, str]) -> set[str]:
+def expand_link_targets(
+    selection: Selection,
+    exclusions: Selection,
+    links: dict[str, str],
+) -> set[str]:
     targets: set[str] = set()
     changed = True
     while changed:
         changed = False
         for alias, target in links.items():
+            if exclusions.matches(alias) or exclusions.matches(target):
+                continue
             if not (selection.matches(alias) or alias in targets):
                 continue
             if target not in targets:
@@ -79,14 +85,20 @@ def expand_link_targets(selection: Selection, links: dict[str, str]) -> set[str]
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         raise SystemExit(
-            "usage: select_members.py MANIFEST ARCHIVE_PREFIX WHENCE"
+            "usage: select_members.py INCLUDE_MANIFEST EXCLUDE_MANIFEST "
+            "ARCHIVE_PREFIX WHENCE"
         )
 
     selection = load_manifest(Path(sys.argv[1]))
-    archive_prefix = sys.argv[2].rstrip("/") + "/"
-    link_targets = expand_link_targets(selection, load_links(Path(sys.argv[3])))
+    exclusions = load_manifest(Path(sys.argv[2]))
+    archive_prefix = sys.argv[3].rstrip("/") + "/"
+    link_targets = expand_link_targets(
+        selection,
+        exclusions,
+        load_links(Path(sys.argv[4])),
+    )
 
     for raw_member in sys.stdin:
         archive_member = raw_member.rstrip("\n")
@@ -94,6 +106,8 @@ def main() -> int:
             continue
         relative_path = archive_member[len(archive_prefix) :]
         if relative_path.endswith("/"):
+            continue
+        if exclusions.matches(relative_path):
             continue
         if selection.matches(relative_path) or relative_path in link_targets:
             print(archive_member)

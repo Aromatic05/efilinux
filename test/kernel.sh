@@ -22,15 +22,25 @@ efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
 [[ -d "$firmware_root" ]] || die "device firmware is missing from target rootfs"
 [[ -f "$firmware_root/regulatory.db" ]] || die "wireless regulatory database is missing"
 [[ -f "$firmware_root/regulatory.db.p7s" ]] || die "wireless regulatory signature is missing"
-[[ -d "$firmware_root/intel-ucode" ]] || die "Intel microcode files are missing from target rootfs"
-[[ -d "$firmware_root/amd-ucode" ]] || die "AMD microcode files are missing from target rootfs"
+[[ ! -e "$firmware_root/intel-ucode" ]] || die "unused Intel CPU microcode remains in target rootfs"
+[[ ! -e "$firmware_root/amd-ucode" ]] || die "unused AMD CPU microcode remains in target rootfs"
 [[ -f "$efi_binary" ]] || die "EFI executable is missing"
 
 [[ -L "$rootfs/lib" ]] || die "rootfs /lib is not a symbolic link"
 [[ $(readlink "$rootfs/lib") == usr/lib ]] || die "rootfs /lib does not point to usr/lib"
-if find "$rootfs" -name '*[[:space:]]*' -print -quit | grep -q .; then
-    die "rootfs contains a path that cannot be embedded by gen_initramfs.sh"
-fi
+
+assert_no_find_match() {
+    local message=$1
+    shift
+    local match
+
+    match=$(find "$@" -print -quit) || die "find failed while checking: $message"
+    [[ -z "$match" ]] || die "$message: ${match#"$rootfs/"}"
+}
+
+assert_no_find_match \
+    "rootfs contains a path that cannot be embedded by gen_initramfs.sh" \
+    "$rootfs" -name '*[[:space:]]*'
 
 initramfs_source=$(grep '^CONFIG_INITRAMFS_SOURCE=' "$kernel_config")
 [[ "$initramfs_source" == *"$rootfs"* ]] || \
@@ -52,7 +62,6 @@ for option in \
     CONFIG_MODULE_COMPRESS_ZSTD \
     CONFIG_MODULE_DECOMPRESS \
     CONFIG_FW_LOADER_COMPRESS_ZSTD \
-    CONFIG_MICROCODE \
     CONFIG_CPU_MITIGATIONS \
     CONFIG_EFI_STUB \
     CONFIG_EFIVAR_FS \
@@ -131,7 +140,6 @@ require_firmware_family() {
 }
 
 for family in \
-    amd-ucode intel-ucode \
     amdgpu i915 xe nvidia \
     ath10k ath11k ath12k brcm mediatek \
     rtl_nic rtl_bt rtw88 rtw89 \
@@ -139,8 +147,61 @@ for family in \
     require_firmware_family "$family"
 done
 
-if find -L "$firmware_root" -type l -print -quit | grep -q .; then
-    die "broken symbolic links are present in the firmware tree"
+require_firmware_file() {
+    local path=$1
+    [[ -e "$firmware_root/$path" ]] || die "required firmware is missing: $path"
+}
+
+for firmware in \
+    nvidia/tu102/gsp/gsp-570.144.bin.zst \
+    nvidia/ga102/gsp/gsp-570.144.bin.zst \
+    ath10k/QCA6174/hw3.0/firmware-6.bin.zst \
+    ath10k/QCA9377/hw1.0/firmware-6.bin.zst \
+    ath11k/QCA6390/hw2.0/amss.bin.zst \
+    ath11k/WCN6855/hw2.0/amss.bin.zst \
+    ath12k/WCN7850/hw2.0/amss.bin.zst \
+    brcm/brcmfmac43602-pcie.bin.zst; do
+    require_firmware_file "$firmware"
+done
+
+assert_no_find_match \
+    "deprecated Nouveau r535 firmware remains in target rootfs" \
+    "$firmware_root/nvidia" -name '*-535.113.01.bin.zst'
+assert_no_find_match \
+    "SOF community firmware remains in target rootfs" \
+    "$firmware_root/intel" -type d -name community
+assert_no_find_match \
+    "SOF firmware debug dictionaries remain in target rootfs" \
+    "$firmware_root/intel" -type f -name '*.ldc'
+
+for excluded_path in \
+    ath10k/QCA9887 \
+    ath10k/QCA988X \
+    ath10k/QCA99X0 \
+    ath11k/QCN9074 \
+    ath12k/QCN9274; do
+    [[ ! -e "$firmware_root/$excluded_path" ]] || \
+        die "non-default firmware family remains: $excluded_path"
+done
+
+assert_no_find_match \
+    "embedded-only Broadcom SDIO firmware remains in target rootfs" \
+    "$firmware_root/brcm" -path '*-sdio*'
+if [[ -d "$firmware_root/cypress" ]]; then
+    assert_no_find_match \
+        "embedded-only Cypress SDIO firmware remains in target rootfs" \
+        "$firmware_root/cypress" -path '*-sdio*'
 fi
+assert_no_find_match \
+    "data-center-only AMD GPU firmware remains in target rootfs" \
+    "$firmware_root/amdgpu" \( \
+        -name 'aldebaran_*' -o \
+        -name 'arcturus_*' -o \
+        -name 'gc_9_4_3_*' -o \
+        -name 'gc_9_4_4_*' \
+    \)
+assert_no_find_match \
+    "broken symbolic links are present in the firmware tree" \
+    -L "$firmware_root" -type l
 
 log "Kernel and firmware policy passed with $module_count rootfs modules"

@@ -1,20 +1,15 @@
 # Supplements for common PC firmware that kernel MODULE_FIRMWARE metadata does
 # not describe completely. Exact firmware declarations are collected from the
-# built 000-kernel module tree.
-directory amd-ucode
+# built 000-kernel module tree. The default image is consumer-PC focused;
+# exclusions are applied separately after module metadata is collected.
 
 directory ath10k/QCA6174
 directory ath10k/QCA9377
-directory ath10k/QCA988X
-directory ath10k/QCA99X0
 directory ath11k/QCA6390
-directory ath11k/QCN9074
 directory ath11k/WCN6855
-directory ath12k/QCN9274
 directory ath12k/WCN7850
 
 directory brcm
-directory cypress
 directory qca
 directory rtl_bt
 directory rtl_nic

@@ -6,7 +6,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command curl sha256sum tar
+require_command curl find sha256sum tar
 ensure_directories
 
 archive="$EFILINUX_DOWNLOADS/sof-bin-$SOF_FIRMWARE_VERSION.tar.gz"
@@ -34,6 +34,12 @@ for directory in \
     rm -rf "$firmware_root/$directory"
     cp -a "$source_directory/$directory" "$firmware_root/$directory"
 done
+
+# The signed images are the default runtime path. Community images duplicate
+# them for development use, while LDC files are firmware log dictionaries.
+find "$firmware_root" -type d -name community -prune -exec rm -rf -- {} +
+find "$firmware_root" -type f -name '*.ldc' -delete
+find -L "$firmware_root" -type l -delete
 
 rm -f "$firmware_root/sof-ace-tplg"
 ln -s sof-ipc4-tplg "$firmware_root/sof-ace-tplg"

@@ -1,0 +1,30 @@
+# Default EFI image exclusions. These override both the common-PC supplement
+# and kernel MODULE_FIRMWARE declarations.
+
+# CPU microcode in the built-in rootfs is too late for early loading. The
+# default image relies on platform firmware until a real early-microcode path
+# is introduced.
+directory amd-ucode
+
+# Linux 6.18 prefers r570 for Turing and newer Nouveau devices. r535 is the
+# deprecated fallback and duplicates the two large shared GSP images.
+glob nvidia/*/gsp/*-535.113.01.bin
+
+# CDNA data-center accelerators are outside the common desktop/laptop target.
+glob amdgpu/aldebaran_*
+glob amdgpu/arcturus_*
+glob amdgpu/gc_9_4_3_*
+glob amdgpu/gc_9_4_4_*
+
+# Dedicated access-point/server Qualcomm devices. Consumer laptop families
+# remain: QCA6174, QCA9377, QCA6390, WCN6855, and WCN7850.
+directory ath10k/QCA9887
+directory ath10k/QCA988X
+directory ath10k/QCA99X0
+directory ath11k/QCN9074
+directory ath12k/QCN9274
+
+# SDIO Broadcom/Cypress firmware targets embedded boards and Chromebooks.
+# PCIe firmware remains available for conventional PCs and Macs.
+glob brcm/*-sdio*
+glob cypress/*-sdio*

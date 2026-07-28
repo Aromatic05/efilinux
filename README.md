@@ -12,7 +12,6 @@ The current build covers the first two package groups:
 000-kernel
 ├── linux                 curated common-PC kernel and modules
 ├── linux-firmware        module-derived device firmware selection
-├── intel-ucode           Intel CPU microcode data
 ├── sof-firmware          Intel SOF firmware and topology data
 └── wireless-regdb        wireless regulatory database
 
@@ -50,7 +49,7 @@ target/
 `target/rootfs` is both the final system root and the source passed to
 `CONFIG_INITRAMFS_SOURCE`. The EFI-stub kernel therefore embeds the complete
 rootfs, including BusyBox, glibc, compression tools, kernel modules, device
-firmware, wireless regulatory data, and vendor microcode files.
+firmware, and wireless regulatory data.
 
 The rootfs uses a merged `/usr` layout:
 
@@ -82,6 +81,15 @@ server adapters, and embedded SoC-only devices are excluded.
 Device firmware is selected from the pinned `linux-firmware` release using the
 actual `MODULE_FIRMWARE` declarations of the built module tree, supplemented by
 a small list for common firmware families that are not fully self-described.
+An explicit exclusion policy removes duplicate Nouveau r535 images,
+data-center-only AMD firmware, access-point Qualcomm firmware, and embedded
+Broadcom/Cypress SDIO firmware. Nouveau retains the preferred r570 firmware.
+
+CPU microcode is not included in the default image. Files placed in the
+built-in rootfs are unavailable to the x86 early microcode loader, so including
+the complete Intel and AMD collections would consume space without providing
+early-boot updates. The default image relies on platform firmware until a real
+early-microcode delivery mechanism is added.
 
 ## Build
 
@@ -123,7 +131,7 @@ The suite verifies:
 - merged-/usr layout and required BusyBox applets;
 - target-glibc execution and XZ/Zstd compression round trips;
 - exact kernel policy and curated compressed module set;
-- modules, firmware, regulatory data, and microcode under `target/rootfs`;
+- modules, curated firmware, and regulatory data under `target/rootfs`;
 - `target/rootfs` as the sole `CONFIG_INITRAMFS_SOURCE` directory;
 - real OVMF boot with a `Nehalem` CPU model through to the BusyBox `ash` prompt;
 - target BusyBox loading a Zstd-compressed module from the embedded rootfs.

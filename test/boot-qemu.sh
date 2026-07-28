@@ -28,7 +28,7 @@ set +e
 {
     sleep 60
     printf '%s\n' \
-        "/usr/bin/modprobe loop && /usr/bin/lsmod && /usr/bin/printf 'EFILINUX_MODULE_LOAD_OK\\n'"
+        "/usr/bin/modprobe loop && /usr/bin/lsmod && /usr/bin/printf 'EFILINUX_MODULE_LOAD_OK\\n' && /usr/bin/poweroff -f"
 } | timeout --signal=TERM 120s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \

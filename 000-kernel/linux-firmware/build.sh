@@ -14,6 +14,7 @@ staging_directory="$EFILINUX_BUILD/staging/linux-firmware"
 firmware_root="$EFILINUX_ROOTFS/usr/lib/firmware"
 module_root="$EFILINUX_ROOTFS/usr/lib/modules/$LINUX_VERSION"
 supplement_manifest="$ROOT/000-kernel/linux-firmware/families.list"
+exclude_manifest="$ROOT/000-kernel/linux-firmware/exclude.list"
 request_manifest="$EFILINUX_TEST/linux-firmware-requests.list"
 module_firmware_list="$EFILINUX_TEST/module-firmware.list"
 archive_prefix="linux-firmware-$LINUX_FIRMWARE_VERSION"
@@ -61,6 +62,7 @@ log "Selecting common PC firmware from linux-firmware $LINUX_FIRMWARE_VERSION"
 tar --list --file "$archive" |
 python3 "$ROOT/000-kernel/linux-firmware/select_members.py" \
     "$request_manifest" \
+    "$exclude_manifest" \
     "$archive_prefix" \
     "$whence_file" \
     > "$member_list"
