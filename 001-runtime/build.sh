@@ -9,5 +9,8 @@ source "$ROOT/lib/common.sh"
 ensure_directories
 run_component "$ROOT/001-runtime/linux-headers"
 run_component "$ROOT/001-runtime/glibc"
+run_component "$ROOT/001-runtime/zlib"
+run_component "$ROOT/001-runtime/xz"
+run_component "$ROOT/001-runtime/zstd"
 run_component "$ROOT/001-runtime/busybox"
 run_component "$ROOT/001-runtime/rootfs"

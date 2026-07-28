@@ -28,18 +28,51 @@ ensure_directories() {
         "$EFILINUX_STATE" \
         "$EFILINUX_TEST" \
         "$EFILINUX_TARGET" \
+        "$EFILINUX_ROOTFS" \
         "$EFILINUX_SYSROOT"
 }
 
 download() {
     local url=$1
     local output=$2
+    local partial="$output.part"
+    local status
 
     [[ -f "$output" ]] && return
 
+    if [[ -s "$partial" ]]; then
+        log "Resuming $(basename -- "$output")"
+        if curl \
+            --continue-at - \
+            --fail \
+            --location \
+            --retry 3 \
+            --retry-all-errors \
+            --output "$partial" \
+            "$url"; then
+            mv -- "$partial" "$output"
+            return
+        else
+            status=$?
+        fi
+
+        if (( status != 33 )); then
+            return "$status"
+        fi
+
+        log "Server does not support resuming; restarting $(basename -- "$output")"
+        rm -f -- "$partial"
+    fi
+
     log "Downloading $(basename -- "$output")"
-    curl --fail --location --retry 3 --output "$output.part" "$url"
-    mv -- "$output.part" "$output"
+    curl \
+        --fail \
+        --location \
+        --retry 3 \
+        --retry-all-errors \
+        --output "$partial" \
+        "$url"
+    mv -- "$partial" "$output"
 }
 
 verify_md5() {

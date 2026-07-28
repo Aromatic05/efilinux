@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
+source "$ROOT/config.sh"
+source "$ROOT/lib/common.sh"
+
+require_command cmp readelf
+ensure_directories
+
+rootfs="$EFILINUX_ROOTFS"
+loader="$rootfs/usr/lib/ld-linux-x86-64.so.2"
+library_path="$rootfs/usr/lib"
+test_directory="$EFILINUX_TEST/runtime"
+
+[[ -x "$rootfs/usr/bin/busybox" ]] || die "BusyBox is missing from target rootfs"
+[[ -x "$rootfs/usr/bin/xz" ]] || die "xz is missing from target rootfs"
+[[ -x "$rootfs/usr/bin/zstd" ]] || die "zstd is missing from target rootfs"
+[[ -x "$loader" ]] || die "glibc loader is missing from target rootfs"
+
+assert_link() {
+    local path=$1
+    local expected=$2
+    [[ -L "$rootfs$path" ]] || die "$path is not a symbolic link"
+    [[ $(readlink "$rootfs$path") == "$expected" ]] || \
+        die "$path does not point to $expected"
+}
+
+assert_link /bin usr/bin
+assert_link /sbin usr/bin
+assert_link /lib usr/lib
+assert_link /lib64 usr/lib
+assert_link /usr/sbin bin
+
+required_applets=(
+    awk blkid cat chmod chown cp cpio cut date dd depmod df dmesg du env
+    find free grep gzip head hostname id init insmod ip kill killall ln ls
+    lsmod mdev mkdir mkfifo mknod modinfo modprobe mount mv ping ps pwd
+    readlink realpath reboot rm rmdir rmmod sed setsid sh sleep sort stat
+    switch_root sync tail tar tee test touch tr true udhcpc umount uname
+    uniq uptime vi wc xargs
+)
+
+busybox_applets=$(
+    "$loader" --library-path "$library_path" \
+        "$rootfs/usr/bin/busybox" --list
+)
+for applet in "${required_applets[@]}"; do
+    grep -qx "$applet" <<< "$busybox_applets" || \
+        die "required BusyBox applet is not enabled: $applet"
+done
+
+for binary in busybox xz zstd; do
+    if LC_ALL=C readelf --dynamic "$rootfs/usr/bin/$binary" |
+        grep -E '(RPATH|RUNPATH)' |
+        grep -F "$EFILINUX_ROOT" >/dev/null; then
+        die "$binary contains a build-directory runtime path"
+    fi
+done
+
+reset_directory "$test_directory"
+printf 'EFI Linux runtime compression round trip\n' > "$test_directory/input"
+
+"$loader" --library-path "$library_path" "$rootfs/usr/bin/xz" \
+    --stdout "$test_directory/input" > "$test_directory/input.xz"
+"$loader" --library-path "$library_path" "$rootfs/usr/bin/xz" \
+    --decompress --stdout "$test_directory/input.xz" > "$test_directory/xz.output"
+cmp "$test_directory/input" "$test_directory/xz.output"
+
+"$loader" --library-path "$library_path" "$rootfs/usr/bin/zstd" \
+    --quiet --stdout "$test_directory/input" > "$test_directory/input.zst"
+"$loader" --library-path "$library_path" "$rootfs/usr/bin/zstd" \
+    --quiet --decompress --stdout "$test_directory/input.zst" > "$test_directory/zstd.output"
+cmp "$test_directory/input" "$test_directory/zstd.output"
+
+log "Target runtime and compression round trips passed"

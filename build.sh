@@ -15,4 +15,4 @@ run_component "$ROOT/000-kernel"
 
 log "Build complete"
 printf 'EFI executable: %s\n' "$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
-printf 'Target rootfs:  %s\n' "$EFILINUX_TARGET/rootfs"
+printf 'Target rootfs:  %s\n' "$EFILINUX_ROOTFS"

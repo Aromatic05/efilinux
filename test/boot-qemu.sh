@@ -25,10 +25,14 @@ cp "$ovmf_vars_template" "$ovmf_vars"
 
 log "Booting EFI Linux with QEMU CPU model $qemu_cpu"
 set +e
-timeout --signal=TERM 30s qemu-system-x86_64 \
+{
+    sleep 60
+    printf '%s\n' \
+        "/usr/bin/modprobe loop && /usr/bin/lsmod && /usr/bin/printf 'EFILINUX_MODULE_LOAD_OK\\n'"
+} | timeout --signal=TERM 120s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \
-    -m 512M \
+    -m 2G \
     -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
     -drive if=pflash,format=raw,file="$ovmf_vars" \
     -drive format=raw,file=fat:rw:"$EFILINUX_EFI_DIR" \
@@ -57,5 +61,11 @@ if ! grep -q 'EFI Linux initial runtime' "$boot_log" || \
     die "BusyBox shell boot markers were not found"
 fi
 
-log "OVMF boot reached the BusyBox ash shell"
+if ! grep -q 'EFILINUX_MODULE_LOAD_OK' "$boot_log" || \
+   ! grep -Eq '^loop[[:space:]]' "$boot_log"; then
+    tail -n 120 "$boot_log" >&2
+    die "BusyBox failed to load a compressed kernel module from rootfs"
+fi
+
+log "OVMF boot reached BusyBox and loaded a rootfs kernel module"
 printf 'Boot log: %s\n' "$boot_log"

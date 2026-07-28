@@ -6,7 +6,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command curl tar make gcc readelf sha256sum
+require_command awk curl tar make gcc readelf sha256sum
 ensure_directories
 
 archive="$EFILINUX_DOWNLOADS/busybox-$BUSYBOX_VERSION.tar.bz2"
@@ -29,15 +29,31 @@ while IFS= read -r config_entry; do
     [[ -z "$config_entry" ]] && continue
 
     config_name=${config_entry%%=*}
-    if grep -q "^# $config_name is not set$" "$build_directory/.config"; then
-        sed -i "s/^# $config_name is not set$/$config_entry/" \
-            "$build_directory/.config"
-    elif grep -q "^$config_name=" "$build_directory/.config"; then
-        sed -i "s/^$config_name=.*/$config_entry/" \
-            "$build_directory/.config"
-    else
-        printf '%s\n' "$config_entry" >> "$build_directory/.config"
-    fi
+    awk \
+        -v name="$config_name" \
+        -v entry="$config_entry" \
+        '
+            BEGIN {
+                disabled = "# " name " is not set"
+                prefix = name "="
+                replaced = 0
+            }
+            $0 == disabled || index($0, prefix) == 1 {
+                if (!replaced) {
+                    print entry
+                    replaced = 1
+                }
+                next
+            }
+            { print }
+            END {
+                if (!replaced)
+                    print entry
+            }
+        ' \
+        "$build_directory/.config" \
+        > "$build_directory/.config.tmp"
+    mv "$build_directory/.config.tmp" "$build_directory/.config"
 done < "$ROOT/001-runtime/busybox/minimal.config"
 
 sed -i \
@@ -50,6 +66,13 @@ sed -i \
 # BusyBox documents a possible coarse-mtime race after editing .config.
 sleep 1
 make -C "$source_directory" O="$build_directory" oldconfig < <(yes '')
+
+grep -qx 'CONFIG_FEATURE_MODUTILS_ALIAS=y' "$build_directory/.config" || \
+    die "BusyBox module alias support is disabled"
+grep -qx 'CONFIG_DEFAULT_MODULES_DIR="/lib/modules"' "$build_directory/.config" || \
+    die "BusyBox default module directory is incorrect"
+grep -qx 'CONFIG_DEFAULT_DEPMOD_FILE="modules.dep"' "$build_directory/.config" || \
+    die "BusyBox depmod filename is incorrect"
 
 log "Building dynamically linked BusyBox against project glibc"
 make -C "$source_directory" \

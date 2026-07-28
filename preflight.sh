@@ -3,9 +3,11 @@
 set -euo pipefail
 
 required_commands=(
+    awk
     bc
     bison
     curl
+    depmod
     flex
     find
     g++
@@ -13,8 +15,10 @@ required_commands=(
     gcc
     grep
     gzip
+    install
     make
     md5sum
+    modinfo
     openssl
     perl
     python3
@@ -22,7 +26,10 @@ required_commands=(
     sed
     sha256sum
     sort
+    strip
     tar
+    xargs
+    zstd
 )
 
 missing_commands=()

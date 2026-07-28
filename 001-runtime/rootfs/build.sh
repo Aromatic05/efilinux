@@ -9,9 +9,9 @@ source "$ROOT/lib/common.sh"
 require_command readelf
 ensure_directories
 
-staging_directory="$EFILINUX_BUILD/staging/busybox"
-rootfs_directory="$EFILINUX_TARGET/rootfs"
-busybox_binary="$staging_directory/bin/busybox"
+busybox_staging="$EFILINUX_BUILD/staging/busybox"
+rootfs_directory="$EFILINUX_ROOTFS"
+busybox_binary="$busybox_staging/bin/busybox"
 
 [[ -x "$busybox_binary" ]] || die "BusyBox staging tree does not exist"
 reset_directory "$rootfs_directory"
@@ -40,8 +40,43 @@ while IFS= read -r applet_name; do
     [[ "$applet_name" == busybox ]] && continue
     ln -s busybox "$rootfs_directory/usr/bin/$applet_name"
 done < <(
-    find "$staging_directory" -type l -printf '%f\n' | sort -u
+    find "$busybox_staging" -type l -printf '%f\n' | sort -u
 )
+
+copy_program() {
+    local package=$1
+    local program=$2
+    local source="$EFILINUX_BUILD/staging/$package/usr/bin/$program"
+    [[ -e "$source" || -L "$source" ]] || die "$package program is missing: $program"
+    cp -a "$source" "$rootfs_directory/usr/bin/$program"
+}
+
+copy_runtime_libraries() {
+    local package=$1
+    local pattern=$2
+    local source_directory="$EFILINUX_BUILD/staging/$package/usr/lib"
+    local source
+    local found=false
+
+    shopt -s nullglob
+    for source in "$source_directory"/$pattern; do
+        cp -a "$source" "$rootfs_directory/usr/lib/"
+        found=true
+    done
+    shopt -u nullglob
+    [[ "$found" == true ]] || die "$package runtime library is missing: $pattern"
+}
+
+copy_runtime_libraries zlib 'libz.so.1*'
+copy_runtime_libraries xz 'liblzma.so.5*'
+copy_runtime_libraries zstd 'libzstd.so.1*'
+
+for program in xz unxz xzcat; do
+    copy_program xz "$program"
+done
+for program in zstd unzstd zstdcat; do
+    copy_program zstd "$program"
+done
 
 copy_glibc_runtime_file() {
     local file_name=$1
@@ -51,27 +86,34 @@ copy_glibc_runtime_file() {
     cp -aL "$source_file" "$rootfs_directory/usr/lib/$file_name"
 }
 
-interpreter=$(LC_ALL=C readelf --program-headers "$rootfs_directory/usr/bin/busybox" |
-    sed -n 's@.*Requesting program interpreter: \(.*\)]@\1@p')
-[[ -n "$interpreter" ]] || die "BusyBox ELF interpreter was not found"
-copy_glibc_runtime_file "$(basename -- "$interpreter")"
-
-while IFS= read -r library_name; do
-    [[ -z "$library_name" ]] && continue
-    copy_glibc_runtime_file "$library_name"
-done < <(
-    LC_ALL=C readelf --dynamic "$rootfs_directory/usr/bin/busybox" |
-        sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'
-)
+for runtime_file in \
+    ld-linux-x86-64.so.2 \
+    libc.so.6 \
+    libdl.so.2 \
+    libm.so.6 \
+    libnss_dns.so.2 \
+    libnss_files.so.2 \
+    libpthread.so.0 \
+    libresolv.so.2 \
+    librt.so.1; do
+    copy_glibc_runtime_file "$runtime_file"
+done
 
 cat > "$rootfs_directory/init" <<'INIT'
 #!/bin/busybox sh
 
+export PATH=/usr/bin
+export HOME=/root
+export TERM=linux
+
 /usr/bin/mount -t proc proc /proc
 /usr/bin/mount -t sysfs sysfs /sys
-/usr/bin/mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+/usr/bin/mount -t devtmpfs devtmpfs /dev 2>/dev/null || /usr/bin/true
 
+/usr/bin/mdev -s
+/usr/bin/mdev -d >/dev/null 2>&1 &
 /usr/bin/hostname efilinux
+
 /usr/bin/printf '\nEFI Linux initial runtime\n'
 /usr/bin/printf '%s\n\n' "$(/usr/bin/busybox | /usr/bin/head -n 1)"
 exec /usr/bin/setsid /usr/bin/cttyhack /usr/bin/sh
@@ -90,6 +132,19 @@ group: files
 shadow: files
 hosts: files dns
 NSSWITCH
+cat > "$rootfs_directory/etc/hosts" <<'HOSTS'
+127.0.0.1 localhost efilinux
+::1 localhost efilinux
+HOSTS
+cat > "$rootfs_directory/etc/host.conf" <<'HOSTCONF'
+multi on
+HOSTCONF
+cat > "$rootfs_directory/etc/resolv.conf" <<'RESOLV'
+# Populated by the network configuration layer.
+RESOLV
+cat > "$rootfs_directory/etc/mdev.conf" <<'MDEV'
+$MODALIAS=.* 0:0 660 @/usr/bin/modprobe "$MODALIAS"
+MDEV
 
 log "Writing initramfs device manifest"
 cat > "$EFILINUX_INITRAMFS_DEVICES" <<'DEVICES'
