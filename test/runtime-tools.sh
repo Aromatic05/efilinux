@@ -71,6 +71,63 @@ set -e
 "$loader" --library-path "$library_path" \
     "$rootfs/usr/bin/ntfsfix" --help >/dev/null 2>&1
 
+run_target() {
+    local program=$1
+    shift
+    "$loader" --library-path "$library_path" \
+        "$rootfs/usr/bin/$program" "$@"
+}
+
+run_filesystem_command() {
+    local log_file=$1
+    local description=$2
+    shift 2
+
+    if ! run_target "$@" > "$log_file" 2>&1; then
+        cat "$log_file" >&2
+        die "$description failed"
+    fi
+}
+
+filesystem_test_directory="$EFILINUX_TEST/filesystems"
+reset_directory "$filesystem_test_directory"
+
+truncate -s 64M "$filesystem_test_directory/ext4.img"
+run_filesystem_command "$filesystem_test_directory/ext4-mkfs.log" \
+    "ext4 creation" mke2fs -q -t ext4 -F "$filesystem_test_directory/ext4.img"
+run_filesystem_command "$filesystem_test_directory/ext4-check.log" \
+    "ext4 read-only check" e2fsck -fn "$filesystem_test_directory/ext4.img"
+
+truncate -s 256M "$filesystem_test_directory/btrfs.img"
+run_filesystem_command "$filesystem_test_directory/btrfs-mkfs.log" \
+    "Btrfs creation" mkfs.btrfs -q -f "$filesystem_test_directory/btrfs.img"
+run_filesystem_command "$filesystem_test_directory/btrfs-check.log" \
+    "Btrfs read-only check" btrfs check --readonly "$filesystem_test_directory/btrfs.img"
+
+truncate -s 512M "$filesystem_test_directory/xfs.img"
+run_filesystem_command "$filesystem_test_directory/xfs-mkfs.log" \
+    "XFS creation" mkfs.xfs -q -f "$filesystem_test_directory/xfs.img"
+run_filesystem_command "$filesystem_test_directory/xfs-check.log" \
+    "XFS read-only check" xfs_repair -n "$filesystem_test_directory/xfs.img"
+
+truncate -s 64M "$filesystem_test_directory/fat.img"
+run_filesystem_command "$filesystem_test_directory/fat-mkfs.log" \
+    "FAT creation" mkfs.fat "$filesystem_test_directory/fat.img"
+run_filesystem_command "$filesystem_test_directory/fat-check.log" \
+    "FAT read-only check" fsck.fat -n "$filesystem_test_directory/fat.img"
+
+truncate -s 64M "$filesystem_test_directory/exfat.img"
+run_filesystem_command "$filesystem_test_directory/exfat-mkfs.log" \
+    "exFAT creation" mkfs.exfat "$filesystem_test_directory/exfat.img"
+run_filesystem_command "$filesystem_test_directory/exfat-check.log" \
+    "exFAT read-only check" fsck.exfat -n "$filesystem_test_directory/exfat.img"
+
+truncate -s 128M "$filesystem_test_directory/ntfs.img"
+run_filesystem_command "$filesystem_test_directory/ntfs-mkfs.log" \
+    "NTFS creation" mkntfs -F -Q "$filesystem_test_directory/ntfs.img"
+run_filesystem_command "$filesystem_test_directory/ntfs-check.log" \
+    "NTFS read-only check" ntfsfix -n "$filesystem_test_directory/ntfs.img"
+
 python3 - "$rootfs" <<'PY'
 from pathlib import Path
 import os
@@ -116,4 +173,4 @@ else
     die "rootfs ownership manifest contains duplicate paths"
 fi
 
-log "001-runtime maintenance tools and filesystem policy passed"
+log "001-runtime maintenance tools and filesystem round trips passed"

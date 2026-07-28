@@ -16,20 +16,30 @@ The current build covers the first two package groups:
 └── wireless-regdb        wireless regulatory database
 
 001-runtime
-├── linux-headers         Linux UAPI headers
-├── glibc                 target C runtime
-├── zlib
-├── xz
-├── zstd
-├── busybox               ash and maintenance applets
-└── rootfs                merged-/usr system assembly
+├── linux-headers, glibc, zlib, xz, zstd
+├── attr, acl, libcap, libxcrypt, lzo
+├── busybox               ash and rescue applets
+├── kmod                  formal module management
+├── util-linux            block, mount, partition, swap, and hardware tools
+├── e2fsprogs, btrfs-progs, xfsprogs
+├── dosfstools, exfatprogs, NTFS maintenance tools
+├── kbd, iana-etc, tzdata
+└── rootfs, runtime-tools merged-/usr system assembly
 ```
 
-BusyBox `ash` provides `/bin/sh` and most basic commands. Bash, GNU coreutils,
-and other broad utility suites are not installed. Standalone programs are added
-only when a concrete runtime need is not adequately covered by BusyBox.
+BusyBox `ash` provides `/bin/sh` and rescue implementations of basic commands.
+Formal module, mount, block-device, partition, console, and filesystem tools
+replace the corresponding BusyBox links through an explicit ownership
+manifest. Bash, GNU coreutils, and other broad utility suites are not installed.
+Headers, static libraries, pkg-config files, and documentation remain in the
+build sysroot or staging trees and are not copied into the target rootfs.
 
 The target userspace baseline is `x86-64-v2`.
+
+The maintenance environment can create, inspect, and repair ext4, Btrfs, XFS,
+FAT, exFAT, and NTFS filesystems. NTFS mounting uses the in-kernel `ntfs3`
+driver; NTFS-3G contributes maintenance programs only, not the FUSE mount
+driver.
 
 ## Single-rootfs model
 
@@ -130,6 +140,12 @@ The suite verifies:
 
 - merged-/usr layout and required BusyBox applets;
 - target-glibc execution and XZ/Zstd compression round trips;
+- explicit replacement of BusyBox links by Kmod, Util-linux, Kbd, and
+  filesystem-specific tools;
+- complete ELF shared-library closure with no target headers, static libraries,
+  or development metadata in the rootfs;
+- real create-and-read-only-check round trips for ext4, Btrfs, XFS, FAT, exFAT,
+  and NTFS sparse images;
 - exact kernel policy and curated compressed module set;
 - modules, curated firmware, and regulatory data under `target/rootfs`;
 - `target/rootfs` as the sole `CONFIG_INITRAMFS_SOURCE` directory;

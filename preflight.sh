@@ -3,12 +3,14 @@
 set -euo pipefail
 
 required_commands=(
+    autoreconf
     awk
     bc
     bison
     curl
     depmod
     flex
+    file
     find
     g++
     gawk
@@ -18,9 +20,15 @@ required_commands=(
     install
     make
     md5sum
+    meson
     modinfo
+    msgfmt
+    msgmerge
+    ninja
     openssl
+    patch
     perl
+    pkg-config
     python3
     readelf
     sed
@@ -29,6 +37,7 @@ required_commands=(
     strip
     tar
     xargs
+    xgettext
     zstd
 )
 
