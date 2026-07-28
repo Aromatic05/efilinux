@@ -6,7 +6,7 @@ installed into the target system and no toolchain bootstrap is performed.
 
 ## Current milestone
 
-The current build covers the first two package groups:
+The current build covers the first three package groups:
 
 ```text
 000-kernel
@@ -25,6 +25,16 @@ The current build covers the first two package groups:
 ├── dosfstools, exfatprogs, NTFS maintenance tools
 ├── kbd, iana-etc, tzdata
 └── rootfs, runtime-tools merged-/usr system assembly
+
+002-system
+├── SysVinit             PID 1, runlevels, console lifecycle, shutdown
+├── standalone Udev      device events, persistent naming, hwdb
+├── Linux-PAM, Shadow    authentication and account management
+├── Sysklogd, D-Bus, Cronie
+├── iproute2, iputils, dhcpcd
+├── OpenSSL, Expat
+├── OpenSSH              key-only remote maintenance
+└── system-rootfs        accounts, PAM policy, services, and runlevels
 ```
 
 BusyBox `ash` provides `/bin/sh` and rescue implementations of basic commands.
@@ -34,12 +44,23 @@ manifest. Bash, GNU coreutils, and other broad utility suites are not installed.
 Headers, static libraries, pkg-config files, and documentation remain in the
 build sysroot or staging trees and are not copied into the target rootfs.
 
-The target userspace baseline is `x86-64-v2`.
+The target userspace baseline is `x86-64-v2`. SysVinit is the final PID 1;
+BusyBox remains the rescue shell and compact implementation of basic commands.
+The kernel initramfs generator maps the build user's UID and GID to root, so
+security-sensitive target paths have deterministic ownership without requiring
+the host build to run as root.
 
 The maintenance environment can create, inspect, and repair ext4, Btrfs, XFS,
 FAT, exFAT, and NTFS filesystems. NTFS mounting uses the in-kernel `ntfs3`
 driver; NTFS-3G contributes maintenance programs only, not the FUSE mount
 driver.
+
+Runlevel 3 starts Udev, local networking, Sysklogd, the D-Bus system bus,
+Cronie, dhcpcd, and OpenSSH. The root password is locked in the image. Local
+serial-console access is available for maintenance, while SSH permits root only
+with an authorized key and disables password and keyboard-interactive
+authentication. Host keys and the D-Bus machine ID are generated at boot and
+are never shared between built images.
 
 ## Single-rootfs model
 
@@ -142,14 +163,18 @@ The suite verifies:
 - target-glibc execution and XZ/Zstd compression round trips;
 - explicit replacement of BusyBox links by Kmod, Util-linux, Kbd, and
   filesystem-specific tools;
-- complete ELF shared-library closure with no target headers, static libraries,
+- complete ELF shared-library closure across programs, PAM modules, Udev
+  helpers, plugins, and libexec files, with no target headers, static libraries,
   or development metadata in the rootfs;
 - real create-and-read-only-check round trips for ext4, Btrfs, XFS, FAT, exFAT,
   and NTFS sparse images;
 - exact kernel policy and curated compressed module set;
 - modules, curated firmware, and regulatory data under `target/rootfs`;
 - `target/rootfs` as the sole `CONFIG_INITRAMFS_SOURCE` directory;
-- real OVMF boot with a `Nehalem` CPU model through to the BusyBox `ash` prompt;
+- exact initramfs ownership mapping from the build user to root;
+- real OVMF boot with a `Nehalem` CPU model into SysVinit runlevel 3;
+- live Udev, Sysklogd, D-Bus, Cronie, dhcpcd, and OpenSSH processes;
+- DHCP configuration and an OpenSSH listener inside the guest;
 - target Kmod loading a Zstd-compressed module from the embedded rootfs.
 
 The removable-media EFI path is:
