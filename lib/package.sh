@@ -16,15 +16,199 @@ target_pkg_config() {
         pkg-config "$@"
 }
 
-prepare_package() {
+set_package_paths() {
     local package=$1
 
     PACKAGE_SOURCE="$EFILINUX_BUILD/sources/$package"
     PACKAGE_BUILD="$EFILINUX_BUILD/$package"
     PACKAGE_STAGING="$EFILINUX_BUILD/staging/$package"
+}
+
+prepare_package() {
+    local package=$1
+
+    set_package_paths "$package"
     reset_directory "$PACKAGE_SOURCE"
     reset_directory "$PACKAGE_BUILD"
     reset_directory "$PACKAGE_STAGING"
+}
+
+binary_package_recipe_hash() {
+    local package=$1
+    local producer=$2
+    shift 2
+    local recipe_file
+
+    [[ -f "$producer" ]] || die "binary package producer is missing: $producer"
+    {
+        printf 'format=1\n'
+        printf 'package=%s\n' "$package"
+        printf 'arch=%s\n' "$EFILINUX_ARCH"
+        printf 'x86_64_level=%s\n' "$EFILINUX_X86_64_LEVEL"
+        printf 'cflags=%s\n' "$(target_cflags)"
+        printf 'ldflags=%s\n' "$(target_ldflags)"
+        for recipe_file in \
+            "$EFILINUX_ROOT/config.sh" \
+            "$EFILINUX_ROOT/lib/common.sh" \
+            "$EFILINUX_ROOT/lib/package.sh" \
+            "$producer" \
+            "$@"; do
+            [[ -f "$recipe_file" ]] || \
+                die "binary package recipe input is missing: $recipe_file"
+            printf 'recipe=%s\n' "${recipe_file#"$EFILINUX_ROOT/"}"
+            sha256sum "$recipe_file"
+        done
+    } | sha256sum | awk '{print $1}'
+}
+
+binary_package_archive_path() {
+    local package=$1
+    local fingerprint=$2
+
+    printf '%s/%s-%s-%s.pkg.tar.zst' \
+        "$EFILINUX_PACKAGES" "$package" "$EFILINUX_ARCH" "${fingerprint:0:16}"
+}
+
+binary_package_verify_archive() {
+    local archive=$1
+    local expected_package=$2
+    local expected_fingerprint=$3
+    local checksum_file="$archive.sha256"
+    local metadata
+
+    [[ -f "$archive" ]] || return 1
+    [[ -f "$checksum_file" ]] || \
+        die "binary package checksum is missing: $checksum_file"
+    (cd "$(dirname -- "$archive")" && sha256sum --check --status "$(basename -- "$checksum_file")") || \
+        die "binary package checksum verification failed: $archive"
+    metadata=$(tar --extract --to-stdout --file "$archive" .PKGINFO)
+    grep -Fxq "name=$expected_package" <<<"$metadata" || \
+        die "binary package name mismatch: $archive"
+    grep -Fxq "fingerprint=$expected_fingerprint" <<<"$metadata" || \
+        die "binary package recipe mismatch: $archive"
+}
+
+binary_package_extract() {
+    local package=$1
+    local destination=$2
+    local producer=$3
+    shift 3
+    local fingerprint archive
+
+    fingerprint=$(binary_package_recipe_hash "$package" "$producer" "$@")
+    archive=$(binary_package_archive_path "$package" "$fingerprint")
+    [[ -f "$archive" ]] || return 1
+    binary_package_verify_archive "$archive" "$package" "$fingerprint"
+    reset_directory "$destination"
+    tar --extract --file "$archive" --directory "$destination" \
+        --strip-components=1 pkg
+    PACKAGE_ARCHIVE="$archive"
+    PACKAGE_FINGERPRINT="$fingerprint"
+}
+
+binary_package_update_index() {
+    local package=$1
+    local fingerprint=$2
+    local archive=$3
+    local digest=$4
+    local temporary="$EFILINUX_PACKAGE_INDEX.tmp.$$"
+
+    mkdir -p "$(dirname -- "$EFILINUX_PACKAGE_INDEX")"
+    touch "$EFILINUX_PACKAGE_INDEX"
+    awk -F '\t' -v package="$package" '$1 != package' \
+        "$EFILINUX_PACKAGE_INDEX" > "$temporary"
+    printf '%s\t%s\t%s\t%s\n' \
+        "$package" "$fingerprint" "$(basename -- "$archive")" "$digest" \
+        >> "$temporary"
+    sort -t $'\t' -k1,1 "$temporary" -o "$temporary"
+    mv -- "$temporary" "$EFILINUX_PACKAGE_INDEX"
+}
+
+binary_package_prune_recipe_variants() {
+    local package=$1
+    local current_archive=$2
+    local archive
+
+    shopt -s nullglob
+    for archive in "$EFILINUX_PACKAGES/$package-$EFILINUX_ARCH-"*.pkg.tar.zst; do
+        [[ "$archive" == "$current_archive" ]] && continue
+        rm -f -- "$archive" "$archive.sha256"
+    done
+    shopt -u nullglob
+}
+
+binary_package_create() {
+    local package=$1
+    local staging=$2
+    local producer=$3
+    shift 3
+    local fingerprint archive temporary metadata_dir digest source_epoch
+
+    [[ -d "$staging" ]] || die "binary package staging tree is missing: $staging"
+    ensure_directories
+    fingerprint=$(binary_package_recipe_hash "$package" "$producer" "$@")
+    archive=$(binary_package_archive_path "$package" "$fingerprint")
+    temporary="$archive.tmp.$$"
+    metadata_dir="$EFILINUX_PACKAGE_WORK/metadata-$package-$$"
+    source_epoch=${SOURCE_DATE_EPOCH:-0}
+    reset_directory "$metadata_dir"
+
+    cat > "$metadata_dir/.PKGINFO" <<EOF
+format=1
+name=$package
+arch=$EFILINUX_ARCH
+x86_64_level=$EFILINUX_X86_64_LEVEL
+fingerprint=$fingerprint
+producer=${producer#"$EFILINUX_ROOT/"}
+EOF
+    (cd "$staging" && find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort) \
+        > "$metadata_dir/.FILELIST"
+
+    tar --create --zstd --file "$temporary" \
+        --sort=name \
+        --mtime="@$source_epoch" \
+        --owner=0 --group=0 --numeric-owner \
+        --transform='s#^\./#pkg/#' \
+        -C "$staging" . \
+        -C "$metadata_dir" .PKGINFO .FILELIST
+    digest=$(sha256sum "$temporary" | awk '{print $1}')
+    mv -- "$temporary" "$archive"
+    printf '%s  %s\n' "$digest" "$(basename -- "$archive")" > "$archive.sha256"
+    binary_package_update_index "$package" "$fingerprint" "$archive" "$digest"
+    binary_package_prune_recipe_variants "$package" "$archive"
+    rm -rf -- "$metadata_dir"
+
+    PACKAGE_ARCHIVE="$archive"
+    PACKAGE_FINGERPRINT="$fingerprint"
+    log "Created binary package $(basename -- "$archive")"
+}
+
+binary_package_current_archive() {
+    local package=$1
+    local record archive digest
+
+    [[ -f "$EFILINUX_PACKAGE_INDEX" ]] || \
+        die "binary package index is missing: $EFILINUX_PACKAGE_INDEX"
+    record=$(awk -F '\t' -v package="$package" '$1 == package { print; exit }' \
+        "$EFILINUX_PACKAGE_INDEX")
+    [[ -n "$record" ]] || die "binary package is not indexed: $package"
+    IFS=$'\t' read -r _ _ archive digest <<<"$record"
+    archive="$EFILINUX_PACKAGES/$archive"
+    [[ -f "$archive" ]] || die "indexed binary package is missing: $archive"
+    [[ $(sha256sum "$archive" | awk '{print $1}') == "$digest" ]] || \
+        die "indexed binary package checksum mismatch: $archive"
+    printf '%s' "$archive"
+}
+
+binary_package_materialize() {
+    local package=$1
+    local destination=$2
+    local archive
+
+    archive=$(binary_package_current_archive "$package")
+    reset_directory "$destination"
+    tar --extract --file "$archive" --directory "$destination" \
+        --strip-components=1 pkg
 }
 
 merge_sysroot() {

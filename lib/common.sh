@@ -22,7 +22,9 @@ require_command() {
 ensure_directories() {
     mkdir -p \
         "$EFILINUX_DOWNLOADS" \
+        "$EFILINUX_PACKAGES" \
         "$EFILINUX_BUILD/sources" \
+        "$EFILINUX_PACKAGE_WORK" \
         "$EFILINUX_BUILD/staging" \
         "$EFILINUX_LOGS" \
         "$EFILINUX_STATE" \
