@@ -10,7 +10,7 @@ usage() {
     cat <<'USAGE'
 Usage: ./run-qemu-gui.sh [--reset-nvram] [--fullscreen] [--dry-run]
 
-Start the built EFI Linux image in a GTK QEMU window with KVM acceleration.
+Start the built EFI Linux image with VirtIO-GPU in a GTK QEMU window.
 The GTK window contains display, serial-console, and QEMU-monitor tabs.
 
 Environment overrides:
@@ -87,7 +87,8 @@ qemu_command=(
     -device "e1000e,netdev=net0"
     -device "qemu-xhci,id=xhci"
     -device "usb-tablet,bus=xhci.0"
-    -vga std
+    -vga none
+    -device virtio-vga
     -display "$qemu_display"
     -serial vc
     -monitor vc
@@ -98,7 +99,7 @@ printf 'EFI image:  %s\n' "$efi_binary"
 printf 'NVRAM:      %s\n' "$ovmf_vars"
 printf 'KVM:        enabled, CPU=host, SMP=%s, memory=%s\n' "$qemu_smp" "$qemu_memory"
 printf 'SSH:        127.0.0.1:%s -> guest:22\n' "$qemu_ssh_port"
-printf 'GTK tabs:   VGA display, serial console, QEMU monitor\n'
+printf 'GTK tabs:   VirtIO-GPU display, serial console, QEMU monitor\n'
 
 if ((dry_run)); then
     printf 'Command:'

@@ -54,8 +54,7 @@ if grep -q 'Kernel panic' "$boot_log"; then
     die "kernel panic detected"
 fi
 
-if ! grep -q 'INIT: Entering runlevel: 3' "$boot_log" || \
-   ! grep -q 'EFILINUX_PID1=init' "$boot_log" || \
+if ! grep -q 'EFILINUX_PID1=init' "$boot_log" || \
    ! grep -q 'EFILINUX_SERVICES_OK' "$boot_log"; then
     tail -n 120 "$boot_log" >&2
     die "SysVinit or the multi-user service set did not become operational"

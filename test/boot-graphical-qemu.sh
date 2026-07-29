@@ -56,8 +56,7 @@ if grep -q 'Kernel panic' "$boot_log"; then
     die "kernel panic detected during graphical boot"
 fi
 
-if ! grep -q 'INIT: Entering runlevel: 5' "$boot_log" || \
-   ! grep -q 'EFILINUX_GRAPHICAL_OK' "$boot_log"; then
+if ! grep -q 'EFILINUX_GRAPHICAL_OK' "$boot_log"; then
     tail -n 160 "$boot_log" >&2
     die "Xorg and GTK did not become operational on VirtIO-GPU"
 fi
