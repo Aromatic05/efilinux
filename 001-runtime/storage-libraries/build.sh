@@ -17,6 +17,7 @@ restore_package() {
 }
 
 publish_package() {
+    find "$PACKAGE_STAGING" -type f -name '*.la' -delete 2>/dev/null || true
     binary_package_publish_sysroot "$1" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"
 }
 
