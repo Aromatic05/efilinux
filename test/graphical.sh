@@ -47,7 +47,6 @@ require_library() {
     die "graphical library family is missing: $pattern"
 }
 
-require_file /etc/X11/Xwrapper.config
 require_file /etc/X11/xinit/xinitrc
 require_file /etc/X11/xorg.conf.d/40-libinput.conf
 require_file /etc/gtk-3.0/settings.ini
@@ -60,11 +59,9 @@ require_directory /usr/lib/xorg/modules/input
 require_directory /usr/lib/dri
 
 require_program Xorg xorg-server
-require_program Xorg.wrap xorg-server
 require_program xinit xinit
-require_program xauth xauth
 require_program xkbcomp xkbcomp
-require_program xdpyinfo xdpyinfo
+require_program xwininfo xwininfo
 require_program gtk3-demo gtk3
 require_program gtk3-widget-factory gtk3
 

@@ -28,7 +28,7 @@ set +e
 {
     sleep 100
     printf '%s\n' \
-        "test \"\$(cat /run/efilinux/runlevel)\" = 5 && test -S /tmp/.X11-unix/X0 && test -s /run/efilinux/graphical.pid && kill -0 \"\$(cat /run/efilinux/graphical.pid)\" && pidof Xorg >/dev/null && pidof gtk3-demo >/dev/null && DISPLAY=:0 XAUTHORITY=/root/.Xauthority /usr/bin/xdpyinfo >/dev/null && /usr/bin/printf 'EFILINUX_GRAPHICAL_OK\\n' && /usr/bin/poweroff -f"
+        "test \"\$(cat /run/efilinux/runlevel)\" = 5 && test -S /tmp/.X11-unix/X0 && test -s /run/efilinux/graphical.pid && kill -0 \"\$(cat /run/efilinux/graphical.pid)\" && pidof Xorg >/dev/null && pidof gtk3-demo >/dev/null && DISPLAY=:0 /usr/bin/xwininfo -root >/dev/null && /usr/bin/printf 'EFILINUX_GRAPHICAL_OK\\n' && /usr/bin/poweroff -f"
 } | timeout --signal=TERM 180s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \
