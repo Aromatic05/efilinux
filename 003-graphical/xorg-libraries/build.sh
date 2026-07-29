@@ -51,6 +51,8 @@ build_xorg_library libXrandr "$LIBXRANDR_VERSION" "$LIBXRANDR_SHA256" \
     xorg/lib/libxrandr "libXrandr-$LIBXRANDR_VERSION"
 build_xorg_library libXi "$LIBXI_VERSION" "$LIBXI_SHA256" \
     xorg/lib/libxi "libXi-$LIBXI_VERSION"
+build_xorg_library libXtst "$LIBXTST_VERSION" "$LIBXTST_SHA256" \
+    xorg/lib/libxtst "libXtst-$LIBXTST_VERSION"
 build_xorg_library libXcursor "$LIBXCURSOR_VERSION" "$LIBXCURSOR_SHA256" \
     xorg/lib/libxcursor "libXcursor-$LIBXCURSOR_VERSION"
 build_xorg_library libXdamage "$LIBXDAMAGE_VERSION" "$LIBXDAMAGE_SHA256" \
