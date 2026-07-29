@@ -1,0 +1,13 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /var/lib/iwd
+        chmod 0700 /var/lib/iwd
+        start_daemon iwd /usr/lib/iwd
+        ;;
+    stop) stop_daemon iwd ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

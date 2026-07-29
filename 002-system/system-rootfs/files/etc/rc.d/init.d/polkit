@@ -1,0 +1,13 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /run/polkit-1 /var/lib/polkit-1
+        chown polkitd:polkitd /run/polkit-1 /var/lib/polkit-1
+        start_daemon polkit /usr/lib/polkit-1/polkitd --no-debug
+        ;;
+    stop) stop_daemon polkit ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

@@ -1,0 +1,12 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /run/udisks2 /var/lib/udisks2
+        start_daemon udisks2 /usr/lib/udisks2/udisksd --no-debug
+        ;;
+    stop) stop_daemon udisks2 ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

@@ -20,5 +20,7 @@ dbus:x:81:
 input:x:97:user
 kvm:x:98:
 users:x:100:
+upower:x:87:
+polkitd:x:102:
 user:x:1000:
 nogroup:x:65534:

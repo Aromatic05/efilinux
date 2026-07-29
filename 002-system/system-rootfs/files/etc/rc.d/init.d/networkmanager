@@ -1,0 +1,12 @@
+#!/usr/bin/sh
+set -eu
+. /etc/rc.d/init.d/functions
+
+case ${1:-} in
+    start)
+        mkdir -p /run/NetworkManager /var/lib/NetworkManager
+        start_daemon networkmanager /usr/bin/NetworkManager --no-daemon
+        ;;
+    stop) stop_daemon networkmanager ;;
+    *) printf 'usage: %s {start|stop}\n' "$0" >&2; exit 2 ;;
+esac

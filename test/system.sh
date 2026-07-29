@@ -99,7 +99,7 @@ done
 
 [[ -L "$rootfs/var/run" && $(readlink -- "$rootfs/var/run") == /run ]] || \
     die "/var/run does not point to /run"
-[[ -L "$rootfs/etc/rc.d/rc3.d/S60sshd" ]] || die "runlevel 3 does not start sshd"
+[[ -L "$rootfs/etc/rc.d/rc3.d/S70sshd" ]] || die "runlevel 3 does not start sshd"
 [[ -L "$rootfs/etc/rc.d/rc6.d/K10sshd" ]] || die "runlevel 6 does not stop sshd"
 
 root_account=$(awk -F: '$3 == 0 { print $1; exit }' "$rootfs/etc/passwd")

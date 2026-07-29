@@ -1,0 +1,11 @@
+#!/usr/bin/sh
+set -eu
+
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+export XDG_RUNTIME_DIR
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+
+pidof pipewire >/dev/null 2>&1 || /usr/bin/pipewire >>"$XDG_RUNTIME_DIR/pipewire.log" 2>&1 &
+pidof pipewire-pulse >/dev/null 2>&1 || /usr/bin/pipewire-pulse >>"$XDG_RUNTIME_DIR/pipewire-pulse.log" 2>&1 &
+pidof wireplumber >/dev/null 2>&1 || /usr/bin/wireplumber >>"$XDG_RUNTIME_DIR/wireplumber.log" 2>&1 &
