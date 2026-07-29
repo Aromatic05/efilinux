@@ -53,6 +53,22 @@ install_soname_family() {
     install_rootfs_library_family "$package" "$(stage "$package")" "$pattern"
 }
 
+install_soname_link() {
+    local package=$1
+    local soname=$2
+    local package_root
+    local target
+
+    package_root=$(stage "$package")
+    [[ -L "$package_root/usr/lib/$soname" ]] || \
+        die "$package SONAME link is missing: $soname"
+    target=$(readlink -- "$package_root/usr/lib/$soname")
+    [[ -f "$package_root/usr/lib/$target" ]] || \
+        die "$package SONAME target is missing: $target"
+    install_rootfs_file "$package" "$package_root/usr/lib/$target" "/usr/lib/$target"
+    install_rootfs_file "$package" "$package_root/usr/lib/$soname" "/usr/lib/$soname"
+}
+
 log "Installing formal module, disk, and filesystem maintenance tools"
 
 for program in getfattr setfattr; do
@@ -110,6 +126,13 @@ done
 install_optional_program "ntfs-3g-$NTFS_3G_VERSION" mkfs.ntfs
 
 log "Installing runtime shared-library closure"
+install_rootfs_file \
+    "gcc-runtime-$GCC_RUNTIME_VERSION" \
+    "$(stage "gcc-runtime-$GCC_RUNTIME_VERSION")/usr/lib/libgcc_s.so.1" \
+    /usr/lib/libgcc_s.so.1
+install_soname_link "gcc-runtime-$GCC_RUNTIME_VERSION" libstdc++.so.6
+install_soname_family "libffi-$LIBFFI_VERSION" 'libffi.so.8*'
+install_soname_family "pcre2-$PCRE2_VERSION" 'libpcre2-8.so.0*'
 install_soname_family "attr-$ATTR_VERSION" 'libattr.so.*'
 install_soname_family "acl-$ACL_VERSION" 'libacl.so.*'
 install_soname_family "libcap-$LIBCAP_VERSION" 'libcap.so.*'

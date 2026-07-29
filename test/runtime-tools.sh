@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
 
 require_command python3 readelf
 
@@ -185,6 +186,10 @@ for compiler in gcc g++ cc c++ cpp gcov; do
     [[ ! -e "$rootfs/usr/bin/$compiler" ]] || \
         die "compiler executable leaked into target rootfs: $compiler"
 done
+
+if find "$rootfs/usr/lib" -type f -name '*-gdb.py' -print -quit | grep -q .; then
+    die "GDB pretty-printer scripts leaked into target rootfs"
+fi
 
 if find "$rootfs" -type f \( -name '*.a' -o -name '*.la' -o -name '*.pc' \) \
     -print -quit | grep -q .; then
