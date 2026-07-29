@@ -49,8 +49,6 @@ binary_package_recipe_hash() {
         printf 'ldflags=%s\n' "$(target_ldflags)"
         for recipe_file in \
             "$EFILINUX_ROOT/config.sh" \
-            "$EFILINUX_ROOT/lib/common.sh" \
-            "$EFILINUX_ROOT/lib/package.sh" \
             "$producer" \
             "$@"; do
             [[ -f "$recipe_file" ]] || \
@@ -106,6 +104,40 @@ binary_package_extract() {
     PACKAGE_FINGERPRINT="$fingerprint"
 }
 
+binary_package_restore_sysroot() {
+    local package=$1
+    local producer=$2
+    shift 2
+
+    set_package_paths "$package"
+    if ! binary_package_extract \
+        "$package" "$PACKAGE_STAGING" "$producer" "$@"; then
+        return 1
+    fi
+
+    log "Using binary package $(basename -- "$PACKAGE_ARCHIVE")"
+    merge_sysroot "$PACKAGE_STAGING"
+    rm -rf -- "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+}
+
+binary_package_reuse() {
+    local package=$1
+    local producer=$2
+    shift 2
+    local fingerprint archive
+
+    fingerprint=$(binary_package_recipe_hash "$package" "$producer" "$@")
+    archive=$(binary_package_archive_path "$package" "$fingerprint")
+    [[ -f "$archive" ]] || return 1
+    binary_package_verify_archive "$archive" "$package" "$fingerprint"
+
+    PACKAGE_ARCHIVE="$archive"
+    PACKAGE_FINGERPRINT="$fingerprint"
+    set_package_paths "$package"
+    rm -rf -- "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    log "Reusing binary package $(basename -- "$archive")"
+}
+
 binary_package_update_index() {
     local package=$1
     local fingerprint=$2
@@ -137,6 +169,24 @@ binary_package_prune_recipe_variants() {
     shopt -u nullglob
 }
 
+binary_package_remove() {
+    local package=$1
+    local temporary="$EFILINUX_PACKAGE_INDEX.tmp.$$"
+    local archive
+
+    if [[ -f "$EFILINUX_PACKAGE_INDEX" ]]; then
+        awk -F '\t' -v package="$package" '$1 != package' \
+            "$EFILINUX_PACKAGE_INDEX" > "$temporary"
+        mv -- "$temporary" "$EFILINUX_PACKAGE_INDEX"
+    fi
+
+    shopt -s nullglob
+    for archive in "$EFILINUX_PACKAGES/$package-$EFILINUX_ARCH-"*.pkg.tar.zst; do
+        rm -f -- "$archive" "$archive.sha256"
+    done
+    shopt -u nullglob
+}
+
 binary_package_create() {
     local package=$1
     local staging=$2
@@ -161,6 +211,10 @@ x86_64_level=$EFILINUX_X86_64_LEVEL
 fingerprint=$fingerprint
 producer=${producer#"$EFILINUX_ROOT/"}
 EOF
+    for recipe_file in "$EFILINUX_ROOT/config.sh" "$producer" "$@"; do
+        printf 'recipe=%s\n' "${recipe_file#"$EFILINUX_ROOT/"}" \
+            >> "$metadata_dir/.PKGINFO"
+    done
     (cd "$staging" && find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort) \
         > "$metadata_dir/.FILELIST"
 
@@ -183,20 +237,44 @@ EOF
     log "Created binary package $(basename -- "$archive")"
 }
 
+binary_package_publish_sysroot() {
+    local package=$1
+    local producer=$2
+    shift 2
+
+    binary_package_create \
+        "$package" "$PACKAGE_STAGING" "$producer" "$@"
+    merge_sysroot "$PACKAGE_STAGING"
+    rm -rf -- "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+}
+
+binary_package_publish_staging() {
+    local package=$1
+    local producer=$2
+    shift 2
+
+    binary_package_create \
+        "$package" "$PACKAGE_STAGING" "$producer" "$@"
+    rm -rf -- "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+}
+
 binary_package_current_archive() {
     local package=$1
-    local record archive digest
+    local record indexed_package fingerprint archive digest
 
     [[ -f "$EFILINUX_PACKAGE_INDEX" ]] || \
         die "binary package index is missing: $EFILINUX_PACKAGE_INDEX"
     record=$(awk -F '\t' -v package="$package" '$1 == package { print; exit }' \
         "$EFILINUX_PACKAGE_INDEX")
     [[ -n "$record" ]] || die "binary package is not indexed: $package"
-    IFS=$'\t' read -r _ _ archive digest <<<"$record"
+    IFS=$'\t' read -r indexed_package fingerprint archive digest <<<"$record"
+    [[ "$indexed_package" == "$package" ]] || \
+        die "binary package index returned the wrong package: $indexed_package"
     archive="$EFILINUX_PACKAGES/$archive"
     [[ -f "$archive" ]] || die "indexed binary package is missing: $archive"
     [[ $(sha256sum "$archive" | awk '{print $1}') == "$digest" ]] || \
         die "indexed binary package checksum mismatch: $archive"
+    binary_package_verify_archive "$archive" "$package" "$fingerprint"
     printf '%s' "$archive"
 }
 
@@ -222,6 +300,17 @@ remove_rootfs_owner() {
 
     [[ -f "$EFILINUX_ROOTFS_OWNERS" ]] || return
     awk -F '\t' -v path="$relative_path" '$1 != path' \
+        "$EFILINUX_ROOTFS_OWNERS" > "$temporary"
+    mv "$temporary" "$EFILINUX_ROOTFS_OWNERS"
+}
+
+remove_rootfs_owner_prefix() {
+    local relative_prefix=$1
+    local temporary="$EFILINUX_ROOTFS_OWNERS.tmp"
+
+    [[ -f "$EFILINUX_ROOTFS_OWNERS" ]] || return
+    awk -F '\t' -v prefix="$relative_prefix/" \
+        '$1 != substr(prefix, 1, length(prefix) - 1) && index($1, prefix) != 1' \
         "$EFILINUX_ROOTFS_OWNERS" > "$temporary"
     mv "$temporary" "$EFILINUX_ROOTFS_OWNERS"
 }
@@ -347,6 +436,27 @@ install_rootfs_tree() {
             install_rootfs_file "$package" "$entry" "$relative_path"
         fi
     done < <(find "$source_root" -mindepth 1 -print0)
+}
+
+replace_rootfs_tree() {
+    local package=$1
+    local expected_owner=$2
+    local source_root=$3
+    local destination_root=$4
+    local conflict
+
+    conflict=$(awk -F '\t' \
+        -v path="$destination_root" \
+        -v prefix="$destination_root/" \
+        -v expected="$expected_owner" \
+        '($1 == path || index($1, prefix) == 1) && $2 != expected { print $1 " owned by " $2; exit }' \
+        "$EFILINUX_ROOTFS_OWNERS" 2>/dev/null || true)
+    [[ -z "$conflict" ]] || \
+        die "$package cannot replace $destination_root: $conflict"
+
+    rm -rf -- "$EFILINUX_ROOTFS$destination_root"
+    remove_rootfs_owner_prefix "$destination_root"
+    install_rootfs_tree "$package" "$source_root" "$destination_root"
 }
 
 strip_rootfs_elf() {
