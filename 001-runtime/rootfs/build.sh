@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
+source "$ROOT/001-runtime/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
@@ -82,12 +83,32 @@ copy_runtime_libraries() {
 copy_runtime_libraries "zlib-$ZLIB_VERSION" 'libz.so.1*'
 copy_runtime_libraries "xz-$XZ_VERSION" 'liblzma.so.5*'
 copy_runtime_libraries "zstd-$ZSTD_VERSION" 'libzstd.so.1*'
+for library in \
+    'libglib-2.0.so.0*' \
+    'libgobject-2.0.so.0*' \
+    'libgio-2.0.so.0*' \
+    'libgmodule-2.0.so.0*' \
+    'libgthread-2.0.so.0*'; do
+    copy_runtime_libraries "glib-$GLIB_VERSION" "$library"
+done
+copy_runtime_libraries "libyaml-$LIBYAML_VERSION" 'libyaml-0.so.2*'
+copy_runtime_libraries "libexif-$LIBEXIF_VERSION" 'libexif.so.12*'
 
 for program in xz unxz xzcat; do
     copy_program "xz-$XZ_VERSION" "$program"
 done
 for program in zstd unzstd zstdcat; do
     copy_program "zstd-$ZSTD_VERSION" "$program"
+done
+for program in gdbus gio gio-querymodules glib-compile-schemas gsettings; do
+    copy_program "glib-$GLIB_VERSION" "$program"
+done
+
+for runtime_tree in gio glib-2.0; do
+    source_tree="$(stage "glib-$GLIB_VERSION")/usr/lib/$runtime_tree"
+    if [[ -d "$source_tree" ]]; then
+        install_rootfs_tree glib "$source_tree" "/usr/lib/$runtime_tree"
+    fi
 done
 
 copy_glibc_runtime_file() {
