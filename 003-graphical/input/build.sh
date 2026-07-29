@@ -53,15 +53,24 @@ build_meson_component \
     -Dinternal-event-debugging=false \
     -Dautoload-plugins=false
 
-build_meson_component \
-    "xkeyboard-config-$XKEYBOARD_CONFIG_VERSION" \
-    "xkeyboard-config-$XKEYBOARD_CONFIG_VERSION.tar.gz" \
-    "$XKEYBOARD_CONFIG_SHA256" \
-    "https://gitlab.freedesktop.org/xkeyboard-config/xkeyboard-config/-/archive/xkeyboard-config-$XKEYBOARD_CONFIG_VERSION/xkeyboard-config-xkeyboard-config-$XKEYBOARD_CONFIG_VERSION.tar.gz" \
-    -Dcompat-rules=true \
-    -Dxorg-rules-symlinks=true \
-    -Dnls=false \
-    -Dnon-latin-layouts-list=false
+xkeyboard_package="xkeyboard-config-$XKEYBOARD_CONFIG_VERSION"
+if ! graphical_binary_package_restore "$xkeyboard_package"; then
+    graphical_prepare_archive \
+        "$xkeyboard_package" \
+        "xkeyboard-config-$XKEYBOARD_CONFIG_VERSION.tar.gz" \
+        "$XKEYBOARD_CONFIG_SHA256" \
+        "https://gitlab.freedesktop.org/xkeyboard-config/xkeyboard-config/-/archive/xkeyboard-config-$XKEYBOARD_CONFIG_VERSION/xkeyboard-config-xkeyboard-config-$XKEYBOARD_CONFIG_VERSION.tar.gz"
+    sed -i \
+        "s/find_program('xsltproc', required: false)/find_program('efilinux-disabled-xsltproc', required: false)/" \
+        "$PACKAGE_SOURCE/meson.build"
+    graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+        -Dcompat-rules=true \
+        -Dxorg-rules-symlinks=true \
+        -Dnls=false \
+        -Dnon-latin-layouts-list=false
+    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$xkeyboard_package"
+fi
 
 build_meson_component \
     "libxkbcommon-$LIBXKBCOMMON_VERSION" \
@@ -93,6 +102,12 @@ for dependency in libevdev libinput xkeyboard-config xkbcommon xkbcommon-x11; do
         die "input stack pkg-config dependency is missing: $dependency"
 done
 
-if find "$EFILINUX_SYSROOT" -iname '*wayland*' -print -quit | grep -q .; then
+if find "$EFILINUX_SYSROOT" \
+    \( -name 'libwayland-*.so*' \
+       -o -name 'wayland-*.pc' \
+       -o -name 'wayland-*.h' \
+       -o -name Xwayland \
+       -o -path '*/wayland-protocols/*' \) \
+    -print -quit | grep -q .; then
     die "Wayland artifacts leaked into the input stack sysroot"
 fi

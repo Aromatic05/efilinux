@@ -53,6 +53,8 @@ require_file /etc/gtk-3.0/settings.ini
 require_file /etc/fonts/fonts.conf
 require_file /etc/rc.d/init.d/graphical
 require_directory /usr/share/fonts/truetype/dejavu
+require_directory /usr/share/fonts/opentype/noto
+require_directory /usr/share/icons/Qogir
 require_directory /usr/share/X11/xkb
 require_directory /usr/lib/xorg/modules/drivers
 require_directory /usr/lib/xorg/modules/input
@@ -64,9 +66,12 @@ require_program startx xinit
 require_program xkbcomp xkbcomp
 require_program xwininfo xwininfo
 require_program xauth xauth
+require_program iceauth iceauth
 require_program mcookie util-linux
 require_program gtk3-demo gtk3
 require_program gtk3-widget-factory gtk3
+require_program fc-cache fontconfig
+require_program fc-match fontconfig
 
 require_library 'libLLVM.so*' llvm
 require_library 'libdrm.so.2*' libdrm
@@ -100,6 +105,17 @@ done
 for font in DejaVuSans.ttf DejaVuSansMono.ttf; do
     require_file "/usr/share/fonts/truetype/dejavu/$font"
 done
+require_file /usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf
+require_file /usr/share/icons/Qogir/index.theme
+[[ -e "$rootfs/usr/share/icons/Qogir/cursors/left_ptr" ]] || \
+    die "Qogir cursor theme is missing left_ptr"
+
+mapfile -t qogir_variants < <(
+    find "$rootfs/usr/share/icons" -maxdepth 1 -mindepth 1 \
+        -type d -name 'Qogir*' -printf '%f\n' | sort
+)
+[[ ${#qogir_variants[@]} -eq 1 && ${qogir_variants[0]} == Qogir ]] || \
+    die "graphical rootfs contains more than one Qogir color variant"
 
 [[ -L "$rootfs/etc/rc.d/rc5.d/S80graphical" ]] || \
     die "runlevel 5 does not start the graphical session"
@@ -138,5 +154,9 @@ PY
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/Xorg" -version 2>&1 | \
     grep -q 'X.Org X Server'
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/gtk3-demo" --help-all >/dev/null
+FONTCONFIG_SYSROOT="$rootfs" \
+    "$loader" --library-path "$library_path" \
+    "$rootfs/usr/bin/fc-match" -f '%{family}\n' ':lang=zh-cn' | \
+    grep -Fq 'Noto Sans CJK SC'
 
-log "003-graphical Xorg, Mesa, GTK, fonts, and no-Wayland contract passed"
+log "003-graphical Xorg, Mesa, GTK, bilingual fonts, Qogir, and no-Wayland contract passed"

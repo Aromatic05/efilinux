@@ -44,6 +44,7 @@ build_xorg_component libXt "$LIBXT_VERSION" "$LIBXT_SHA256" xorg/lib/libxt \
 build_xorg_component libXmu "$LIBXMU_VERSION" "$LIBXMU_SHA256" xorg/lib/libxmu \
     --disable-static --disable-docs
 build_xorg_component xauth "$XAUTH_VERSION" "$XAUTH_SHA256" xorg/app/xauth
+build_xorg_component iceauth "$ICEAUTH_VERSION" "$ICEAUTH_SHA256" xorg/app/iceauth
 
 for dependency in ice sm xt xmu; do
     target_pkg_config --exists "$dependency" || \
@@ -55,7 +56,8 @@ for artifact in \
     usr/lib/libSM.so.6 \
     usr/lib/libXt.so.6 \
     usr/lib/libXmu.so.6 \
-    usr/bin/xauth; do
+    usr/bin/xauth \
+    usr/bin/iceauth; do
     [[ -e "$EFILINUX_SYSROOT/$artifact" ]] || \
         die "X11 session artifact is missing: /$artifact"
 done

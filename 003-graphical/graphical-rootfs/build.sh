@@ -4,7 +4,9 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
+source "$ROOT/001-runtime/config.sh"
 source "$ROOT/003-graphical/config.sh"
+source "$ROOT/003-graphical/desktop-support/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
@@ -99,7 +101,6 @@ libfontenc libfontenc-$LIBFONTENC_VERSION
 libXfont2 libXfont2-$LIBXFONT2_VERSION
 libxkbfile libxkbfile-$LIBXKBFILE_VERSION
 libxcvt libxcvt-$LIBXCVT_VERSION
-glib glib-$GLIB_VERSION
 libxml2 libxml2-$LIBXML2_VERSION
 at-spi2 at-spi2-core-$AT_SPI2_CORE_VERSION
 gdk-pixbuf gdk-pixbuf-$GDK_PIXBUF_VERSION
@@ -110,6 +111,12 @@ libICE libICE-$LIBICE_VERSION
 libSM libSM-$LIBSM_VERSION
 libXt libXt-$LIBXT_VERSION
 libXmu libXmu-$LIBXMU_VERSION
+xcb-util xcb-util-$XCB_UTIL_VERSION
+libXres libXres-$LIBXRES_VERSION
+libXpresent libXpresent-$LIBXPRESENT_VERSION
+startup-notification startup-notification-$STARTUP_NOTIFICATION_VERSION
+libnotify libnotify-$LIBNOTIFY_VERSION
+libwnck libwnck-$LIBWNCK_VERSION
 EOF
 
 log "Installing Xorg and GTK session programs"
@@ -120,9 +127,12 @@ install_stage_program xinit "xinit-$XINIT_VERSION" startx
 install_stage_program xkbcomp "xkbcomp-$XKBCOMP_VERSION" xkbcomp
 install_stage_program xwininfo "xwininfo-$XWININFO_VERSION" xwininfo
 install_stage_program xauth "xauth-$XAUTH_VERSION" xauth
+install_stage_program iceauth "iceauth-$ICEAUTH_VERSION" iceauth
 install_stage_program util-linux "util-linux-$UTIL_LINUX_VERSION" mcookie
 install_stage_program gtk3 "gtk-$GTK3_VERSION" gtk3-demo
 install_stage_program gtk3 "gtk-$GTK3_VERSION" gtk3-widget-factory
+install_stage_program fontconfig "fontconfig-$FONTCONFIG_VERSION" fc-cache
+install_stage_program fontconfig "fontconfig-$FONTCONFIG_VERSION" fc-match
 
 log "Installing graphics drivers, input data, fonts, and toolkit resources"
 install_rootfs_tree mesa \
@@ -165,6 +175,12 @@ install_rootfs_tree fontconfig \
     /usr/share/fontconfig
 install_rootfs_tree dejavu-fonts \
     "$(stage "dejavu-fonts-$DEJAVU_FONTS_VERSION")/usr/share/fonts" /usr/share/fonts
+install_rootfs_tree noto-sans-cjk-sc \
+    "$(stage "noto-sans-cjk-sc-$NOTO_SANS_CJK_VERSION")/usr/share/fonts" \
+    /usr/share/fonts
+install_new_rootfs_tree qogir-icon-theme \
+    "$(stage "qogir-icon-theme-$QOGIR_ICON_VERSION")/usr/share/icons/Qogir" \
+    /usr/share/icons/Qogir
 
 install_rootfs_tree at-spi2 \
     "$(stage "at-spi2-core-$AT_SPI2_CORE_VERSION")/usr/libexec" /usr/libexec
@@ -177,6 +193,9 @@ install_rootfs_tree gtk3 \
     "$(stage "gtk-$GTK3_VERSION")/usr/share/icons" /usr/share/icons
 install_rootfs_tree gtk3 \
     "$(stage "gtk-$GTK3_VERSION")/usr/share/themes" /usr/share/themes
+install_new_rootfs_tree qogir-desktop-theme \
+    "$(stage "qogir-desktop-theme-$QOGIR_THEME_VERSION")/usr/share/themes/Qogir" \
+    /usr/share/themes/Qogir
 
 schema_source="$(stage "gtk-$GTK3_VERSION")/usr/share/glib-2.0/schemas"
 schema_assembly="$assembly/usr/share/glib-2.0/schemas"

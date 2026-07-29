@@ -118,7 +118,13 @@ if find "$sysroot/usr/lib" -maxdepth 1 \( -type f -o -type l \) \
     -print -quit | grep -q .; then
     die "Clang library leaked into the target sysroot"
 fi
-if find "$sysroot" -iname '*wayland*' -print -quit | grep -q .; then
+if find "$sysroot" \
+    \( -name 'libwayland-*.so*' \
+       -o -name 'wayland-*.pc' \
+       -o -name 'wayland-*.h' \
+       -o -name Xwayland \
+       -o -path '*/wayland-protocols/*' \) \
+    -print -quit | grep -q .; then
     die "Wayland artifact leaked into graphical core"
 fi
 

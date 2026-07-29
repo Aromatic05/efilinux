@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
+source "$ROOT/001-runtime/config.sh"
 source "$ROOT/003-graphical/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
@@ -47,25 +48,8 @@ fi
 target_pkg_config --exists xtst || \
     die "libXtst must be built before the GTK accessibility stack"
 
-ensure_pkg_component glib-2.0 "$GLIB_VERSION" build_meson_component \
-    "glib-$GLIB_VERSION" \
-    "glib-$GLIB_VERSION.tar.xz" \
-    "$GLIB_SHA256" \
-    "https://download.gnome.org/sources/glib/${GLIB_VERSION%.*}/glib-$GLIB_VERSION.tar.xz" \
-    -Dselinux=disabled \
-    -Dlibmount=disabled \
-    -Dman-pages=disabled \
-    -Ddtrace=disabled \
-    -Dsystemtap=disabled \
-    -Dsysprof=disabled \
-    -Ddocumentation=false \
-    -Dtests=false \
-    -Dinstalled_tests=false \
-    -Dnls=disabled \
-    -Dglib_debug=disabled \
-    -Dintrospection=disabled \
-    -Dlibelf=disabled \
-    -Dfile_monitor_backend=inotify
+target_pkg_config --exact-version="$GLIB_VERSION" glib-2.0 || \
+    die "GLib $GLIB_VERSION must be built by 001-runtime before GTK"
 
 ensure_pkg_component libxml-2.0 "$LIBXML2_VERSION" build_meson_component \
     "libxml2-$LIBXML2_VERSION" \
@@ -219,7 +203,13 @@ for dependency in \
         die "GTK 3 toolkit pkg-config dependency is missing: $dependency"
 done
 
-if find "$EFILINUX_SYSROOT" -iname '*wayland*' -print -quit | grep -q .; then
+if find "$EFILINUX_SYSROOT" \
+    \( -name 'libwayland-*.so*' \
+       -o -name 'wayland-*.pc' \
+       -o -name 'wayland-*.h' \
+       -o -name Xwayland \
+       -o -path '*/wayland-protocols/*' \) \
+    -print -quit | grep -q .; then
     die "Wayland artifacts leaked into the GTK 3 toolkit sysroot"
 fi
 

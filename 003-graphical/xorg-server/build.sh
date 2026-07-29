@@ -161,14 +161,23 @@ if [[ ! -x "$EFILINUX_SYSROOT/usr/bin/Xorg" ||
 fi
 
 rm -f "$EFILINUX_SYSROOT/usr/lib/xorg/modules/libinput_drv.so"
-build_meson_component \
-    "xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION" \
-    "xf86-input-libinput-xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION.tar.gz" \
-    "$XF86_INPUT_LIBINPUT_SHA256" \
-    "https://gitlab.freedesktop.org/xorg/driver/xf86-input-libinput/-/archive/xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION/xf86-input-libinput-xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION.tar.gz" \
-    -Dsdkdir=/usr/include/xorg \
-    -Dxorg-module-dir=/usr/lib/xorg/modules/input \
-    -Dxorg-conf-dir=/usr/share/X11/xorg.conf.d
+package="xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION"
+if ! graphical_binary_package_restore "$package"; then
+    graphical_prepare_archive \
+        "$package" \
+        "xf86-input-libinput-xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION.tar.gz" \
+        "$XF86_INPUT_LIBINPUT_SHA256" \
+        "https://gitlab.freedesktop.org/xorg/driver/xf86-input-libinput/-/archive/xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION/xf86-input-libinput-xf86-input-libinput-$XF86_INPUT_LIBINPUT_VERSION.tar.gz"
+    graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+        -Dsdkdir=/usr/include/xorg \
+        -Dxorg-module-dir=/usr/lib/xorg/modules/input \
+        -Dxorg-conf-dir=/usr/share/X11/xorg.conf.d
+    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    install -Dm644 \
+        "$PACKAGE_SOURCE/include/libinput-properties.h" \
+        "$PACKAGE_STAGING/usr/include/xorg/libinput-properties.h"
+    graphical_binary_package_publish "$package"
+fi
 
 build_autotools_component \
     "xf86-video-fbdev-$XF86_VIDEO_FBDEV_VERSION" \
@@ -197,6 +206,7 @@ for artifact in \
     usr/bin/startx \
     usr/bin/xkbcomp \
     usr/bin/xwininfo \
+    usr/include/xorg/libinput-properties.h \
     usr/lib/xorg/modules/drivers/modesetting_drv.so \
     usr/lib/xorg/modules/drivers/fbdev_drv.so \
     usr/lib/xorg/modules/input/libinput_drv.so \
@@ -212,6 +222,6 @@ for dependency in epoxy xorg-server xorg-libinput; do
         die "Xorg Server pkg-config dependency is missing: $dependency"
 done
 
-if find "$EFILINUX_SYSROOT" -iname '*Xwayland*' -print -quit | grep -q .; then
+if find "$EFILINUX_SYSROOT" -type f -name Xwayland -print -quit | grep -q .; then
     die "Xwayland leaked into the Xorg Server sysroot"
 fi

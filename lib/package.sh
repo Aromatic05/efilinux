@@ -438,6 +438,33 @@ install_rootfs_tree() {
     done < <(find "$source_root" -mindepth 1 -print0)
 }
 
+install_new_rootfs_tree() {
+    local package=$1
+    local source_root=$2
+    local destination_root=$3
+    local destination="$EFILINUX_ROOTFS$destination_root"
+
+    [[ -d "$source_root" ]] || die "$package runtime tree is missing: $source_root"
+    [[ ! -e "$destination" && ! -L "$destination" ]] || \
+        die "$package attempted to install an already existing tree: $destination_root"
+
+    if [[ -f "$EFILINUX_ROOTFS_OWNERS" ]] && \
+        awk -F '\t' -v root="$destination_root" \
+            '$1 == root || index($1, root "/") == 1 { found=1 } END { exit !found }' \
+            "$EFILINUX_ROOTFS_OWNERS"; then
+        die "$package attempted to install an already owned tree: $destination_root"
+    fi
+
+    mkdir -p "$(dirname -- "$destination")" \
+        "$(dirname -- "$EFILINUX_ROOTFS_OWNERS")"
+    cp -a -- "$source_root" "$destination"
+    touch "$EFILINUX_ROOTFS_OWNERS"
+    LC_ALL=C find "$source_root" -mindepth 1 -printf '%P\0' |
+        awk -v RS='\0' -v prefix="$destination_root/" -v owner="$package" \
+            'length($0) { print prefix $0 "\t" owner }' \
+        >> "$EFILINUX_ROOTFS_OWNERS"
+}
+
 replace_rootfs_tree() {
     local package=$1
     local expected_owner=$2

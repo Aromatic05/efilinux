@@ -91,23 +91,27 @@ graphical_autotools_configure() {
     local build=$2
     shift 2
 
-    cd "$source"
-    ACLOCAL_PATH="$GRAPHICAL_ACLOCAL_PATH" autoreconf -fi
-    cd "$build"
-    CC=gcc \
-    CXX=g++ \
-    CFLAGS="$(target_cflags)" \
-    CXXFLAGS="$(target_cflags)" \
-    LDFLAGS="$(target_ldflags)" \
-    PYTHON=/usr/bin/python3 \
-    PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
-    PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
-    PYTHONPATH="$(_graphical_python_path)" \
-    ACLOCAL_PATH="$GRAPHICAL_ACLOCAL_PATH" \
-        "$source/configure" \
-        --prefix=/usr \
-        --libdir=/usr/lib \
-        "$@"
+    (
+        cd "$source"
+        ACLOCAL_PATH="$GRAPHICAL_ACLOCAL_PATH" autoreconf -fi
+    )
+    (
+        cd "$build"
+        CC=gcc \
+        CXX=g++ \
+        CFLAGS="$(target_cflags)" \
+        CXXFLAGS="$(target_cflags)" \
+        LDFLAGS="$(target_ldflags)" \
+        PYTHON=/usr/bin/python3 \
+        PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
+        PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
+        PYTHONPATH="$(_graphical_python_path)" \
+        ACLOCAL_PATH="$GRAPHICAL_ACLOCAL_PATH" \
+            "$source/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            "$@"
+    )
 }
 
 graphical_release_configure() {
@@ -115,20 +119,22 @@ graphical_release_configure() {
     local build=$2
     shift 2
 
-    cd "$build"
-    CC=gcc \
-    CXX=g++ \
-    CFLAGS="$(target_cflags)" \
-    CXXFLAGS="$(target_cflags)" \
-    LDFLAGS="$(target_ldflags)" \
-    PYTHON=/usr/bin/python3 \
-    PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
-    PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
-    PYTHONPATH="$(_graphical_python_path)" \
-        "$source/configure" \
-        --prefix=/usr \
-        --libdir=/usr/lib \
-        "$@"
+    (
+        cd "$build"
+        CC=gcc \
+        CXX=g++ \
+        CFLAGS="$(target_cflags)" \
+        CXXFLAGS="$(target_cflags)" \
+        LDFLAGS="$(target_ldflags)" \
+        PYTHON=/usr/bin/python3 \
+        PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
+        PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
+        PYTHONPATH="$(_graphical_python_path)" \
+            "$source/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            "$@"
+    )
 }
 
 graphical_make_install() {

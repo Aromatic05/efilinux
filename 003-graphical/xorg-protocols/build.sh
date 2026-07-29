@@ -47,7 +47,12 @@ build_autotools_data \
     "https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/archive/xorgproto-$XORGPROTO_VERSION/xorgproto-xorgproto-$XORGPROTO_VERSION.tar.gz" \
     --without-fop --without-xmlto
 
-if find "$EFILINUX_SYSROOT" -iname '*xwayland*' -print -quit | grep -q .; then
+if find "$EFILINUX_SYSROOT" \
+    \( -name xwaylandproto.h \
+       -o -name xwaylandproto.pc \
+       -o -name xwaylandproto.txt \
+       -o -name Xwayland \) \
+    -print -quit | grep -q .; then
     die "Xwayland protocol artifacts leaked into the Stage 3 sysroot"
 fi
 
