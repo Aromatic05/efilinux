@@ -40,4 +40,30 @@ CXXFLAGS="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic" \
 make -j"$EFILINUX_JOBS"
 make DESTDIR="$PACKAGE_STAGING" install
 
+log "Generating compact English and Simplified Chinese locale archive"
+mkdir -p "$PACKAGE_STAGING/usr/lib/locale"
+for locale_name in en_US zh_CN; do
+    I18NPATH="$PACKAGE_STAGING/usr/share/i18n" \
+        "$PACKAGE_STAGING/usr/lib/ld-linux-x86-64.so.2" \
+        --library-path "$PACKAGE_STAGING/usr/lib" \
+        "$PACKAGE_STAGING/usr/bin/localedef" \
+        --prefix="$PACKAGE_STAGING" \
+        --no-archive \
+        -i "$locale_name" \
+        -f UTF-8 \
+        "$locale_name.UTF-8"
+done
+
+I18NPATH="$PACKAGE_STAGING/usr/share/i18n" \
+    "$PACKAGE_STAGING/usr/lib/ld-linux-x86-64.so.2" \
+    --library-path "$PACKAGE_STAGING/usr/lib" \
+    "$PACKAGE_STAGING/usr/bin/localedef" \
+    --prefix="$PACKAGE_STAGING" \
+    --add-to-archive \
+    "$PACKAGE_STAGING/usr/lib/locale/en_US.utf8" \
+    "$PACKAGE_STAGING/usr/lib/locale/zh_CN.utf8"
+rm -rf \
+    "$PACKAGE_STAGING/usr/lib/locale/en_US.utf8" \
+    "$PACKAGE_STAGING/usr/lib/locale/zh_CN.utf8"
+
 binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

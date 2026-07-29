@@ -114,6 +114,12 @@ for runtime_file in \
     copy_glibc_runtime_file "$runtime_file"
 done
 
+copy_program "glibc-$GLIBC_VERSION" locale
+install_rootfs_file \
+    glibc \
+    "$(stage "glibc-$GLIBC_VERSION")/usr/lib/locale/locale-archive" \
+    /usr/lib/locale/locale-archive
+
 cat > "$rootfs_directory/init" <<'INIT'
 #!/bin/busybox sh
 

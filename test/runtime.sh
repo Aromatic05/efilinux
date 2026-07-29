@@ -17,7 +17,10 @@ test_directory="$EFILINUX_TEST/runtime"
 [[ -x "$rootfs/usr/bin/busybox" ]] || die "BusyBox is missing from target rootfs"
 [[ -x "$rootfs/usr/bin/xz" ]] || die "xz is missing from target rootfs"
 [[ -x "$rootfs/usr/bin/zstd" ]] || die "zstd is missing from target rootfs"
+[[ -x "$rootfs/usr/bin/locale" ]] || die "locale is missing from target rootfs"
 [[ -x "$loader" ]] || die "glibc loader is missing from target rootfs"
+[[ -f "$rootfs/usr/lib/locale/locale-archive" ]] || \
+    die "compiled locale archive is missing from target rootfs"
 
 assert_link() {
     local path=$1
@@ -51,6 +54,24 @@ for applet in "${required_applets[@]}"; do
         die "required BusyBox applet is not enabled: $applet"
 done
 
+available_locales=$(
+    "$loader" --library-path "$library_path" \
+        "$rootfs/usr/bin/locale" -a
+)
+grep -Fxiq C <<< "$available_locales" || die "required locale is missing: C"
+grep -Eixq 'C\.(UTF-?8|utf8)' <<< "$available_locales" || \
+    die "required locale is missing: C.UTF-8"
+grep -Eixq 'en_US\.(UTF-?8|utf8)' <<< "$available_locales" || \
+    die "required locale is missing: en_US.UTF-8"
+grep -Eixq 'zh_CN\.(UTF-?8|utf8)' <<< "$available_locales" || \
+    die "required locale is missing: zh_CN.UTF-8"
+
+for locale_name in en_US.UTF-8 zh_CN.UTF-8; do
+    LANG="$locale_name" "$loader" --library-path "$library_path" \
+        "$rootfs/usr/bin/locale" charmap | grep -Fxq UTF-8 || \
+        die "$locale_name does not use UTF-8"
+done
+
 for binary in busybox xz zstd; do
     if LC_ALL=C readelf --dynamic "$rootfs/usr/bin/$binary" |
         grep -E '(RPATH|RUNPATH)' |
@@ -74,4 +95,4 @@ cmp "$test_directory/input" "$test_directory/xz.output"
     --quiet --decompress --stdout "$test_directory/input.zst" > "$test_directory/zstd.output"
 cmp "$test_directory/input" "$test_directory/zstd.output"
 
-log "Target runtime and compression round trips passed"
+log "Target runtime, locales, and compression round trips passed"
