@@ -10,6 +10,9 @@ require_command curl gcc meson ninja pkg-config sha256sum tar
 ensure_directories
 
 package="dbus-$DBUS_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 
 prepare_package "$package"
@@ -45,4 +48,4 @@ find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 \
     \( -name '*.a' -o -name '*.la' \) -delete
 rm -rf "$PACKAGE_STAGING/usr/share/doc"
 
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

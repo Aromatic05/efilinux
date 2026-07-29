@@ -10,6 +10,9 @@ require_command curl gcc make pkg-config sha256sum tar
 ensure_directories
 
 package="dhcpcd-$DHCPCD_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 
 prepare_package "$package"
@@ -34,4 +37,4 @@ log "Building dhcpcd"
 make -j"$EFILINUX_JOBS"
 make DESTDIR="$PACKAGE_STAGING" install
 rm -rf "$PACKAGE_STAGING/usr/share/man"
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

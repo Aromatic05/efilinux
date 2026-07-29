@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc make sha256sum tar
 ensure_directories
 package="tzdata-$TZDATA_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 data_archive="$EFILINUX_DOWNLOADS/tzdata$TZDATA_VERSION.tar.gz"
 code_archive="$EFILINUX_DOWNLOADS/tzcode$TZDATA_VERSION.tar.gz"
 prepare_package "$package"
@@ -27,4 +30,4 @@ install -m 0644 "$PACKAGE_SOURCE/iso3166.tab" "$zoneinfo/iso3166.tab"
 install -m 0644 "$PACKAGE_SOURCE/zone.tab" "$zoneinfo/zone.tab"
 install -m 0644 "$PACKAGE_SOURCE/zone1970.tab" "$zoneinfo/zone1970.tab"
 install -m 0644 "$PACKAGE_SOURCE/zonenow.tab" "$zoneinfo/zonenow.tab"
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

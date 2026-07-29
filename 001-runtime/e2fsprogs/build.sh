@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc make pkg-config sha256sum tar
 ensure_directories
 package="e2fsprogs-$E2FSPROGS_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 prepare_package "$package"
 download "https://downloads.sourceforge.net/project/e2fsprogs/e2fsprogs/v$E2FSPROGS_VERSION/$package.tar.gz" "$archive"
@@ -36,4 +39,4 @@ log "Building E2fsprogs"
 make -j"$EFILINUX_JOBS"
 make DESTDIR="$PACKAGE_STAGING" install
 find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 \( -name '*.a' -o -name '*.la' \) -delete
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

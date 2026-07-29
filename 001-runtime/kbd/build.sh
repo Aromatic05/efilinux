@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command autoreconf curl gcc make patch python3 sha256sum tar
 ensure_directories
 package="kbd-$KBD_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 patch_file="$EFILINUX_DOWNLOADS/$package-backspace-1.patch"
 prepare_package "$package"
@@ -38,4 +41,4 @@ CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
 log "Building Kbd"
 make -j"$EFILINUX_JOBS"
 make DESTDIR="$PACKAGE_STAGING" install
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

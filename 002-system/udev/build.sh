@@ -10,6 +10,9 @@ require_command awk curl gcc grep install make meson ninja pkg-config realpath s
 ensure_directories
 
 package="systemd-$UDEV_SYSTEMD_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 udev_lfs="udev-lfs-$UDEV_LFS_VERSION"
 udev_lfs_archive="$EFILINUX_DOWNLOADS/$udev_lfs.tar.xz"
@@ -107,4 +110,4 @@ make -f "$PACKAGE_BUILD/$udev_lfs/Makefile.lfs" \
     "$PACKAGE_STAGING/usr/bin/udev-hwdb" \
     --root="$PACKAGE_STAGING" --strict update
 
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

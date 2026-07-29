@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc make sha256sum tar
 ensure_directories
 package="libcap-$LIBCAP_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 prepare_package "$package"
 download "https://www.kernel.org/pub/linux/libs/security/linux-privs/libcap2/$package.tar.xz" "$archive"
@@ -19,4 +22,4 @@ make -C "$PACKAGE_SOURCE" -j"$EFILINUX_JOBS" BUILD_CC=gcc CC=gcc \
 make -C "$PACKAGE_SOURCE" DESTDIR="$PACKAGE_STAGING" prefix=/usr lib=lib \
     PAM_CAP=no GOLANG=no RAISE_SETFCAP=no install
 rm -f "$PACKAGE_STAGING/usr/lib"/*.a
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

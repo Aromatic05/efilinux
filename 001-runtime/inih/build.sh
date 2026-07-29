@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc meson ninja pkg-config sha256sum tar
 ensure_directories
 package="inih-$INIH_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 prepare_package "$package"
 download "https://github.com/benhoyt/inih/archive/refs/tags/$INIH_VERSION.tar.gz" "$archive"
@@ -22,4 +25,4 @@ PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/sha
 log "Building inih"
 meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
 DESTDIR="$PACKAGE_STAGING" meson install -C "$PACKAGE_BUILD"
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

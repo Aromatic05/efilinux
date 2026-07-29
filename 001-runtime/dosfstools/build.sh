@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc make sha256sum tar
 ensure_directories
 package="dosfstools-$DOSFSTOOLS_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 prepare_package "$package"
 download "https://github.com/dosfstools/dosfstools/releases/download/v$DOSFSTOOLS_VERSION/$package.tar.gz" "$archive"
@@ -20,4 +23,4 @@ CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
 log "Building dosfstools"
 make -j"$EFILINUX_JOBS"
 make DESTDIR="$PACKAGE_STAGING" install
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

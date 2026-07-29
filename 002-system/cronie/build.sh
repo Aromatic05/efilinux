@@ -10,6 +10,9 @@ require_command curl gcc make patch pkg-config sha256sum tar
 ensure_directories
 
 package="cronie-$CRONIE_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 
 prepare_package "$package"
@@ -38,4 +41,4 @@ make DESTDIR="$PACKAGE_STAGING" install
 install -d "$PACKAGE_STAGING/etc/pam.d"
 install -m644 "$PACKAGE_SOURCE/pam/crond" "$PACKAGE_STAGING/etc/pam.d/crond"
 
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

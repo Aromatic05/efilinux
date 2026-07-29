@@ -7,27 +7,39 @@ source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
-require_command find readelf strip
+require_command find readelf sha256sum strip tar
 ensure_directories
 
 files_root="$ROOT/002-system/system-rootfs/files"
-assembly="$EFILINUX_BUILD/staging/system-rootfs"
+assembly="$EFILINUX_BUILD/assembly/system-rootfs"
 reset_directory "$assembly"
+package_materialization="$assembly/packages"
+mkdir -p "$package_materialization"
 
-sysv_stage="$EFILINUX_BUILD/staging/sysvinit-$SYSVINIT_VERSION"
-sysklogd_stage="$EFILINUX_BUILD/staging/sysklogd-$SYSKLOGD_VERSION"
-udev_stage="$EFILINUX_BUILD/staging/systemd-$UDEV_SYSTEMD_VERSION"
-pam_stage="$EFILINUX_BUILD/staging/Linux-PAM-$LINUX_PAM_VERSION"
-shadow_stage="$EFILINUX_BUILD/staging/shadow-$SHADOW_VERSION"
-openssl_stage="$EFILINUX_BUILD/staging/openssl-$OPENSSL_VERSION"
-expat_stage="$EFILINUX_BUILD/staging/expat-$EXPAT_VERSION"
-dbus_stage="$EFILINUX_BUILD/staging/dbus-$DBUS_VERSION"
-cronie_stage="$EFILINUX_BUILD/staging/cronie-$CRONIE_VERSION"
-iproute_stage="$EFILINUX_BUILD/staging/iproute2-$IPROUTE2_VERSION"
-iputils_stage="$EFILINUX_BUILD/staging/iputils-$IPUTILS_VERSION"
-dhcpcd_stage="$EFILINUX_BUILD/staging/dhcpcd-$DHCPCD_VERSION"
-openssh_stage="$EFILINUX_BUILD/staging/openssh-$OPENSSH_VERSION"
-util_linux_stage="$EFILINUX_BUILD/staging/util-linux-$UTIL_LINUX_VERSION"
+stage() {
+    local package=$1
+    local directory="$package_materialization/$package"
+
+    if [[ ! -d "$directory" ]]; then
+        binary_package_materialize "$package" "$directory"
+    fi
+    printf '%s' "$directory"
+}
+
+sysv_stage=$(stage "sysvinit-$SYSVINIT_VERSION")
+sysklogd_stage=$(stage "sysklogd-$SYSKLOGD_VERSION")
+udev_stage=$(stage "systemd-$UDEV_SYSTEMD_VERSION")
+pam_stage=$(stage "Linux-PAM-$LINUX_PAM_VERSION")
+shadow_stage=$(stage "shadow-$SHADOW_VERSION")
+openssl_stage=$(stage "openssl-$OPENSSL_VERSION")
+expat_stage=$(stage "expat-$EXPAT_VERSION")
+dbus_stage=$(stage "dbus-$DBUS_VERSION")
+cronie_stage=$(stage "cronie-$CRONIE_VERSION")
+iproute_stage=$(stage "iproute2-$IPROUTE2_VERSION")
+iputils_stage=$(stage "iputils-$IPUTILS_VERSION")
+dhcpcd_stage=$(stage "dhcpcd-$DHCPCD_VERSION")
+openssh_stage=$(stage "openssh-$OPENSSH_VERSION")
+util_linux_stage=$(stage "util-linux-$UTIL_LINUX_VERSION")
 
 install_program_from() {
     local owner=$1

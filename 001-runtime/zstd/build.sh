@@ -5,36 +5,38 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
 
-require_command curl tar make gcc md5sum
 ensure_directories
+package="zstd-$ZSTD_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 
-archive="$EFILINUX_DOWNLOADS/zstd-$ZSTD_VERSION.tar.gz"
-source_directory="$EFILINUX_BUILD/sources/zstd-$ZSTD_VERSION"
-staging_directory="$EFILINUX_BUILD/staging/zstd"
-target_flags="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic -B$EFILINUX_SYSROOT/usr/lib/ --sysroot=$EFILINUX_SYSROOT"
+require_command curl gcc make md5sum tar
+prepare_package "$package"
+archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 
 download \
-    "https://github.com/facebook/zstd/releases/download/v$ZSTD_VERSION/zstd-$ZSTD_VERSION.tar.gz" \
+    "https://github.com/facebook/zstd/releases/download/v$ZSTD_VERSION/$package.tar.gz" \
     "$archive"
 verify_md5 "$ZSTD_MD5" "$archive"
-extract_source "$archive" "$source_directory"
-reset_directory "$staging_directory"
+extract_source "$archive" "$PACKAGE_SOURCE"
 
 log "Building Zstandard"
-CC=gcc CFLAGS="$target_flags" LDFLAGS="$target_flags" \
-make -C "$source_directory" -j"$EFILINUX_JOBS" \
+CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
+make -C "$PACKAGE_SOURCE" -j"$EFILINUX_JOBS" \
     ZSTD_LEGACY_SUPPORT=0 \
     ZSTD_BUILD_STATIC=0
 
-CC=gcc CFLAGS="$target_flags" LDFLAGS="$target_flags" \
-make -C "$source_directory" \
+CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
+make -C "$PACKAGE_SOURCE" \
     prefix=/usr \
     libdir=/usr/lib \
-    DESTDIR="$staging_directory" \
+    DESTDIR="$PACKAGE_STAGING" \
     ZSTD_LEGACY_SUPPORT=0 \
     ZSTD_BUILD_STATIC=0 \
     install
 
-rm -f "$staging_directory/usr/lib/libzstd.a"
-cp -a "$staging_directory/." "$EFILINUX_SYSROOT/"
+rm -f "$PACKAGE_STAGING/usr/lib/libzstd.a"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

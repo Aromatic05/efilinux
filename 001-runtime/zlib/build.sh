@@ -5,27 +5,29 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
 
-require_command curl tar make gcc md5sum
 ensure_directories
+package="zlib-$ZLIB_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 
-archive="$EFILINUX_DOWNLOADS/zlib-$ZLIB_VERSION.tar.gz"
-source_directory="$EFILINUX_BUILD/sources/zlib-$ZLIB_VERSION"
-staging_directory="$EFILINUX_BUILD/staging/zlib"
-target_flags="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic -B$EFILINUX_SYSROOT/usr/lib/ --sysroot=$EFILINUX_SYSROOT"
+require_command curl gcc make md5sum tar
+prepare_package "$package"
+archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 
-download "https://zlib.net/fossils/zlib-$ZLIB_VERSION.tar.gz" "$archive"
+download "https://zlib.net/fossils/$package.tar.gz" "$archive"
 verify_md5 "$ZLIB_MD5" "$archive"
-extract_source "$archive" "$source_directory"
-reset_directory "$staging_directory"
+extract_source "$archive" "$PACKAGE_SOURCE"
 
 log "Configuring zlib"
-cd "$source_directory"
-CC=gcc CFLAGS="$target_flags" LDFLAGS="$target_flags" \
+cd "$PACKAGE_SOURCE"
+CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
     ./configure --prefix=/usr --libdir=/usr/lib
 
 log "Building zlib"
 make -j"$EFILINUX_JOBS"
-make DESTDIR="$staging_directory" install
+make DESTDIR="$PACKAGE_STAGING" install
 
-cp -a "$staging_directory/." "$EFILINUX_SYSROOT/"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

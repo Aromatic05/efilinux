@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl sha256sum tar
 ensure_directories
 package="iana-etc-$IANA_ETC_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 prepare_package "$package"
 download "https://github.com/Mic92/iana-etc/releases/download/$IANA_ETC_VERSION/$package.tar.gz" "$archive"
@@ -15,4 +18,4 @@ extract_source "$archive" "$PACKAGE_SOURCE"
 mkdir -p "$PACKAGE_STAGING/etc"
 install -m 0644 "$PACKAGE_SOURCE/protocols" "$PACKAGE_STAGING/etc/protocols"
 install -m 0644 "$PACKAGE_SOURCE/services" "$PACKAGE_STAGING/etc/services"
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

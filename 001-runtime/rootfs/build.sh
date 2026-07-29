@@ -7,10 +7,25 @@ source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
-require_command readelf
+require_command readelf sha256sum tar
 ensure_directories
 
-busybox_staging="$EFILINUX_BUILD/staging/busybox"
+assembly="$EFILINUX_BUILD/assembly/runtime-rootfs"
+reset_directory "$assembly"
+package_materialization="$assembly/packages"
+mkdir -p "$package_materialization"
+
+stage() {
+    local package=$1
+    local directory="$package_materialization/$package"
+
+    if [[ ! -d "$directory" ]]; then
+        binary_package_materialize "$package" "$directory"
+    fi
+    printf '%s' "$directory"
+}
+
+busybox_staging=$(stage "busybox-$BUSYBOX_VERSION")
 rootfs_directory="$EFILINUX_ROOTFS"
 busybox_binary="$busybox_staging/bin/busybox"
 
@@ -51,7 +66,7 @@ done < <(
 copy_program() {
     local package=$1
     local program=$2
-    local source="$EFILINUX_BUILD/staging/$package/usr/bin/$program"
+    local source="$(stage "$package")/usr/bin/$program"
     install_rootfs_program "$package" "$source" "$program"
 }
 
@@ -60,27 +75,27 @@ copy_runtime_libraries() {
     local pattern=$2
     install_rootfs_library_family \
         "$package" \
-        "$EFILINUX_BUILD/staging/$package" \
+        "$(stage "$package")" \
         "$pattern"
 }
 
-copy_runtime_libraries zlib 'libz.so.1*'
-copy_runtime_libraries xz 'liblzma.so.5*'
-copy_runtime_libraries zstd 'libzstd.so.1*'
+copy_runtime_libraries "zlib-$ZLIB_VERSION" 'libz.so.1*'
+copy_runtime_libraries "xz-$XZ_VERSION" 'liblzma.so.5*'
+copy_runtime_libraries "zstd-$ZSTD_VERSION" 'libzstd.so.1*'
 
 for program in xz unxz xzcat; do
-    copy_program xz "$program"
+    copy_program "xz-$XZ_VERSION" "$program"
 done
 for program in zstd unzstd zstdcat; do
-    copy_program zstd "$program"
+    copy_program "zstd-$ZSTD_VERSION" "$program"
 done
 
 copy_glibc_runtime_file() {
     local file_name=$1
-    local source_file="$EFILINUX_SYSROOT/usr/lib/$file_name"
+    local source_file="$(stage "glibc-$GLIBC_VERSION")/usr/lib/$file_name"
 
     [[ -e "$source_file" ]] || die "glibc runtime file is missing: $file_name"
-    local resolved="$EFILINUX_BUILD/staging/rootfs-glibc/$file_name"
+    local resolved="$assembly/glibc/$file_name"
     mkdir -p "$(dirname -- "$resolved")"
     cp -aL "$source_file" "$resolved"
     install_rootfs_file glibc "$resolved" "/usr/lib/$file_name"

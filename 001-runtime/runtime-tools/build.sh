@@ -7,11 +7,22 @@ source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
-require_command find readelf strip
+require_command find readelf sha256sum strip tar
 ensure_directories
 
+assembly="$EFILINUX_BUILD/assembly/runtime-tools"
+reset_directory "$assembly"
+package_materialization="$assembly/packages"
+mkdir -p "$package_materialization"
+
 stage() {
-    printf '%s/staging/%s' "$EFILINUX_BUILD" "$1"
+    local package=$1
+    local directory="$package_materialization/$package"
+
+    if [[ ! -d "$directory" ]]; then
+        binary_package_materialize "$package" "$directory"
+    fi
+    printf '%s' "$directory"
 }
 
 install_program() {

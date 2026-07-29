@@ -11,6 +11,9 @@ require_command bison curl flex g++ gcc make perl sha256sum tar
 ensure_directories
 
 package="gcc-runtime-$GCC_RUNTIME_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/gcc-$GCC_RUNTIME_VERSION.tar.xz"
 prepare_package "$package"
 
@@ -65,4 +68,4 @@ fi
 [[ ! -d "$PACKAGE_STAGING/usr/bin" ]] || \
     die "GCC compiler programs leaked into the runtime staging tree"
 
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

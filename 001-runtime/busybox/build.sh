@@ -5,25 +5,28 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
 
-require_command awk curl tar make gcc readelf sha256sum
 ensure_directories
+package="busybox-$BUSYBOX_VERSION"
+if binary_package_reuse \
+    "$package" "${BASH_SOURCE[0]}" \
+    "$ROOT/001-runtime/busybox/minimal.config"; then
+    exit 0
+fi
 
+require_command awk curl gcc make readelf sha256sum tar
+prepare_package "$package"
 archive="$EFILINUX_DOWNLOADS/busybox-$BUSYBOX_VERSION.tar.bz2"
-source_directory="$EFILINUX_BUILD/sources/busybox-$BUSYBOX_VERSION"
-build_directory="$EFILINUX_BUILD/busybox-$BUSYBOX_VERSION"
-staging_directory="$EFILINUX_BUILD/staging/busybox"
 
 download \
     "https://busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2" \
     "$archive"
 verify_sha256 "$BUSYBOX_SHA256" "$archive"
-extract_source "$archive" "$source_directory"
-reset_directory "$build_directory"
-reset_directory "$staging_directory"
+extract_source "$archive" "$PACKAGE_SOURCE"
 
 log "Configuring BusyBox"
-make -C "$source_directory" O="$build_directory" allnoconfig
+make -C "$PACKAGE_SOURCE" O="$PACKAGE_BUILD" allnoconfig
 
 while IFS= read -r config_entry; do
     [[ -z "$config_entry" ]] && continue
@@ -51,43 +54,47 @@ while IFS= read -r config_entry; do
                     print entry
             }
         ' \
-        "$build_directory/.config" \
-        > "$build_directory/.config.tmp"
-    mv "$build_directory/.config.tmp" "$build_directory/.config"
+        "$PACKAGE_BUILD/.config" \
+        > "$PACKAGE_BUILD/.config.tmp"
+    mv "$PACKAGE_BUILD/.config.tmp" "$PACKAGE_BUILD/.config"
 done < "$ROOT/001-runtime/busybox/minimal.config"
 
 sed -i \
     "s@^CONFIG_SYSROOT=.*@CONFIG_SYSROOT=\"$EFILINUX_SYSROOT\"@" \
-    "$build_directory/.config"
+    "$PACKAGE_BUILD/.config"
 sed -i \
     "s@^CONFIG_EXTRA_CFLAGS=.*@CONFIG_EXTRA_CFLAGS=\"-B$EFILINUX_SYSROOT/usr/lib/ -march=$EFILINUX_X86_64_LEVEL -mtune=generic\"@" \
-    "$build_directory/.config"
+    "$PACKAGE_BUILD/.config"
 
 # BusyBox documents a possible coarse-mtime race after editing .config.
 sleep 1
-make -C "$source_directory" O="$build_directory" oldconfig < <(yes '')
+make -C "$PACKAGE_SOURCE" O="$PACKAGE_BUILD" oldconfig < <(yes '')
 
-grep -qx 'CONFIG_FEATURE_MODUTILS_ALIAS=y' "$build_directory/.config" || \
+grep -qx 'CONFIG_FEATURE_MODUTILS_ALIAS=y' "$PACKAGE_BUILD/.config" || \
     die "BusyBox module alias support is disabled"
-grep -qx 'CONFIG_TEST1=y' "$build_directory/.config" || \
+grep -qx 'CONFIG_TEST1=y' "$PACKAGE_BUILD/.config" || \
     die "BusyBox [ applet is disabled"
-grep -qx 'CONFIG_DEFAULT_MODULES_DIR="/lib/modules"' "$build_directory/.config" || \
+grep -qx 'CONFIG_DEFAULT_MODULES_DIR="/lib/modules"' "$PACKAGE_BUILD/.config" || \
     die "BusyBox default module directory is incorrect"
-grep -qx 'CONFIG_DEFAULT_DEPMOD_FILE="modules.dep"' "$build_directory/.config" || \
+grep -qx 'CONFIG_DEFAULT_DEPMOD_FILE="modules.dep"' "$PACKAGE_BUILD/.config" || \
     die "BusyBox depmod filename is incorrect"
 
 log "Building dynamically linked BusyBox against project glibc"
-make -C "$source_directory" \
-    O="$build_directory" \
+make -C "$PACKAGE_SOURCE" \
+    O="$PACKAGE_BUILD" \
     -j"$EFILINUX_JOBS" \
     CC=gcc \
     HOSTCC=gcc
 
-make -C "$source_directory" \
-    O="$build_directory" \
-    CONFIG_PREFIX="$staging_directory" \
+make -C "$PACKAGE_SOURCE" \
+    O="$PACKAGE_BUILD" \
+    CONFIG_PREFIX="$PACKAGE_STAGING" \
     install
 
-LC_ALL=C readelf --program-headers "$staging_directory/bin/busybox" |
+LC_ALL=C readelf --program-headers "$PACKAGE_STAGING/bin/busybox" |
     grep -q 'Requesting program interpreter' || \
     die "BusyBox is not dynamically linked"
+
+binary_package_publish_staging \
+    "$package" "${BASH_SOURCE[0]}" \
+    "$ROOT/001-runtime/busybox/minimal.config"

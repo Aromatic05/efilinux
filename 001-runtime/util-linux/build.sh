@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc make pkg-config sha256sum tar
 ensure_directories
 package="util-linux-$UTIL_LINUX_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 prepare_package "$package"
 download "https://www.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX_VERSION%.*}/$package.tar.xz" "$archive"
@@ -49,4 +52,4 @@ log "Building Util-linux"
 make -j"$EFILINUX_JOBS"
 make DESTDIR="$PACKAGE_STAGING" install
 find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 \( -name '*.a' -o -name '*.la' \) -delete
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

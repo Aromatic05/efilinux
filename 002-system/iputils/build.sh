@@ -10,6 +10,9 @@ require_command curl gcc meson ninja pkg-config sha256sum tar
 ensure_directories
 
 package="iputils-$IPUTILS_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 
 prepare_package "$package"
@@ -33,4 +36,4 @@ PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/sha
 log "Building iputils"
 meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
 DESTDIR="$PACKAGE_STAGING" meson install -C "$PACKAGE_BUILD"
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

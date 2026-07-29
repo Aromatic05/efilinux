@@ -5,28 +5,28 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
 
-require_command curl tar make gcc md5sum
 ensure_directories
+package="xz-$XZ_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 
-archive="$EFILINUX_DOWNLOADS/xz-$XZ_VERSION.tar.xz"
-source_directory="$EFILINUX_BUILD/sources/xz-$XZ_VERSION"
-build_directory="$EFILINUX_BUILD/xz-$XZ_VERSION"
-staging_directory="$EFILINUX_BUILD/staging/xz"
-target_flags="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic -B$EFILINUX_SYSROOT/usr/lib/ --sysroot=$EFILINUX_SYSROOT"
+require_command curl gcc make md5sum tar
+prepare_package "$package"
+archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 
 download \
-    "https://github.com/tukaani-project/xz/releases/download/v$XZ_VERSION/xz-$XZ_VERSION.tar.xz" \
+    "https://github.com/tukaani-project/xz/releases/download/v$XZ_VERSION/$package.tar.xz" \
     "$archive"
 verify_md5 "$XZ_MD5" "$archive"
-extract_source "$archive" "$source_directory"
-reset_directory "$build_directory"
-reset_directory "$staging_directory"
+extract_source "$archive" "$PACKAGE_SOURCE"
 
 log "Configuring XZ Utils"
-cd "$build_directory"
-CC=gcc CFLAGS="$target_flags" LDFLAGS="$target_flags" \
-    "$source_directory/configure" \
+cd "$PACKAGE_BUILD"
+CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
+    "$PACKAGE_SOURCE/configure" \
         --prefix=/usr \
         --libdir=/usr/lib \
         --disable-static \
@@ -35,6 +35,6 @@ CC=gcc CFLAGS="$target_flags" LDFLAGS="$target_flags" \
 
 log "Building XZ Utils"
 make -j"$EFILINUX_JOBS"
-make DESTDIR="$staging_directory" install
+make DESTDIR="$PACKAGE_STAGING" install
 
-cp -a "$staging_directory/." "$EFILINUX_SYSROOT/"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

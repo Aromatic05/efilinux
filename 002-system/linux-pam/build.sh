@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc meson ninja pkg-config sha256sum tar
 ensure_directories
 package="Linux-PAM-$LINUX_PAM_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
 prepare_package "$package"
 download "https://github.com/linux-pam/linux-pam/releases/download/v$LINUX_PAM_VERSION/$package.tar.xz" "$archive"
@@ -27,4 +30,4 @@ log "Building Linux-PAM"
 meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
 DESTDIR="$PACKAGE_STAGING" meson install -C "$PACKAGE_BUILD"
 find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 \( -name '*.a' -o -name '*.la' \) -delete
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"

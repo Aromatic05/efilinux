@@ -7,6 +7,9 @@ source "$ROOT/lib/package.sh"
 require_command curl gcc make perl sha256sum tar
 ensure_directories
 package="openssl-$OPENSSL_VERSION"
+if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
+    exit 0
+fi
 archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
 prepare_package "$package"
 download "https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/$package.tar.gz" "$archive"
@@ -21,4 +24,4 @@ log "Building OpenSSL"
 make -j"$EFILINUX_JOBS"
 make DESTDIR="$PACKAGE_STAGING" install_sw install_ssldirs
 find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 \( -name '*.a' -o -name '*.la' \) -delete
-merge_sysroot "$PACKAGE_STAGING"
+binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
