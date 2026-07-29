@@ -70,6 +70,14 @@ export EXFATPROGS_SHA256="${EXFATPROGS_SHA256:-47c7c8ddeccbf50d39b903353f2cb3df7
 export NTFS_3G_VERSION="${NTFS_3G_VERSION:-2026.7.7}"
 export NTFS_3G_SHA256="${NTFS_3G_SHA256:-7742bfe3399a7b2f677fea8aa193dc21d38112d77ae8beb0fb66aaf550f72c1d}"
 
+# 001-runtime: compiler ABI and generic low-level runtime libraries.
+export GCC_RUNTIME_VERSION="${GCC_RUNTIME_VERSION:-16.1.0}"
+export GCC_RUNTIME_SHA256="${GCC_RUNTIME_SHA256:-50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79}"
+export LIBFFI_VERSION="${LIBFFI_VERSION:-3.7.1}"
+export LIBFFI_SHA256="${LIBFFI_SHA256:-d5e9a6638ddbd2513ddb54518eb67e4bbe6fa707bcc01c10f6212f0a088d819d}"
+export PCRE2_VERSION="${PCRE2_VERSION:-10.47}"
+export PCRE2_SHA256="${PCRE2_SHA256:-47fe8c99461250d42f89e6e8fdaeba9da057855d06eb7fc08d9ca03fd08d7bc7}"
+
 # 002-system: multi-user lifecycle, authentication, device management, and services.
 export OPENSSL_VERSION="${OPENSSL_VERSION:-3.6.3}"
 export OPENSSL_SHA256="${OPENSSL_SHA256:-243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1}"

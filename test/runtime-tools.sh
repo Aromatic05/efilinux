@@ -160,6 +160,32 @@ if missing:
     raise SystemExit(1)
 PY
 
+require_runtime_library() {
+    local pattern=$1
+    local owner=$2
+    local file
+
+    shopt -s nullglob
+    for file in "$rootfs/usr/lib"/$pattern; do
+        [[ $(rootfs_owner "/usr/lib/$(basename -- "$file")") == "$owner" ]] || \
+            die "$(basename -- "$file") is not owned by $owner"
+        shopt -u nullglob
+        return
+    done
+    shopt -u nullglob
+    die "runtime library family is missing: $pattern"
+}
+
+require_runtime_library 'libgcc_s.so.1*' "gcc-runtime-$GCC_RUNTIME_VERSION"
+require_runtime_library 'libstdc++.so.6*' "gcc-runtime-$GCC_RUNTIME_VERSION"
+require_runtime_library 'libffi.so.8*' "libffi-$LIBFFI_VERSION"
+require_runtime_library 'libpcre2-8.so.0*' "pcre2-$PCRE2_VERSION"
+
+for compiler in gcc g++ cc c++ cpp gcov; do
+    [[ ! -e "$rootfs/usr/bin/$compiler" ]] || \
+        die "compiler executable leaked into target rootfs: $compiler"
+done
+
 if find "$rootfs" -type f \( -name '*.a' -o -name '*.la' -o -name '*.pc' \) \
     -print -quit | grep -q .; then
     die "development artifact leaked into target rootfs"
