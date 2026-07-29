@@ -86,11 +86,14 @@ install_rootfs_file shadow "$shadow_stage/etc/login.defs" /etc/login.defs
 install_rootfs_file openssh "$openssh_stage/etc/ssh/ssh_config" /etc/ssh/ssh_config
 install_rootfs_file openssh "$openssh_stage/etc/ssh/moduli" /etc/ssh/moduli
 
-root_account=$(awk -F: '$3 == 0 { print $1; exit }' "$EFILINUX_ROOTFS/etc/passwd")
-root_password_hash=$(openssl passwd -6 -salt "$root_account" "$root_account")
-awk -F: -v OFS=: -v account="$root_account" -v hash="$root_password_hash" \
-    '$1 == account { $2 = hash } { print }' \
-    "$EFILINUX_ROOTFS/etc/shadow" > "$assembly/shadow"
+cp "$EFILINUX_ROOTFS/etc/shadow" "$assembly/shadow"
+for account in root user; do
+    password_hash=$(openssl passwd -6 -salt "$account" "$account")
+    awk -F: -v OFS=: -v account="$account" -v hash="$password_hash" \
+        '$1 == account { $2 = hash } { print }' \
+        "$assembly/shadow" > "$assembly/shadow.next"
+    mv "$assembly/shadow.next" "$assembly/shadow"
+done
 replace_rootfs_file \
     system-config system-config "$assembly/shadow" /etc/shadow
 
@@ -161,6 +164,7 @@ log "Creating runtime directories and runlevels"
 mkdir -p \
     "$EFILINUX_ROOTFS/etc/cron.d" \
     "$EFILINUX_ROOTFS/root/.ssh" \
+    "$EFILINUX_ROOTFS/home/user" \
     "$EFILINUX_ROOTFS/var/empty" \
     "$EFILINUX_ROOTFS/var/lib/dbus" \
     "$EFILINUX_ROOTFS/var/lib/dhcpcd" \
@@ -201,6 +205,8 @@ chmod 0755 \
     "$EFILINUX_ROOTFS/etc/rc.d/init.d/"*
 chmod 0600 "$EFILINUX_ROOTFS/etc/shadow" "$EFILINUX_ROOTFS/etc/gshadow"
 chmod 0700 "$EFILINUX_ROOTFS/root/.ssh"
+chmod 0750 "$EFILINUX_ROOTFS/home/user"
+chown 1000:1000 "$EFILINUX_ROOTFS/home/user"
 chmod 0755 "$EFILINUX_ROOTFS/var/empty"
 touch \
     "$EFILINUX_ROOTFS/var/log/messages" \

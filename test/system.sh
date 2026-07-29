@@ -50,7 +50,7 @@ done
 
 for directory in \
     /etc/rc.d/init.d /etc/rc.d/rc3.d /etc/rc.d/rc6.d \
-    /etc/ssh /root/.ssh /var/empty /var/lib/dbus /var/log /var/spool/cron; do
+    /etc/ssh /root/.ssh /home/user /var/empty /var/lib/dbus /var/log /var/spool/cron; do
     require_directory "$directory"
 done
 
@@ -108,6 +108,21 @@ root_password_hash=$(awk -F: -v account="$root_account" \
 expected_root_password_hash=$(openssl passwd -6 -salt "$root_account" "$root_account")
 [[ "$root_password_hash" == "$expected_root_password_hash" ]] || \
     die "root password does not match the root account name"
+user_passwd=$(awk -F: '$1 == "user" { print; exit }' "$rootfs/etc/passwd")
+[[ "$user_passwd" == 'user:x:1000:1000:User:/home/user:/usr/bin/sh' ]] || \
+    die "normal user account is missing or malformed"
+user_password_hash=$(awk -F: '$1 == "user" { print $2; exit }' "$rootfs/etc/shadow")
+expected_user_password_hash=$(openssl passwd -6 -salt user user)
+[[ "$user_password_hash" == "$expected_user_password_hash" ]] || \
+    die "user password does not match the user account name"
+grep -Eq '^user:x:1000:$' "$rootfs/etc/group" || \
+    die "user primary group is missing"
+grep -Eq '^wheel:x:10:([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/group" || \
+    die "user is not a member of wheel"
+grep -Eq '^wheel:\*::([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/gshadow" || \
+    die "user wheel membership is missing from gshadow"
+[[ $(stat -c '%u:%g:%a' "$rootfs/home/user") == '1000:1000:750' ]] || \
+    die "/home/user ownership or permissions are incorrect"
 grep -q '^sshd:' "$rootfs/etc/passwd" || die "sshd user is missing"
 grep -q '^dbus:' "$rootfs/etc/passwd" || die "dbus user is missing"
 grep -Eq '^PermitRootLogin[[:space:]]+prohibit-password$' "$rootfs/etc/ssh/sshd_config" || \
