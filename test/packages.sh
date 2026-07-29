@@ -4,7 +4,11 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
+source "$ROOT/001-runtime/config.sh"
+source "$ROOT/002-system/desktop-config.sh"
 source "$ROOT/003-graphical/config.sh"
+source "$ROOT/003-graphical/desktop-support/config.sh"
+source "$ROOT/004-desktop/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
@@ -63,6 +67,9 @@ required_packages=(
     "gcc-runtime-$GCC_RUNTIME_VERSION"
     "libffi-$LIBFFI_VERSION"
     "pcre2-$PCRE2_VERSION"
+    "glib-$GLIB_VERSION"
+    "libyaml-$LIBYAML_VERSION"
+    "libexif-$LIBEXIF_VERSION"
     "zlib-$ZLIB_VERSION"
     "xz-$XZ_VERSION"
     "zstd-$ZSTD_VERSION"
@@ -92,6 +99,7 @@ required_packages=(
     "sysvinit-$SYSVINIT_VERSION"
     "sysklogd-$SYSKLOGD_VERSION"
     "systemd-$UDEV_SYSTEMD_VERSION"
+    "libgudev-$LIBGUDEV_VERSION"
     "expat-$EXPAT_VERSION"
     "dbus-$DBUS_VERSION"
     "cronie-$CRONIE_VERSION"
@@ -168,6 +176,30 @@ required_packages=(
     "libXt-$LIBXT_VERSION"
     "libXmu-$LIBXMU_VERSION"
     "xauth-$XAUTH_VERSION"
+    "iceauth-$ICEAUTH_VERSION"
+    "noto-sans-cjk-sc-$NOTO_SANS_CJK_VERSION"
+    "qogir-icon-theme-$QOGIR_ICON_VERSION"
+    "qogir-desktop-theme-$QOGIR_THEME_VERSION"
+    "xcb-util-$XCB_UTIL_VERSION"
+    "libXres-$LIBXRES_VERSION"
+    "libXpresent-$LIBXPRESENT_VERSION"
+    "startup-notification-$STARTUP_NOTIFICATION_VERSION"
+    "libnotify-$LIBNOTIFY_VERSION"
+    "libwnck-$LIBWNCK_VERSION"
+
+    "libxfce4util-$LIBXFCE4UTIL_VERSION"
+    "xfconf-$XFCONF_VERSION"
+    "libxfce4ui-$LIBXFCE4UI_VERSION"
+    "exo-$EXO_VERSION"
+    "garcon-$GARCON_VERSION"
+    "thunar-$THUNAR_VERSION"
+    "tumbler-$TUMBLER_VERSION"
+    "xfce4-appfinder-$XFCE4_APPFINDER_VERSION"
+    "xfce4-panel-$XFCE4_PANEL_VERSION"
+    "xfce4-session-$XFCE4_SESSION_VERSION"
+    "xfce4-settings-$XFCE4_SETTINGS_VERSION"
+    "xfdesktop-$XFDESKTOP_VERSION"
+    "xfwm4-$XFWM4_VERSION"
 )
 
 for package in "${required_packages[@]}"; do
@@ -185,6 +217,24 @@ binary_package_materialize "xauth-$XAUTH_VERSION" "$materialized"
 [[ -x "$materialized/usr/bin/xauth" ]] || \
     die "materialized xauth package does not contain /usr/bin/xauth"
 rm -rf -- "$materialized"
+
+qogir_icon_materialized="$EFILINUX_TEST/package-qogir-icons"
+qogir_theme_materialized="$EFILINUX_TEST/package-qogir-theme"
+binary_package_materialize \
+    "qogir-icon-theme-$QOGIR_ICON_VERSION" "$qogir_icon_materialized"
+binary_package_materialize \
+    "qogir-desktop-theme-$QOGIR_THEME_VERSION" "$qogir_theme_materialized"
+[[ -f "$qogir_icon_materialized/usr/share/icons/Qogir/index.theme" ]] || \
+    die "Qogir icon package does not contain its icon theme"
+[[ ! -e "$qogir_icon_materialized/usr/share/themes" ]] || \
+    die "Qogir icon package incorrectly contains desktop themes"
+[[ -f "$qogir_theme_materialized/usr/share/themes/Qogir/gtk-3.0/gtk.css" ]] || \
+    die "Qogir desktop theme package does not contain its GTK theme"
+[[ -f "$qogir_theme_materialized/usr/share/themes/Qogir/xfwm4/themerc" ]] || \
+    die "Qogir desktop theme package does not contain its XFWM theme"
+[[ ! -e "$qogir_theme_materialized/usr/share/icons" ]] || \
+    die "Qogir desktop theme package incorrectly contains icon themes"
+rm -rf -- "$qogir_icon_materialized" "$qogir_theme_materialized"
 
 linux_materialized="$EFILINUX_TEST/package-linux"
 binary_package_materialize "linux-$LINUX_VERSION" "$linux_materialized"

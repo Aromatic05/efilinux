@@ -10,6 +10,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 "$ROOT/test/packages.sh"
 "$ROOT/test/graphical-core.sh"
 "$ROOT/test/graphical.sh"
+"$ROOT/test/desktop.sh"
 "$ROOT/test/kernel.sh"
 "$ROOT/test/boot-qemu.sh"
 "$ROOT/test/boot-graphical-qemu.sh"

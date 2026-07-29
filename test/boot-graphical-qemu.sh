@@ -28,7 +28,7 @@ set +e
 {
     sleep 100
     printf '%s\n' \
-        "test \"\$(cat /run/efilinux/runlevel)\" = 5 && test -S /tmp/.X11-unix/X0 && test -s /run/efilinux/graphical.pid && kill -0 \"\$(cat /run/efilinux/graphical.pid)\" && pidof Xorg >/dev/null && pidof gtk3-demo >/dev/null && DISPLAY=:0 /usr/bin/xwininfo -root >/dev/null && /usr/bin/printf 'EFILINUX_GRAPHICAL_OK\\n' && /usr/bin/poweroff -f"
+        "test \"\$(cat /run/efilinux/runlevel)\" = 5 && test -S /tmp/.X11-unix/X0 && test -s /run/efilinux/graphical.pid && kill -0 \"\$(cat /run/efilinux/graphical.pid)\" && test -s /etc/xdg/menus/xfce-applications.menu && pidof Xorg >/dev/null && pidof xfce4-session >/dev/null && pidof xfsettingsd >/dev/null && pidof xfwm4 >/dev/null && pidof xfce4-panel >/dev/null && pidof xfdesktop >/dev/null && ! grep -qi 'failed to load applications menu' /var/log/graphical.log && settings_pid=\$(pidof xfsettingsd) && bus=\$(tr '\\0' '\\n' </proc/\$settings_pid/environ | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p') && test -n \"\$bus\" && test \"\$(DBUS_SESSION_BUS_ADDRESS=\$bus /usr/bin/xfconf-query -c xsettings -p /Net/ThemeName)\" = Qogir && test \"\$(DBUS_SESSION_BUS_ADDRESS=\$bus /usr/bin/xfconf-query -c xsettings -p /Net/IconThemeName)\" = Qogir && test \"\$(DBUS_SESSION_BUS_ADDRESS=\$bus /usr/bin/xfconf-query -c xsettings -p /Gtk/CursorThemeName)\" = Qogir && test \"\$(DBUS_SESSION_BUS_ADDRESS=\$bus /usr/bin/xfconf-query -c xfwm4 -p /general/theme)\" = Qogir && DISPLAY=:0 /usr/bin/xwininfo -root >/dev/null && /usr/bin/printf 'EFILINUX_XFCE_OK\\n' && /usr/bin/poweroff -f"
 } | timeout --signal=TERM 180s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \
@@ -56,10 +56,10 @@ if grep -q 'Kernel panic' "$boot_log"; then
     die "kernel panic detected during graphical boot"
 fi
 
-if ! grep -q 'EFILINUX_GRAPHICAL_OK' "$boot_log"; then
+if ! grep -q 'EFILINUX_XFCE_OK' "$boot_log"; then
     tail -n 160 "$boot_log" >&2
-    die "Xorg and GTK did not become operational on VirtIO-GPU"
+    die "Xorg and the XFCE desktop did not become operational on VirtIO-GPU"
 fi
 
-log "OVMF boot reached a live Xorg and GTK 3 session on VirtIO-GPU"
+log "OVMF boot reached a live XFCE 4.18 session on Xorg and VirtIO-GPU"
 printf 'Boot log: %s\n' "$boot_log"
