@@ -1,0 +1,8 @@
+favorites=xfce4-terminal.desktop,thunar.desktop,xfce-settings-manager.desktop
+recent=
+button-single-row=true
+show-button-title=false
+show-command-profile=false
+show-command-switchuser=false
+show-command-lockscreen=true
+show-command-logout=true

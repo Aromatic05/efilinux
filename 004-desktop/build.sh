@@ -8,4 +8,6 @@ source "$ROOT/lib/common.sh"
 
 ensure_directories
 run_component "$ROOT/004-desktop/core"
+run_component "$ROOT/004-desktop/session-overrides"
+run_component "$ROOT/004-desktop/extras"
 run_component "$ROOT/004-desktop/desktop-rootfs"

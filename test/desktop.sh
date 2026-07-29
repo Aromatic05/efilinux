@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/004-desktop/config.sh"
+source "$ROOT/004-desktop/extras/config.sh"
 source "$ROOT/lib/common.sh"
 
 ensure_directories
@@ -20,10 +21,19 @@ require_program() {
 
 for program in \
     startxfce4 xfce4-session xfwm4 xfce4-panel xfdesktop \
-    xfconf-query thunar xfce4-appfinder xfce4-settings-manager; do
+    xfconf-query thunar xfce4-appfinder xfce4-settings-manager \
+    xfce4-terminal xfce4-notifyd-config \
+    xfce4-power-manager xfce4-power-manager-settings \
+    xfce4-screensaver xfce4-screensaver-command \
+    xfce4-popup-whiskermenu thunar-volman nm-applet nm-connection-editor \
+    efilinux-volume-control; do
     require_program "$program"
 done
 
+[[ -x "$rootfs/usr/lib/xfce4/notifyd/xfce4-notifyd" ]] || \
+    die "XFCE notification daemon is missing"
+[[ -f "$rootfs/etc/xdg/autostart/xfce4-notifyd.desktop" ]] || \
+    die "XFCE notification daemon autostart entry is missing"
 [[ -x "$rootfs/usr/lib/xfce4/xfconf/xfconfd" ]] || \
     die "xfconfd is missing from the desktop runtime"
 [[ -f "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" ]] || \
@@ -48,7 +58,7 @@ grep -Fq '<Name>Xfce</Name>' \
 grep -Fq '<DefaultAppDirs/>' \
     "$rootfs/etc/xdg/menus/xfce-applications.menu" || \
     die "XFCE applications menu does not scan standard desktop entries"
-[[ -x "$rootfs/etc/xdg/xfce4/xinitrc" ]] || \
+[[ -f "$rootfs/etc/xdg/xfce4/xinitrc" ]] || \
     die "XFCE system xinitrc is missing from /etc/xdg"
 [[ ! -e "$rootfs/usr/etc" ]] || \
     die "desktop configuration leaked into /usr/etc"
@@ -71,19 +81,60 @@ grep -Fq '<property name="theme" type="string" value="Qogir"/>' \
     "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" || \
     die "XFWM does not select the Qogir window theme"
 
-user_xfconf="$rootfs/root/.config/xfce4/xfconf/xfce-perchannel-xml"
-for channel in xsettings xfwm4 xfce4-panel xfce4-session keyboards thunar; do
+skel_xfconf="$rootfs/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml"
+user_xfconf="$rootfs/home/user/.config/xfce4/xfconf/xfce-perchannel-xml"
+for channel in \
+    xsettings xfwm4 xfce4-panel xfce4-session keyboards thunar \
+    xfce4-notifyd xfce4-power-manager xfce4-screensaver \
+    xfce4-terminal xfce4-keyboard-shortcuts; do
+    [[ -f "$skel_xfconf/$channel.xml" ]] || \
+        die "skel XFCE profile is missing channel defaults: $channel"
     [[ -f "$user_xfconf/$channel.xml" ]] || \
-        die "root XFCE profile is missing channel defaults: $channel"
+        die "user XFCE profile is missing channel defaults: $channel"
+    cmp -s "$skel_xfconf/$channel.xml" "$user_xfconf/$channel.xml" || \
+        die "user XFCE channel differs from skel default: $channel"
 done
 cmp -s \
     "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" \
     "$user_xfconf/xsettings.xml" || \
-    die "root XFCE profile does not preserve the system Qogir xsettings"
+    die "user XFCE profile does not preserve the system Qogir xsettings"
 cmp -s \
     "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" \
     "$user_xfconf/xfwm4.xml" || \
-    die "root XFCE profile does not preserve the system Qogir XFWM settings"
+    die "user XFCE profile does not preserve the system Qogir XFWM settings"
+[[ ! -d "$rootfs/root/.config/xfce4" ]] || \
+    die "root desktop profile must not be seeded"
+[[ $(stat -c '%u:%g' "$rootfs/home/user") == 1000:1000 ]] || \
+    die "desktop user home ownership is incorrect"
+
+for autostart in \
+    xfce-polkit.desktop efilinux-nm-applet.desktop; do
+    [[ -f "$rootfs/etc/xdg/autostart/$autostart" ]] || \
+        die "desktop autostart entry is missing: $autostart"
+done
+[[ -x "$rootfs/usr/lib/xfce-polkit/xfce-polkit" ]] || \
+    die "XFCE PolicyKit authentication agent is missing"
+[[ -f "$rootfs/etc/skel/.config/xfce4/panel/whiskermenu-1.rc" ]] || \
+    die "Whisker menu user defaults are missing"
+[[ -f "$rootfs/home/user/.config/xfce4/panel/whiskermenu-1.rc" ]] || \
+    die "Whisker menu defaults were not seeded for user"
+
+panel_defaults="$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml"
+for plugin in whiskermenu pulseaudio power-manager-plugin notification-plugin; do
+    grep -Fq "value=\"$plugin\"" "$panel_defaults" || \
+        die "required XFCE panel plugin is absent from defaults: $plugin"
+done
+grep -Fq '<property name="theme" type="string" value="Qogir"/>' \
+    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-notifyd.xml" || \
+    die "XFCE notifications do not use the Qogir theme"
+
+for plugin_library in \
+    libwhiskermenu.so libpulseaudio-plugin.so \
+    libxfce4powermanager.so libnotification-plugin.so; do
+    if ! find "$rootfs/usr/lib" -type f -name "$plugin_library" -print -quit | grep -q .; then
+        die "XFCE panel plugin library is missing: $plugin_library"
+    fi
+done
 
 for required_theme_path in \
     gtk-3.0/gtk.css xfwm4/themerc xfce-notify-4.0/gtk.css; do

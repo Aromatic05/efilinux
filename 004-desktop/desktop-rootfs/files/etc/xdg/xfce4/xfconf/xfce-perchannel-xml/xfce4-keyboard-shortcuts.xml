@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-keyboard-shortcuts" version="1.0">
+  <property name="commands" type="empty">
+    <property name="custom" type="empty">
+      <property name="&lt;Super&gt;space" type="string" value="/usr/bin/xfce4-popup-whiskermenu"/>
+      <property name="&lt;Super&gt;Return" type="string" value="/usr/bin/xfce4-terminal"/>
+      <property name="&lt;Super&gt;e" type="string" value="/usr/bin/thunar"/>
+      <property name="&lt;Super&gt;l" type="string" value="/usr/bin/xfce4-screensaver-command --lock"/>
+    </property>
+  </property>
+</channel>

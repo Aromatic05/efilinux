@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-terminal" version="1.0">
+  <property name="font-name" type="string" value="DejaVu Sans Mono 11"/>
+  <property name="font-use-system" type="bool" value="false"/>
+  <property name="misc-menubar-default" type="bool" value="false"/>
+  <property name="misc-toolbar-default" type="bool" value="false"/>
+  <property name="misc-mouse-wheel-zoom" type="bool" value="true"/>
+  <property name="misc-highlight-urls" type="bool" value="true"/>
+  <property name="misc-confirm-close" type="bool" value="true"/>
+  <property name="scrolling-lines" type="uint" value="10000"/>
+</channel>

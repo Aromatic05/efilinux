@@ -1,0 +1,23 @@
+#!/usr/bin/sh
+set -eu
+
+if test "${1:-}" != --cli; then
+    exec /usr/bin/xfce4-terminal \
+        --title="Audio Control" \
+        --command="/usr/bin/efilinux-volume-control --cli"
+fi
+
+while :; do
+    clear
+    printf 'EFILinux audio control\n\n'
+    /usr/bin/pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null || true
+    /usr/bin/pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null || true
+    printf '\n[+] louder  [-] quieter  [m] mute  [q] quit\n> '
+    IFS= read -r action
+    case "$action" in
+        +) /usr/bin/pactl set-sink-volume @DEFAULT_SINK@ +5% ;;
+        -) /usr/bin/pactl set-sink-volume @DEFAULT_SINK@ -5% ;;
+        m|M) /usr/bin/pactl set-sink-mute @DEFAULT_SINK@ toggle ;;
+        q|Q) exit 0 ;;
+    esac
+done

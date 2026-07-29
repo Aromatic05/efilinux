@@ -61,7 +61,11 @@ desktop_release_build() {
         --disable-silent-rules \
         --sysconfdir=/etc \
         "$@"
-    graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    env -u LD_LIBRARY_PATH make -C "$PACKAGE_BUILD" -j"$EFILINUX_JOBS"
+    env -u LD_LIBRARY_PATH make -C "$PACKAGE_BUILD" \
+        DESTDIR="$PACKAGE_STAGING" install
+    find "$PACKAGE_STAGING" -type f -name '*.la' -delete 2>/dev/null || true
+    graphical_normalize_pkg_config "$PACKAGE_STAGING"
     desktop_prune_translations "$PACKAGE_STAGING"
     desktop_package_publish "$package" "$producer"
 }
