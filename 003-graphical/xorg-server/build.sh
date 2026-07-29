@@ -19,12 +19,15 @@ build_autotools_component() {
     local url=$4
     shift 4
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_autotools_configure \
         "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
         --disable-static --disable-docs "$@"
     graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
 }
 
 build_meson_component() {
@@ -34,10 +37,13 @@ build_meson_component() {
     local url=$4
     shift 4
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
     graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
 }
 
 ensure_pkg_component() {
@@ -93,63 +99,65 @@ fi
 if [[ ! -x "$EFILINUX_SYSROOT/usr/bin/Xorg" ||
       ! -e "$EFILINUX_SYSROOT/usr/include/xorg/dgaproc.h" ]]; then
     package="xorg-server-$XORG_SERVER_VERSION"
-    graphical_prepare_archive \
-        "$package" \
-        "xorg-server-xorg-server-$XORG_SERVER_VERSION.tar.gz" \
-        "$XORG_SERVER_SHA256" \
-        "https://gitlab.freedesktop.org/xorg/xserver/-/archive/xorg-server-$XORG_SERVER_VERSION/xserver-xorg-server-$XORG_SERVER_VERSION.tar.gz"
-    log "Configuring Xorg Server"
-    graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
-    -Dxorg=true \
-    -Dxephyr=false \
-    -Dxnest=false \
-    -Dxvfb=false \
-    -Dxwin=false \
-    -Dxquartz=false \
-    -Dglamor=true \
-    -Dglx=true \
-    -Dxdmcp=false \
-    -Dxdm-auth-1=false \
-    -Dsecure-rpc=false \
-    -Dlisten_tcp=false \
-    -Dlisten_unix=true \
-    -Dlisten_local=true \
-    -Dint10=false \
-    -Dsuid_wrapper=false \
-    -Dpciaccess=true \
-    -Dudev=true \
-    -Dudev_kms=true \
-    -Dhal=false \
-    -Dsystemd_logind=false \
-    -Dvgahw=false \
-    -Ddpms=true \
-    -Dxselinux=false \
-    -Ddri1=false \
-    -Ddri2=true \
-    -Ddri3=true \
-    -Ddrm=true \
-    -Dagp=false \
-    -Ddga=true \
-    -Dxvmc=false \
-    -Dxv=true \
-    -Dsha1=libcrypto \
-    -Dxf86-input-inputtest=false \
-    -Ddocs=false \
-    -Ddevel-docs=false \
-    -Ddocs-pdf=false \
-    -Dmodule_dir=xorg/modules \
-    -Dlog_dir=/var/log \
-    -Ddefault_font_path=/usr/share/fonts/truetype/dejavu \
-    -Dxkb_dir=/usr/share/X11/xkb \
-    -Dxkb_output_dir=/var/lib/xkb \
-    -Dxkb_bin_dir=/usr/bin \
-    -Dxkb_default_rules=evdev \
-    -Dxkb_default_model=pc105 \
-    -Dxkb_default_layout=us \
-        -Dfallback_input_driver=libinput
-    log "Building Xorg Server"
-    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    if ! graphical_binary_package_restore "$package"; then
+        graphical_prepare_archive \
+            "$package" \
+            "xorg-server-xorg-server-$XORG_SERVER_VERSION.tar.gz" \
+            "$XORG_SERVER_SHA256" \
+            "https://gitlab.freedesktop.org/xorg/xserver/-/archive/xorg-server-$XORG_SERVER_VERSION/xserver-xorg-server-$XORG_SERVER_VERSION.tar.gz"
+        log "Configuring Xorg Server"
+        graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+            -Dxorg=true \
+            -Dxephyr=false \
+            -Dxnest=false \
+            -Dxvfb=false \
+            -Dxwin=false \
+            -Dxquartz=false \
+            -Dglamor=true \
+            -Dglx=true \
+            -Dxdmcp=false \
+            -Dxdm-auth-1=false \
+            -Dsecure-rpc=false \
+            -Dlisten_tcp=false \
+            -Dlisten_unix=true \
+            -Dlisten_local=true \
+            -Dint10=false \
+            -Dsuid_wrapper=false \
+            -Dpciaccess=true \
+            -Dudev=true \
+            -Dudev_kms=true \
+            -Dhal=false \
+            -Dsystemd_logind=false \
+            -Dvgahw=false \
+            -Ddpms=true \
+            -Dxselinux=false \
+            -Ddri1=false \
+            -Ddri2=true \
+            -Ddri3=true \
+            -Ddrm=true \
+            -Dagp=false \
+            -Ddga=true \
+            -Dxvmc=false \
+            -Dxv=true \
+            -Dsha1=libcrypto \
+            -Dxf86-input-inputtest=false \
+            -Ddocs=false \
+            -Ddevel-docs=false \
+            -Ddocs-pdf=false \
+            -Dmodule_dir=xorg/modules \
+            -Dlog_dir=/var/log \
+            -Ddefault_font_path=/usr/share/fonts/truetype/dejavu \
+            -Dxkb_dir=/usr/share/X11/xkb \
+            -Dxkb_output_dir=/var/lib/xkb \
+            -Dxkb_bin_dir=/usr/bin \
+            -Dxkb_default_rules=evdev \
+            -Dxkb_default_model=pc105 \
+            -Dxkb_default_layout=us \
+            -Dfallback_input_driver=libinput
+        log "Building Xorg Server"
+        graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+        graphical_binary_package_publish "$package"
+    fi
 fi
 
 rm -f "$EFILINUX_SYSROOT/usr/lib/xorg/modules/libinput_drv.so"

@@ -13,8 +13,12 @@ require_command cmake curl ninja python3 sha256sum tar
 ensure_directories
 
 package="spirv-tools-$SPIRV_TOOLS_VERSION"
+if graphical_binary_package_restore "$package"; then
+    exit 0
+fi
+
 prepare_package "$package"
-headers_source="$EFILINUX_BUILD/sources/spirv-tools-headers-$SPIRV_TOOLS_HEADERS_COMMIT"
+headers_source="$PACKAGE_SOURCE/spirv-headers"
 reset_directory "$headers_source"
 
 archive="SPIRV-Tools-vulkan-sdk-$SPIRV_TOOLS_VERSION.tar.gz"
@@ -70,4 +74,4 @@ if find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 -type f \
     die "unexpected SPIRV-Tools library leaked into target staging"
 fi
 
-merge_sysroot "$PACKAGE_STAGING"
+graphical_binary_package_publish "$package"

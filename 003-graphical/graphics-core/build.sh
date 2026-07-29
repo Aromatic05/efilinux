@@ -44,10 +44,13 @@ build_meson_package() {
     local url=$4
     shift 4
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
     graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
 }
 
 build_meson_package \
@@ -82,83 +85,87 @@ build_meson_package \
     -Dinstall-test-programs=false
 
 package="elfutils-$ELFUTILS_VERSION"
-graphical_prepare_archive \
-    "$package" \
-    "elfutils-$ELFUTILS_VERSION.tar.bz2" \
-    "$ELFUTILS_SHA256" \
-    "https://sourceware.org/elfutils/ftp/$ELFUTILS_VERSION/elfutils-$ELFUTILS_VERSION.tar.bz2"
-log "Configuring libelf"
-graphical_release_configure "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
-    --disable-debuginfod \
-    --disable-libdebuginfod \
-    --disable-nls \
-    --disable-demangler \
-    --without-bzlib \
-    --without-lzma \
-    --with-zstd
-log "Building libelf"
-graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-merge_sysroot "$PACKAGE_STAGING"
+if ! graphical_binary_package_restore "$package"; then
+    graphical_prepare_archive \
+        "$package" \
+        "elfutils-$ELFUTILS_VERSION.tar.bz2" \
+        "$ELFUTILS_SHA256" \
+        "https://sourceware.org/elfutils/ftp/$ELFUTILS_VERSION/elfutils-$ELFUTILS_VERSION.tar.bz2"
+    log "Configuring libelf"
+    graphical_release_configure "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+        --disable-nls \
+        --disable-demangler \
+        --without-bzlib \
+        --without-lzma \
+        --with-zstd
+    log "Building libelf"
+    graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
+fi
 
 package="mesa-$MESA_VERSION"
-graphical_prepare_archive \
-    "$package" \
-    "mesa-$MESA_VERSION.tar.xz" \
-    "$MESA_SHA256" \
-    "https://archive.mesa3d.org/mesa-$MESA_VERSION.tar.xz"
+if ! graphical_binary_package_restore "$package"; then
+    graphical_prepare_archive \
+        "$package" \
+        "mesa-$MESA_VERSION.tar.xz" \
+        "$MESA_SHA256" \
+        "https://archive.mesa3d.org/mesa-$MESA_VERSION.tar.xz"
 
-mesa_host_tools="$EFILINUX_BUILD/host-tools/$package"
-reset_directory "$mesa_host_tools"
-system_zstd=$(command -v zstd)
-cat > "$mesa_host_tools/zstd" <<EOF
+    mesa_host_tools="$EFILINUX_BUILD/host-tools/$package"
+    reset_directory "$mesa_host_tools"
+    system_zstd=$(command -v zstd)
+    cat > "$mesa_host_tools/zstd" <<EOF
 #!/bin/sh
 unset LD_LIBRARY_PATH
 exec "$system_zstd" "\$@"
 EOF
-chmod 0755 "$mesa_host_tools/zstd"
-LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib" \
-    "$mesa_host_tools/zstd" --version >/dev/null
+    chmod 0755 "$mesa_host_tools/zstd"
+    LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib" \
+        "$mesa_host_tools/zstd" --version >/dev/null
 
-log "Configuring Mesa X11-only desktop drivers"
-PATH="$mesa_host_tools:$PATH" \
-graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
-    -Dplatforms=x11 \
-    -Degl-native-platform=x11 \
-    -Dgallium-drivers=iris,crocus,radeonsi,nouveau,virgl,llvmpipe,softpipe \
-    -Dvulkan-drivers= \
-    -Dvideo-codecs= \
-    -Dllvm=enabled \
-    -Dshared-llvm=enabled \
-    -Ddraw-use-llvm=true \
-    -Damd-use-llvm=true \
-    -Dspirv-tools=enabled \
-    -Dstatic-libclc=all \
-    -Dmesa-clc-bundle-headers=enabled \
-    -Dinstall-mesa-clc=false \
-    -Dglx=dri \
-    -Degl=enabled \
-    -Dgbm=enabled \
-    -Dopengl=true \
-    -Dgles1=disabled \
-    -Dgles2=disabled \
-    -Dglvnd=disabled \
-    -Dgallium-va=disabled \
-    -Dvalgrind=disabled \
-    -Dlibunwind=disabled \
-    -Dlmsensors=disabled \
-    -Dselinux=false \
-    -Dbuild-tests=false \
-    -Denable-glcpp-tests=false \
-    -Dtools=
-log "Building Mesa"
-graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    log "Configuring Mesa X11-only desktop drivers"
+    PATH="$mesa_host_tools:$PATH" \
+    graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+        -Dplatforms=x11 \
+        -Degl-native-platform=x11 \
+        -Dgallium-drivers=iris,crocus,radeonsi,nouveau,virgl,llvmpipe,softpipe \
+        -Dvulkan-drivers= \
+        -Dvideo-codecs= \
+        -Dllvm=enabled \
+        -Dshared-llvm=enabled \
+        -Ddraw-use-llvm=true \
+        -Damd-use-llvm=true \
+        -Dspirv-tools=enabled \
+        -Dstatic-libclc=all \
+        -Dmesa-clc-bundle-headers=enabled \
+        -Dinstall-mesa-clc=false \
+        -Dglx=dri \
+        -Degl=enabled \
+        -Dgbm=enabled \
+        -Dopengl=true \
+        -Dgles1=disabled \
+        -Dgles2=disabled \
+        -Dglvnd=disabled \
+        -Dgallium-va=disabled \
+        -Dvalgrind=disabled \
+        -Dlibunwind=disabled \
+        -Dlmsensors=disabled \
+        -Dselinux=false \
+        -Dbuild-tests=false \
+        -Denable-glcpp-tests=false \
+        -Dtools=
+    log "Building Mesa"
+    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
 
-if find "$PACKAGE_STAGING" -iname '*wayland*' -print -quit | grep -q .; then
-    die "Wayland artifacts leaked into the Mesa staging tree"
+    if find "$PACKAGE_STAGING" -iname '*wayland*' -print -quit | grep -q .; then
+        die "Wayland artifacts leaked into the Mesa staging tree"
+    fi
+    for driver in iris crocus radeonsi nouveau virtio_gpu swrast; do
+        [[ -e "$PACKAGE_STAGING/usr/lib/dri/${driver}_dri.so" ]] || \
+            die "Mesa driver is missing: ${driver}_dri.so"
+    done
+
+    graphical_binary_package_publish "$package"
 fi
-for driver in iris crocus radeonsi nouveau virtio_gpu swrast; do
-    [[ -e "$PACKAGE_STAGING/usr/lib/dri/${driver}_dri.so" ]] || \
-        die "Mesa driver is missing: ${driver}_dri.so"
-done
-
-merge_sysroot "$PACKAGE_STAGING"

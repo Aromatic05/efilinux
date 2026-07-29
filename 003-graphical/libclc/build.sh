@@ -7,9 +7,16 @@ source "$ROOT/config.sh"
 source "$ROOT/003-graphical/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/003-graphical/lib/build.sh"
+
+ensure_directories
+
+package="libclc-$LLVM_VERSION"
+if graphical_binary_package_restore "$package"; then
+    exit 0
+fi
 
 require_command clang cmake curl llvm-config ninja sha256sum tar
-ensure_directories
 
 host_llvm_version=$(llvm-config --version)
 [[ $host_llvm_version == "$LLVM_VERSION" ]] || \
@@ -24,7 +31,6 @@ if [[ ! -x $translator ]]; then
 fi
 [[ -x $translator ]] || die "host llvm-spirv translator is missing"
 
-package="libclc-$LLVM_VERSION"
 prepare_package "$package"
 archive="llvm-project-$LLVM_VERSION.src.tar.xz"
 download \
@@ -59,4 +65,4 @@ if find "$PACKAGE_STAGING" -type f ! -path '*/usr/share/clc/*.spv' \
     die "unexpected files were installed by the minimal libclc build"
 fi
 
-merge_sysroot "$PACKAGE_STAGING"
+graphical_binary_package_publish "$package"

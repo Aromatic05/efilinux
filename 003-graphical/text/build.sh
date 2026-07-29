@@ -19,16 +19,22 @@ build_meson_component() {
     local url=$4
     shift 4
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
     graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
 }
 
 build_freetype() {
     local package=$1
     local harfbuzz=$2
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive \
         "$package" \
         "freetype-$FREETYPE_VERSION.tar.xz" \
@@ -43,40 +49,44 @@ build_freetype() {
         -Dtests=disabled \
         -Dzlib=system
     graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
 }
 
 package="libpng-$LIBPNG_VERSION"
-graphical_prepare_archive \
-    "$package" \
-    "libpng-$LIBPNG_VERSION.tar.gz" \
-    "$LIBPNG_SHA256" \
-    "https://download.sourceforge.net/libpng/libpng-$LIBPNG_VERSION.tar.gz"
-graphical_cmake_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
-    -DPNG_SHARED=ON \
-    -DPNG_STATIC=OFF \
-    -DPNG_TESTS=OFF \
-    -DPNG_TOOLS=OFF \
-    -DPNG_EXECUTABLES=OFF
-graphical_cmake_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-merge_sysroot "$PACKAGE_STAGING"
+if ! graphical_binary_package_restore "$package"; then
+    graphical_prepare_archive \
+        "$package" \
+        "libpng-$LIBPNG_VERSION.tar.gz" \
+        "$LIBPNG_SHA256" \
+        "https://download.sourceforge.net/libpng/libpng-$LIBPNG_VERSION.tar.gz"
+    graphical_cmake_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+        -DPNG_SHARED=ON \
+        -DPNG_STATIC=OFF \
+        -DPNG_TESTS=OFF \
+        -DPNG_TOOLS=OFF \
+        -DPNG_EXECUTABLES=OFF
+    graphical_cmake_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
+fi
 
 package="libjpeg-turbo-$LIBJPEG_TURBO_VERSION"
-graphical_prepare_archive \
-    "$package" \
-    "libjpeg-turbo-$LIBJPEG_TURBO_VERSION.tar.gz" \
-    "$LIBJPEG_TURBO_SHA256" \
-    "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/$LIBJPEG_TURBO_VERSION/libjpeg-turbo-$LIBJPEG_TURBO_VERSION.tar.gz"
-graphical_cmake_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
-    -DENABLE_SHARED=ON \
-    -DENABLE_STATIC=OFF \
-    -DWITH_SIMD=ON \
-    -DWITH_TURBOJPEG=OFF \
-    -DWITH_TOOLS=OFF \
-    -DWITH_TESTS=OFF \
-    -DWITH_FUZZ=OFF
-graphical_cmake_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-merge_sysroot "$PACKAGE_STAGING"
+if ! graphical_binary_package_restore "$package"; then
+    graphical_prepare_archive \
+        "$package" \
+        "libjpeg-turbo-$LIBJPEG_TURBO_VERSION.tar.gz" \
+        "$LIBJPEG_TURBO_SHA256" \
+        "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/$LIBJPEG_TURBO_VERSION/libjpeg-turbo-$LIBJPEG_TURBO_VERSION.tar.gz"
+    graphical_cmake_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+        -DENABLE_SHARED=ON \
+        -DENABLE_STATIC=OFF \
+        -DWITH_SIMD=ON \
+        -DWITH_TURBOJPEG=OFF \
+        -DWITH_TOOLS=OFF \
+        -DWITH_TESTS=OFF \
+        -DWITH_FUZZ=OFF
+    graphical_cmake_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
+fi
 
 build_freetype "freetype-bootstrap-$FREETYPE_VERSION" disabled
 
@@ -155,17 +165,19 @@ build_meson_component \
     -Dgnuplot=false
 
 package="dejavu-fonts-$DEJAVU_FONTS_VERSION"
-prepare_package "$package"
-archive="dejavu-fonts-ttf-$DEJAVU_FONTS_VERSION.tar.bz2"
-download \
-    "https://downloads.sourceforge.net/dejavu/$archive" \
-    "$EFILINUX_DOWNLOADS/$archive"
-verify_sha256 "$DEJAVU_FONTS_SHA256" "$EFILINUX_DOWNLOADS/$archive"
-extract_source "$EFILINUX_DOWNLOADS/$archive" "$PACKAGE_SOURCE"
-mkdir -p "$PACKAGE_STAGING/usr/share/fonts/truetype/dejavu"
-find "$PACKAGE_SOURCE/ttf" -maxdepth 1 -type f -name '*.ttf' \
-    -exec install -m 0644 -t "$PACKAGE_STAGING/usr/share/fonts/truetype/dejavu" {} +
-merge_sysroot "$PACKAGE_STAGING"
+if ! graphical_binary_package_restore "$package"; then
+    prepare_package "$package"
+    archive="dejavu-fonts-ttf-$DEJAVU_FONTS_VERSION.tar.bz2"
+    download \
+        "https://downloads.sourceforge.net/dejavu/$archive" \
+        "$EFILINUX_DOWNLOADS/$archive"
+    verify_sha256 "$DEJAVU_FONTS_SHA256" "$EFILINUX_DOWNLOADS/$archive"
+    extract_source "$EFILINUX_DOWNLOADS/$archive" "$PACKAGE_SOURCE"
+    mkdir -p "$PACKAGE_STAGING/usr/share/fonts/truetype/dejavu"
+    find "$PACKAGE_SOURCE/ttf" -maxdepth 1 -type f -name '*.ttf' \
+        -exec install -m 0644 -t "$PACKAGE_STAGING/usr/share/fonts/truetype/dejavu" {} +
+    graphical_binary_package_publish "$package"
+fi
 
 for artifact in \
     usr/lib/libpng16.so.16 \

@@ -23,6 +23,9 @@ build_xorg_library() {
     local package="$package_name-$version"
     local slug=${project##*/}
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive \
         "$package" "$archive" "$sha256" \
         "https://gitlab.freedesktop.org/$project/-/archive/$tag/$slug-$tag.tar.gz"
@@ -30,7 +33,7 @@ build_xorg_library() {
         "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
         --disable-static --disable-docs "$@"
     graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
 }
 
 build_xorg_library libXau "$LIBXAU_VERSION" "$LIBXAU_SHA256" \

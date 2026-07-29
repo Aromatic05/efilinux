@@ -1,0 +1,9 @@
+#!/usr/bin/sh
+set -eu
+
+export GDK_BACKEND=x11
+export GTK_IM_MODULE=xim
+export NO_AT_BRIDGE=0
+export XDG_RUNTIME_DIR=/run/user/0
+
+exec /usr/bin/dbus-run-session -- /usr/bin/gtk3-demo

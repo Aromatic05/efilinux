@@ -9,8 +9,14 @@ source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 source "$ROOT/003-graphical/lib/build.sh"
 
-require_command clang cmake curl llvm-config llvm-tblgen ninja readelf sha256sum tar
 ensure_directories
+
+package="clang-headers-$LLVM_VERSION"
+if graphical_binary_package_restore "$package"; then
+    exit 0
+fi
+
+require_command clang cmake curl llvm-config llvm-tblgen ninja readelf sha256sum tar
 
 host_llvm_version=$(llvm-config --version)
 [[ $host_llvm_version == "$LLVM_VERSION" ]] || \
@@ -30,7 +36,6 @@ LC_ALL=C readelf -d "$host_clang_cpp" | \
     grep -Fq "Library soname: [$expected_clang_soname]" || \
     die "host libclang-cpp does not provide $expected_clang_soname"
 
-package="clang-headers-$LLVM_VERSION"
 prepare_package "$package"
 archive="llvm-project-$LLVM_VERSION.src.tar.xz"
 download \
@@ -84,4 +89,4 @@ find "$EFILINUX_SYSROOT/usr/lib" -maxdepth 1 \
     \( -type f -o -type l \) -name 'libclang*.a' -delete
 find "$EFILINUX_SYSROOT/usr/lib" -maxdepth 1 \
     \( -type f -o -type l \) -name 'libclang-cpp.so*' -delete
-merge_sysroot "$PACKAGE_STAGING"
+graphical_binary_package_publish "$package"

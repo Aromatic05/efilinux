@@ -4,6 +4,26 @@ set -euo pipefail
 
 export GRAPHICAL_ACLOCAL_PATH="$EFILINUX_SYSROOT/usr/share/aclocal"
 
+graphical_binary_package_restore() {
+    local package=$1
+    local producer=${2:-${BASH_SOURCE[1]}}
+
+    binary_package_restore_sysroot \
+        "$package" "$producer" \
+        "$ROOT/003-graphical/config.sh" \
+        "$ROOT/003-graphical/lib/build.sh"
+}
+
+graphical_binary_package_publish() {
+    local package=$1
+    local producer=${2:-${BASH_SOURCE[1]}}
+
+    binary_package_publish_sysroot \
+        "$package" "$producer" \
+        "$ROOT/003-graphical/config.sh" \
+        "$ROOT/003-graphical/lib/build.sh"
+}
+
 _graphical_python_path() {
     find "$EFILINUX_SYSROOT/usr/lib" -type d -path '*/site-packages' -print 2>/dev/null |
         paste -sd: -

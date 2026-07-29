@@ -19,10 +19,19 @@ build_autotools_data() {
     local url=$4
     shift 4
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_autotools_configure "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
     graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    if [[ $package == xorgproto-* ]]; then
+        rm -f \
+            "$PACKAGE_STAGING/usr/include/X11/extensions/xwaylandproto.h" \
+            "$PACKAGE_STAGING/usr/share/pkgconfig/xwaylandproto.pc" \
+            "$PACKAGE_STAGING/usr/share/doc/xorgproto/xwaylandproto.txt"
+    fi
+    graphical_binary_package_publish "$package"
 }
 
 build_autotools_data \
@@ -38,12 +47,6 @@ build_autotools_data \
     "https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/archive/xorgproto-$XORGPROTO_VERSION/xorgproto-xorgproto-$XORGPROTO_VERSION.tar.gz" \
     --without-fop --without-xmlto
 
-for root in "$PACKAGE_STAGING" "$EFILINUX_SYSROOT"; do
-    rm -f \
-        "$root/usr/include/X11/extensions/xwaylandproto.h" \
-        "$root/usr/share/pkgconfig/xwaylandproto.pc" \
-        "$root/usr/share/doc/xorgproto/xwaylandproto.txt"
-done
 if find "$EFILINUX_SYSROOT" -iname '*xwayland*' -print -quit | grep -q .; then
     die "Xwayland protocol artifacts leaked into the Stage 3 sysroot"
 fi

@@ -12,6 +12,7 @@ ensure_directories
 # The final EFI-stub kernel embeds the initramfs, so runtime is staged first.
 run_component "$ROOT/001-runtime"
 run_component "$ROOT/002-system"
+run_component "$ROOT/003-graphical"
 run_component "$ROOT/000-kernel"
 
 log "Build complete"

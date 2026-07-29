@@ -19,10 +19,13 @@ build_meson_component() {
     local url=$4
     shift 4
 
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
     graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-    merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
 }
 
 build_meson_component \

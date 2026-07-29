@@ -18,20 +18,22 @@ for dependency in fontconfig freetype2 x11 xrender; do
 done
 
 package="libXft-$LIBXFT_VERSION"
-graphical_prepare_archive \
-    "$package" \
-    "libXft-libXft-$LIBXFT_VERSION.tar.gz" \
-    "$LIBXFT_SHA256" \
-    "https://gitlab.freedesktop.org/xorg/lib/libxft/-/archive/libXft-$LIBXFT_VERSION/libxft-libXft-$LIBXFT_VERSION.tar.gz"
-graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD"
-graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+if ! graphical_binary_package_restore "$package"; then
+    graphical_prepare_archive \
+        "$package" \
+        "libXft-libXft-$LIBXFT_VERSION.tar.gz" \
+        "$LIBXFT_SHA256" \
+        "https://gitlab.freedesktop.org/xorg/lib/libxft/-/archive/libXft-$LIBXFT_VERSION/libxft-libXft-$LIBXFT_VERSION.tar.gz"
+    graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD"
+    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
 
-for artifact in \
-    usr/lib/libXft.so.2 \
-    usr/lib/pkgconfig/xft.pc \
-    usr/include/X11/Xft/Xft.h; do
-    [[ -e "$PACKAGE_STAGING/$artifact" ]] || \
-        die "libXft artifact is missing: /$artifact"
-done
+    for artifact in \
+        usr/lib/libXft.so.2 \
+        usr/lib/pkgconfig/xft.pc \
+        usr/include/X11/Xft/Xft.h; do
+        [[ -e "$PACKAGE_STAGING/$artifact" ]] || \
+            die "libXft artifact is missing: /$artifact"
+    done
 
-merge_sysroot "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
+fi
