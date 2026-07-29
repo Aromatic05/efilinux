@@ -23,7 +23,10 @@ set_clean_kernel_config() {
     "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
         --disable CMDLINE_BOOL \
         --set-str CMDLINE "" \
-        --set-str INITRAMFS_SOURCE ""
+        --set-str INITRAMFS_SOURCE "" \
+        --disable KERNEL_GZIP \
+        --disable KERNEL_XZ \
+        --enable KERNEL_ZSTD
     make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" olddefconfig
     make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" prepare
     python3 "$kernel_config_validator" \
@@ -87,7 +90,10 @@ configure_embedded_initramfs() {
     "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
         --set-str INITRAMFS_SOURCE "$initramfs_tree $device_manifest" \
         --set-val INITRAMFS_ROOT_UID "$EFILINUX_INITRAMFS_ROOT_UID" \
-        --set-val INITRAMFS_ROOT_GID "$EFILINUX_INITRAMFS_ROOT_GID"
+        --set-val INITRAMFS_ROOT_GID "$EFILINUX_INITRAMFS_ROOT_GID" \
+        --disable INITRAMFS_COMPRESSION_GZIP \
+        --disable INITRAMFS_COMPRESSION_XZ \
+        --enable INITRAMFS_COMPRESSION_ZSTD
     make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" olddefconfig
     python3 "$kernel_config_validator" \
         "$kernel_config_fragment" \

@@ -62,6 +62,7 @@ publish_kernel_package() {
 
     log "Installing curated common-PC kernel modules"
     ZSTD_NBTHREADS="${EFILINUX_COMPRESSION_JOBS:-16}" \
+ZSTD="zstd -T${EFILINUX_COMPRESSION_JOBS:-16}" \
 make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" \
         INSTALL_MOD_PATH="$kernel_staging" \
         MODLIB="$kernel_staging$module_directory" \
