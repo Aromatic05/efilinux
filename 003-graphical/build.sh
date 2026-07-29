@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
+source "$ROOT/config.sh"
+source "$ROOT/lib/common.sh"
+
+run_component "$ROOT/003-graphical/xorg-protocols"
+run_component "$ROOT/003-graphical/xorg-libraries"
+run_component "$ROOT/003-graphical/llvm"
+run_component "$ROOT/003-graphical/graphics-core"
+run_component "$ROOT/003-graphical/input"
+run_component "$ROOT/003-graphical/text"
