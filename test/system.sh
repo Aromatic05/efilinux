@@ -100,7 +100,12 @@ done
 [[ -L "$rootfs/etc/rc.d/rc3.d/S60sshd" ]] || die "runlevel 3 does not start sshd"
 [[ -L "$rootfs/etc/rc.d/rc6.d/K10sshd" ]] || die "runlevel 6 does not stop sshd"
 
-grep -Eq '^root:[!*]:' "$rootfs/etc/shadow" || die "root password is not locked by default"
+root_account=$(awk -F: '$3 == 0 { print $1; exit }' "$rootfs/etc/passwd")
+root_password_hash=$(awk -F: -v account="$root_account" \
+    '$1 == account { print $2; exit }' "$rootfs/etc/shadow")
+expected_root_password_hash=$(openssl passwd -6 -salt "$root_account" "$root_account")
+[[ "$root_password_hash" == "$expected_root_password_hash" ]] || \
+    die "root password does not match the root account name"
 grep -q '^sshd:' "$rootfs/etc/passwd" || die "sshd user is missing"
 grep -q '^dbus:' "$rootfs/etc/passwd" || die "dbus user is missing"
 grep -Eq '^PermitRootLogin[[:space:]]+prohibit-password$' "$rootfs/etc/ssh/sshd_config" || \

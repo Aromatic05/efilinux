@@ -7,7 +7,7 @@ source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
-require_command find readelf sha256sum strip tar
+require_command awk find openssl readelf sha256sum strip tar
 ensure_directories
 
 files_root="$ROOT/002-system/system-rootfs/files"
@@ -83,6 +83,14 @@ done < <(find "$files_root" -type f -print0)
 install_rootfs_file shadow "$shadow_stage/etc/login.defs" /etc/login.defs
 install_rootfs_file openssh "$openssh_stage/etc/ssh/ssh_config" /etc/ssh/ssh_config
 install_rootfs_file openssh "$openssh_stage/etc/ssh/moduli" /etc/ssh/moduli
+
+root_account=$(awk -F: '$3 == 0 { print $1; exit }' "$EFILINUX_ROOTFS/etc/passwd")
+root_password_hash=$(openssl passwd -6 -salt "$root_account" "$root_account")
+awk -F: -v OFS=: -v account="$root_account" -v hash="$root_password_hash" \
+    '$1 == account { $2 = hash } { print }' \
+    "$EFILINUX_ROOTFS/etc/shadow" > "$assembly/shadow"
+replace_rootfs_file \
+    system-config system-config "$assembly/shadow" /etc/shadow
 
 log "Installing SysVinit and console lifecycle tools"
 install_programs_from_directory sysvinit "$sysv_stage/sbin" \
