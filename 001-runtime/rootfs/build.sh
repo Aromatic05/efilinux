@@ -7,6 +7,7 @@ source "$ROOT/config.sh"
 source "$ROOT/001-runtime/config.sh"
 source "$ROOT/001-runtime/desktop-libraries/config.sh"
 source "$ROOT/001-runtime/storage-libraries/config.sh"
+source "$ROOT/001-runtime/audio-libraries/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
@@ -121,7 +122,8 @@ for runtime_spec in \
     "mpfr-$MPFR_VERSION|libmpfr.so.6*" \
     "json-c-$JSON_C_VERSION|libjson-c.so.5*" \
     "popt-$POPT_VERSION|libpopt.so.0*" \
-    "keyutils-$KEYUTILS_VERSION|libkeyutils.so.1*"; do
+    "keyutils-$KEYUTILS_VERSION|libkeyutils.so.1*" \
+    "libsndfile-$LIBSNDFILE_VERSION|libsndfile.so.1*"; do
     package_name=${runtime_spec%%|*}
     library_pattern=${runtime_spec#*|}
     copy_runtime_libraries "$package_name" "$library_pattern"
