@@ -146,8 +146,19 @@ import subprocess
 import sys
 
 root = Path(sys.argv[1])
-library_directory = root / "usr/lib"
 missing: list[tuple[str, str]] = []
+
+def expand_search_directory(artifact: Path, value: str) -> Path:
+    origin = artifact.parent
+    value = value.replace("${ORIGIN}", str(origin)).replace("$ORIGIN", str(origin))
+    path = Path(value)
+    if path.is_absolute():
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            relative = Path(str(path).lstrip("/"))
+        return root / relative
+    return origin / path
 
 for artifact in sorted(root.rglob("*")):
     if artifact.is_symlink() or not artifact.is_file():
@@ -160,8 +171,17 @@ for artifact in sorted(root.rglob("*")):
     )
     if result.returncode:
         continue
+
+    search_directories = [root / "usr/lib", root / "lib"]
+    for encoded_path in re.findall(
+        r"Library (?:runpath|rpath): \[(.*?)\]", result.stdout, re.IGNORECASE
+    ):
+        for entry in encoded_path.split(":"):
+            if entry:
+                search_directories.append(expand_search_directory(artifact, entry))
+
     for soname in re.findall(r"Shared library: \[(.*?)\]", result.stdout):
-        if not (library_directory / soname).exists():
+        if not any((directory / soname).exists() for directory in search_directories):
             missing.append((str(artifact.relative_to(root)), soname))
 
 if missing:
