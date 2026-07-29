@@ -75,6 +75,8 @@ require_program dbus-uuidgen dbus
 require_program ip iproute2
 require_program ss iproute2
 require_program ping iputils
+require_program arping iputils
+require_program tracepath iputils
 require_program dhcpcd dhcpcd
 require_program ssh openssh
 require_program sshd openssh
@@ -136,6 +138,12 @@ grep -Fq 'start_daemon sshd /usr/bin/sshd ' "$rootfs/etc/rc.d/init.d/sshd" || \
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/udevadm" --version >/dev/null
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/dbus-daemon" --version >/dev/null
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/ip" -Version >/dev/null
+"$loader" --library-path "$library_path" "$rootfs/usr/bin/ping" -V >/dev/null
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/ssh" -V >/dev/null 2>&1
+
+for formal_network_tool in ip ss ping arping tracepath; do
+    [[ ! -L "$rootfs/usr/bin/$formal_network_tool" ]] || \
+        die "$formal_network_tool is still a BusyBox symbolic link"
+done
 
 log "002-system structure, ownership, permissions, and target programs passed"
