@@ -258,7 +258,10 @@ if ! restore_package "$package"; then
     unzip -q "$archive" -d "$temporary"
     cp -a "$temporary/sqlite-src-$SQLITE_SOURCE_VERSION/." "$PACKAGE_SOURCE/"
     rm -rf "$temporary"
-    configure_target "$PACKAGE_SOURCE" --disable-static --disable-readline
+    configure_target "$PACKAGE_SOURCE" \
+        --disable-static \
+        --disable-readline \
+        --soname=legacy
     make_target
     publish_package "$package"
 fi

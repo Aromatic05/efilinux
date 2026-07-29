@@ -251,6 +251,14 @@ cat > "$rootfs_directory/etc/mdev.conf" <<'MDEV'
 $MODALIAS=.* 0:0 660 @/usr/bin/modprobe "$MODALIAS"
 MDEV
 
+chmod 0644 \
+    "$rootfs_directory/etc/passwd" \
+    "$rootfs_directory/etc/group" \
+    "$rootfs_directory/etc/nsswitch.conf" \
+    "$rootfs_directory/etc/hosts" \
+    "$rootfs_directory/etc/host.conf" \
+    "$rootfs_directory/etc/resolv.conf" \
+    "$rootfs_directory/etc/mdev.conf"
 chmod 4755 "$rootfs_directory/usr/bin/fusermount3"
 
 for base_file in \

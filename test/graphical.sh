@@ -76,6 +76,8 @@ require_program iceauth iceauth
 require_program mcookie util-linux
 require_program gtk3-demo gtk3
 require_program gtk3-widget-factory gtk3
+require_program gdk-pixbuf-query-loaders gdk-pixbuf
+require_program gdk-pixbuf-csource gdk-pixbuf
 require_program fc-cache fontconfig
 require_program fc-match fontconfig
 
@@ -88,6 +90,7 @@ require_library 'libgtk-3.so.0*' gtk3
 require_library 'libgdk-3.so.0*' gtk3
 require_library 'libcairo.so.2*' cairo
 require_library 'libpango-1.0.so.0*' pango
+require_library 'librsvg-2.so.2*' librsvg
 require_library 'libfontconfig.so.1*' fontconfig
 require_library 'libfreetype.so.6*' freetype
 require_library 'libICE.so.6*' libICE
@@ -127,6 +130,22 @@ if find "$rootfs/usr/share/xml/iso-codes" -maxdepth 1 -type f \
 fi
 [[ -e "$rootfs/usr/share/icons/Qogir/cursors/left_ptr" ]] || \
     die "Qogir cursor theme is missing left_ptr"
+if find -L "$rootfs/usr/share/icons/Qogir" -type l -print -quit | grep -q .; then
+    die "Qogir icon theme contains broken symbolic links"
+fi
+
+svg_loader=$(find "$rootfs/usr/lib/gdk-pixbuf-2.0" \
+    -type f -name libpixbufloader-svg.so -print -quit)
+[[ -n "$svg_loader" ]] || die "GdkPixbuf SVG loader is missing"
+[[ $(rootfs_owner "${svg_loader#"$rootfs"}") == librsvg ]] || \
+    die "GdkPixbuf SVG loader is not owned by librsvg"
+loader_cache="$(dirname -- "$(dirname -- "$svg_loader")")/loaders.cache"
+[[ -s "$loader_cache" ]] || die "GdkPixbuf loader cache is missing"
+grep -Fq '"svg"' "$loader_cache" || \
+    die "GdkPixbuf loader cache does not register SVG"
+if grep -Fq "$rootfs" "$loader_cache"; then
+    die "GdkPixbuf loader cache contains build-host paths"
+fi
 
 mapfile -t qogir_variants < <(
     find "$rootfs/usr/share/icons" -maxdepth 1 -mindepth 1 \
@@ -179,6 +198,22 @@ if ! "$loader" --library-path "$library_path" \
     die "real Xorg server does not execute against the target library closure"
 fi
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/gtk3-demo" --help-all >/dev/null
+"$loader" --library-path "$library_path" \
+    "$rootfs/usr/bin/gdk-pixbuf-query-loaders" "$svg_loader" | \
+    grep -Fq '"svg"'
+host_loader_cache="$EFILINUX_TEST/gdk-pixbuf-loaders.host.cache"
+decoded_icon="$EFILINUX_TEST/qogir-terminal-icon.c"
+"$loader" --library-path "$library_path" \
+    "$rootfs/usr/bin/gdk-pixbuf-query-loaders" "$svg_loader" \
+    > "$host_loader_cache"
+GDK_PIXBUF_MODULE_FILE="$host_loader_cache" \
+    "$loader" --library-path "$library_path" \
+    "$rootfs/usr/bin/gdk-pixbuf-csource" \
+    --raw --name=qogir_terminal_icon \
+    "$rootfs/usr/share/icons/Qogir/scalable/apps/org.xfce.terminal.svg" \
+    > "$decoded_icon"
+grep -Fq 'qogir_terminal_icon' "$decoded_icon" || \
+    die "GdkPixbuf could not decode a real Qogir SVG icon"
 FONTCONFIG_SYSROOT="$rootfs" \
     "$loader" --library-path "$library_path" \
     "$rootfs/usr/bin/fc-match" -f '%{family}\n' ':lang=zh-cn' | \

@@ -104,9 +104,9 @@ ln -s /usr/bin/init "$assembly/init"
 replace_rootfs_file sysvinit runtime-base "$assembly/init" /init
 
 for base_config in passwd group nsswitch.conf hosts host.conf resolv.conf; do
-    replace_rootfs_file \
+    replace_rootfs_file_mode \
         system-config runtime-base \
-        "$files_root/etc/$base_config" "/etc/$base_config"
+        "$files_root/etc/$base_config" "/etc/$base_config" 0644
 done
 
 log "Installing system configuration"
@@ -117,7 +117,7 @@ while IFS= read -r -d '' source; do
             continue
             ;;
     esac
-    install_rootfs_file system-config "$source" "$relative"
+    install_rootfs_overlay_file system-config "$source" "$relative"
 done < <(find "$files_root" -type f -print0)
 
 install_rootfs_file shadow "$shadow_stage/etc/login.defs" /etc/login.defs
@@ -132,8 +132,8 @@ for account in root user; do
         "$assembly/shadow" > "$assembly/shadow.next"
     mv "$assembly/shadow.next" "$assembly/shadow"
 done
-replace_rootfs_file \
-    system-config system-config "$assembly/shadow" /etc/shadow
+replace_rootfs_file_mode \
+    system-config system-config "$assembly/shadow" /etc/shadow 0600
 
 log "Installing SysVinit and console lifecycle tools"
 install_programs_from_directory sysvinit "$sysv_stage/sbin" \

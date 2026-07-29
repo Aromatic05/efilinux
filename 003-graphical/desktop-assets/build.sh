@@ -44,6 +44,10 @@ if ! graphical_binary_package_restore "$qogir_package"; then
     )
 
     rm -rf "$PACKAGE_STAGING/usr/share/icons/Qogir/cursors_scalable"
+    if find -L "$PACKAGE_STAGING/usr/share/icons/Qogir" \
+        -type l -print -quit | grep -q .; then
+        die "Qogir icon package contains broken symbolic links"
+    fi
     mapfile -t installed_variants < <(
         find "$PACKAGE_STAGING/usr/share/icons" \
             -maxdepth 1 -mindepth 1 -type d -name 'Qogir*' -printf '%f\n' | sort
@@ -66,7 +70,9 @@ if ! graphical_binary_package_restore "$qogir_theme_package"; then
 
     theme_directory="$PACKAGE_STAGING/usr/share/themes/Qogir"
     mkdir -p \
+        "$theme_directory/gtk-2.0/assets" \
         "$theme_directory/gtk-3.0/assets" \
+        "$theme_directory/gtk-4.0/assets/scalable" \
         "$theme_directory/xfwm4"
 
     cat > "$theme_directory/index.theme" <<'EOF'
@@ -82,6 +88,15 @@ IconTheme=Qogir
 CursorTheme=Qogir
 ButtonLayout=menu:minimize,maximize,close
 EOF
+
+    install -m644 \
+        "$PACKAGE_SOURCE/src/gtk-2.0/theme/gtkrc" \
+        "$theme_directory/gtk-2.0/gtkrc"
+    install -m644 \
+        "$PACKAGE_SOURCE/src/gtk-2.0/"*.rc \
+        "$theme_directory/gtk-2.0/"
+    cp -a "$PACKAGE_SOURCE/src/gtk-2.0/assets/assets/." \
+        "$theme_directory/gtk-2.0/assets/"
 
     cp -a "$PACKAGE_SOURCE/src/gtk/assets/assets/." \
         "$theme_directory/gtk-3.0/assets/"
@@ -103,6 +118,19 @@ EOF
         "$PACKAGE_SOURCE/src/gtk/assets/thumbnail.png" \
         "$theme_directory/gtk-3.0/thumbnail.png"
 
+    cp -a "$theme_directory/gtk-3.0/assets/." \
+        "$theme_directory/gtk-4.0/assets/"
+    install -m644 \
+        "$PACKAGE_SOURCE/src/gtk/assets/assets-common/check-symbolic.svg" \
+        "$PACKAGE_SOURCE/src/gtk/assets/assets-common/check-symbolic@2.svg" \
+        "$theme_directory/gtk-4.0/assets/scalable/"
+    install -m644 \
+        "$PACKAGE_SOURCE/src/gtk/theme-4.0/gtk.css" \
+        "$theme_directory/gtk-4.0/gtk.css"
+    install -m644 \
+        "$PACKAGE_SOURCE/src/gtk/theme-4.0/gtk-Dark.css" \
+        "$theme_directory/gtk-4.0/gtk-dark.css"
+
     install -m644 \
         "$PACKAGE_SOURCE/src/xfwm4/themerc" \
         "$theme_directory/xfwm4/themerc"
@@ -113,7 +141,7 @@ EOF
         "$theme_directory/xfce-notify-4.0"
 
     for excluded in \
-        cinnamon gnome-shell gtk-2.0 gtk-4.0 labwc metacity-1 plank unity; do
+        cinnamon gnome-shell labwc metacity-1 plank unity; do
         [[ ! -e "$theme_directory/$excluded" ]] || \
             die "Qogir desktop theme contains excluded subtree: $excluded"
     done

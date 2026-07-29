@@ -13,6 +13,7 @@ ensure_directories
 run_component "$ROOT/001-runtime"
 run_component "$ROOT/002-system"
 run_component "$ROOT/003-graphical"
+run_component "$ROOT/004-desktop"
 run_component "$ROOT/000-kernel"
 
 log "Build complete"

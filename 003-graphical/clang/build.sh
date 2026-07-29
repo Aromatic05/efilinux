@@ -60,16 +60,13 @@ graphical_cmake_setup "$PACKAGE_SOURCE/clang" "$PACKAGE_BUILD" \
     -DLLVM_INCLUDE_TESTS=OFF
 
 log "Building build-time Clang headers"
-LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    cmake --build "$PACKAGE_BUILD" \
-        --target clang-headers clang-resource-headers \
-        -j "$EFILINUX_JOBS"
+cmake --build "$PACKAGE_BUILD" \
+    --target clang-headers clang-resource-headers \
+    -j "$EFILINUX_JOBS"
 
-DESTDIR="$PACKAGE_STAGING" \
-LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    cmake --build "$PACKAGE_BUILD" \
-        --target install-clang-headers install-clang-resource-headers \
-        -j "$EFILINUX_JOBS"
+DESTDIR="$PACKAGE_STAGING" cmake --build "$PACKAGE_BUILD" \
+    --target install-clang-headers install-clang-resource-headers \
+    -j "$EFILINUX_JOBS"
 
 for artifact in \
     usr/include/clang/Config/config.h \

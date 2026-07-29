@@ -89,6 +89,12 @@ done
 
 [[ $(stat -c '%a' "$rootfs/etc/shadow") == 600 ]] || die "/etc/shadow permissions are not 0600"
 [[ $(stat -c '%a' "$rootfs/etc/gshadow") == 600 ]] || die "/etc/gshadow permissions are not 0600"
+for public_config in \
+    /etc/passwd /etc/group /etc/nsswitch.conf /etc/hosts \
+    /etc/pam.d/system-auth /etc/pam.d/login /etc/profile; do
+    [[ $(stat -c '%a' "$rootfs$public_config") == 644 ]] || \
+        die "$public_config permissions are not 0644"
+done
 [[ $(stat -c '%a' "$rootfs/root/.ssh") == 700 ]] || die "/root/.ssh permissions are not 0700"
 for privileged_file in \
     /usr/bin/passwd /usr/bin/su /usr/bin/newgrp /usr/bin/crontab \
@@ -117,6 +123,8 @@ expected_user_password_hash=$(openssl passwd -6 -salt user user)
     die "user password does not match the user account name"
 grep -Eq '^user:x:1000:$' "$rootfs/etc/group" || \
     die "user primary group is missing"
+grep -Eq '^netdev:x:[0-9]+:([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/group" || \
+    die "netdev group is missing or does not include user"
 grep -Eq '^wheel:x:10:([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/group" || \
     die "user is not a member of wheel"
 grep -Eq '^wheel:\*::([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/gshadow" || \
@@ -139,7 +147,7 @@ fi
     die "D-Bus machine ID does not follow the runtime-generated machine ID"
 [[ ! -e "$rootfs/usr/lib/udev/rules.d/99-systemd.rules" ]] || \
     die "systemd activation rules leaked into standalone Udev"
-[[ ! -e "$rootfs/usr/bin/systemd" && ! -d "$rootfs/usr/lib/systemd" ]] || \
+[[ ! -e "$rootfs/usr/bin/systemd" && ! -e "$rootfs/usr/lib/systemd/systemd" ]] || \
     die "systemd runtime artifacts leaked into the SysVinit rootfs"
 grep -Fq 'PAGER=${PAGER:-cat}' "$rootfs/etc/profile" || \
     die "profile selects a pager that is not guaranteed to exist"

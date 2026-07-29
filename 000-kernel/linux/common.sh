@@ -83,14 +83,13 @@ remove_embedded_initramfs_outputs() {
 }
 
 configure_embedded_initramfs() {
-    local initramfs_tree=$1
-    local device_manifest=$2
+    local initramfs_manifest=$1
     local scripts_config="$kernel_source_directory/scripts/config"
 
     "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
-        --set-str INITRAMFS_SOURCE "$initramfs_tree $device_manifest" \
-        --set-val INITRAMFS_ROOT_UID "$EFILINUX_INITRAMFS_ROOT_UID" \
-        --set-val INITRAMFS_ROOT_GID "$EFILINUX_INITRAMFS_ROOT_GID" \
+        --set-str INITRAMFS_SOURCE "$initramfs_manifest" \
+        --set-val INITRAMFS_ROOT_UID 0 \
+        --set-val INITRAMFS_ROOT_GID 0 \
         --disable INITRAMFS_COMPRESSION_GZIP \
         --disable INITRAMFS_COMPRESSION_XZ \
         --enable INITRAMFS_COMPRESSION_ZSTD

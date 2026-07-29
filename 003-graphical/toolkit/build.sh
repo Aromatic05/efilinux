@@ -10,7 +10,7 @@ source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 source "$ROOT/003-graphical/lib/build.sh"
 
-require_command curl gcc meson ninja pkg-config python3 readelf sha256sum tar
+require_command cargo curl gcc make meson ninja pkg-config python3 readelf rustc sha256sum tar
 ensure_directories
 
 build_meson_component() {
@@ -28,6 +28,83 @@ build_meson_component() {
         graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
     PATH="$EFILINUX_SYSROOT/usr/bin:$PATH" \
         graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    graphical_binary_package_publish "$package"
+}
+
+build_librsvg_component() {
+    local package="librsvg-$LIBRSVG_VERSION"
+    local rustflags="-C target-cpu=$EFILINUX_X86_64_LEVEL -C linker=gcc"
+    local gdk_pixbuf_binary_version
+    local gdk_pixbuf_binarydir
+    local flag
+    local -a linker_flags
+
+    if graphical_binary_package_restore "$package"; then
+        return
+    fi
+
+    graphical_prepare_archive \
+        "$package" \
+        "$package.tar.xz" \
+        "$LIBRSVG_SHA256" \
+        "https://download.gnome.org/sources/librsvg/${LIBRSVG_VERSION%.*}/$package.tar.xz"
+
+    read -r -a linker_flags <<< "$(target_ldflags)"
+    for flag in "${linker_flags[@]}"; do
+        rustflags+=" -C link-arg=$flag"
+    done
+
+    CARGO_HOME="$EFILINUX_BUILD/cargo-home" \
+    CARGO_BUILD_JOBS="$EFILINUX_JOBS" \
+    RUSTFLAGS="$rustflags" \
+    PKG_CONFIG_ALLOW_CROSS=1 \
+        graphical_autotools_configure "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
+        --disable-static \
+        --enable-shared \
+        --disable-gtk-doc \
+        --disable-installed-tests \
+        --disable-always-build-tests \
+        --enable-pixbuf-loader \
+        --enable-introspection=no \
+        --enable-vala=no
+
+    gdk_pixbuf_binary_version=$(target_pkg_config \
+        --variable=gdk_pixbuf_binary_version gdk-pixbuf-2.0)
+    [[ -n "$gdk_pixbuf_binary_version" ]] || \
+        die "gdk-pixbuf did not report its binary module version"
+    gdk_pixbuf_binarydir="/usr/lib/gdk-pixbuf-2.0/$gdk_pixbuf_binary_version"
+    sed -i \
+        -e "s#^gdk_pixbuf_binarydir = .*#gdk_pixbuf_binarydir = $gdk_pixbuf_binarydir#" \
+        -e "s#^gdk_pixbuf_moduledir = .*#gdk_pixbuf_moduledir = $gdk_pixbuf_binarydir/loaders#" \
+        -e "s#^gdk_pixbuf_cache_file = .*#gdk_pixbuf_cache_file = $gdk_pixbuf_binarydir/loaders.cache#" \
+        "$PACKAGE_BUILD/gdk-pixbuf-loader/Makefile"
+
+    CARGO_HOME="$EFILINUX_BUILD/cargo-home" \
+    CARGO_BUILD_JOBS="$EFILINUX_JOBS" \
+    RUSTFLAGS="$rustflags" \
+    PKG_CONFIG_ALLOW_CROSS=1 \
+        make -C "$PACKAGE_BUILD" -j"$EFILINUX_JOBS"
+    CARGO_HOME="$EFILINUX_BUILD/cargo-home" \
+    CARGO_BUILD_JOBS="$EFILINUX_JOBS" \
+    RUSTFLAGS="$rustflags" \
+    PKG_CONFIG_ALLOW_CROSS=1 \
+    GDK_PIXBUF_QUERYLOADERS=: \
+        make -C "$PACKAGE_BUILD" DESTDIR="$PACKAGE_STAGING" install
+    find "$PACKAGE_STAGING/usr/lib" -type f -name '*.la' -delete 2>/dev/null || true
+    rm -f "$PACKAGE_STAGING$gdk_pixbuf_binarydir/loaders.cache"
+    graphical_normalize_pkg_config "$PACKAGE_STAGING"
+
+    rm -f "$PACKAGE_STAGING/usr/bin/rsvg-convert"
+    rm -rf \
+        "$PACKAGE_STAGING/usr/share/doc" \
+        "$PACKAGE_STAGING/usr/share/man" \
+        "$PACKAGE_STAGING/usr/share/thumbnailers"
+    if grep -R -Fq "$EFILINUX_SYSROOT" "$PACKAGE_STAGING"; then
+        die "librsvg package contains a build sysroot path"
+    fi
+    if [[ -e "$PACKAGE_STAGING/home" ]]; then
+        die "librsvg package contains a build-host directory tree"
+    fi
     graphical_binary_package_publish "$package"
 }
 
@@ -149,6 +226,11 @@ ensure_pkg_component pango "$PANGO_VERSION" build_meson_component \
     -Dxft=enabled \
     -Dfreetype=enabled
 
+if ! target_pkg_config --exact-version="$LIBRSVG_VERSION" librsvg-2.0 || \
+   [[ ! -f "$EFILINUX_SYSROOT/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-svg.so" ]]; then
+    build_librsvg_component
+fi
+
 ensure_pkg_component gtk+-3.0 "$GTK3_VERSION" build_meson_component \
     "gtk-$GTK3_VERSION" \
     "gtk-$GTK3_VERSION.tar.gz" \
@@ -186,6 +268,8 @@ for artifact in \
     usr/lib/libcairo-gobject.so.2 \
     usr/lib/libpango-1.0.so.0 \
     usr/lib/libpangocairo-1.0.so.0 \
+    usr/lib/librsvg-2.so.2 \
+    usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-svg.so \
     usr/lib/libgtk-3.so.0 \
     usr/lib/libgdk-3.so.0 \
     usr/bin/gtk3-demo \
@@ -198,7 +282,8 @@ done
 for dependency in \
     glib-2.0 gio-2.0 gio-unix-2.0 gmodule-2.0 gobject-2.0 \
     libxml-2.0 atk atspi-2 atk-bridge-2.0 gdk-pixbuf-2.0 \
-    cairo cairo-gobject pango pangoft2 pangocairo gtk+-3.0 gdk-x11-3.0; do
+    cairo cairo-gobject pango pangoft2 pangocairo librsvg-2.0 \
+    gtk+-3.0 gdk-x11-3.0; do
     target_pkg_config --exists "$dependency" || \
         die "GTK 3 toolkit pkg-config dependency is missing: $dependency"
 done

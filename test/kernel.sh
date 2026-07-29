@@ -12,6 +12,7 @@ ensure_directories
 rootfs="$EFILINUX_ROOTFS"
 kernel_config="$EFILINUX_KERNEL_BUILD/.config"
 module_root="$rootfs/usr/lib/modules/$LINUX_VERSION"
+initramfs_manifest="$EFILINUX_INITRAMFS_MANIFEST"
 firmware_root="$rootfs/usr/lib/firmware"
 efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
 
@@ -42,17 +43,39 @@ assert_no_find_match \
     "rootfs contains a path that cannot be embedded by gen_initramfs.sh" \
     "$rootfs" -name '*[[:space:]]*'
 
+[[ -s "$initramfs_manifest" ]] || die "generated initramfs manifest is missing"
 initramfs_source=$(grep '^CONFIG_INITRAMFS_SOURCE=' "$kernel_config")
-[[ "$initramfs_source" == *"$rootfs"* ]] || \
-    die "target rootfs is not the kernel initramfs source"
-[[ "$initramfs_source" != *"target/layers"* ]] || \
-    die "obsolete external kernel layer remains in initramfs configuration"
-[[ "$initramfs_source" != *"initramfs-root"* ]] || \
-    die "a second initramfs root is configured"
-grep -qx "CONFIG_INITRAMFS_ROOT_UID=$EFILINUX_INITRAMFS_ROOT_UID" "$kernel_config" || \
-    die "initramfs build-user UID is not mapped to root"
-grep -qx "CONFIG_INITRAMFS_ROOT_GID=$EFILINUX_INITRAMFS_ROOT_GID" "$kernel_config" || \
-    die "initramfs build-user GID is not mapped to root"
+[[ "$initramfs_source" == *"$initramfs_manifest"* ]] || \
+    die "generated manifest is not the kernel initramfs source"
+[[ "$initramfs_source" != *"$rootfs"* ]] || \
+    die "host-owned rootfs directory is still embedded directly"
+grep -qx 'CONFIG_INITRAMFS_ROOT_UID=0' "$kernel_config" || \
+    die "initramfs UID remapping is still enabled"
+grep -qx 'CONFIG_INITRAMFS_ROOT_GID=0' "$kernel_config" || \
+    die "initramfs GID remapping is still enabled"
+
+require_manifest_entry() {
+    local pattern=$1
+    local message=$2
+    grep -Eq "$pattern" "$initramfs_manifest" || die "$message"
+}
+
+require_manifest_entry '^file /etc/passwd [^ ]+ 0644 0 0$' \
+    "initramfs /etc/passwd metadata is incorrect"
+require_manifest_entry '^file /etc/group [^ ]+ 0644 0 0$' \
+    "initramfs /etc/group metadata is incorrect"
+require_manifest_entry '^file /etc/hosts [^ ]+ 0644 0 0$' \
+    "initramfs /etc/hosts metadata is incorrect"
+require_manifest_entry '^file /etc/nsswitch\.conf [^ ]+ 0644 0 0$' \
+    "initramfs /etc/nsswitch.conf metadata is incorrect"
+require_manifest_entry '^file /etc/shadow [^ ]+ 0600 0 0$' \
+    "initramfs /etc/shadow metadata is incorrect"
+require_manifest_entry '^dir /home/user 0750 1000 1000$' \
+    "initramfs user home metadata is incorrect"
+require_manifest_entry '^nod /dev/console 0600 0 0 c 5 1$' \
+    "initramfs console device is missing"
+require_manifest_entry '^nod /dev/null 0666 0 0 c 1 3$' \
+    "initramfs null device is missing"
 
 require_kernel_option() {
     local option=$1
@@ -71,6 +94,9 @@ for option in \
     CONFIG_EFIVAR_FS \
     CONFIG_DEVTMPFS \
     CONFIG_TMPFS \
+    CONFIG_TMPFS_XATTR \
+    CONFIG_TMPFS_POSIX_ACL \
+    CONFIG_FS_POSIX_ACL \
     CONFIG_CGROUPS \
     CONFIG_NAMESPACES \
     CONFIG_FUTEX \
@@ -83,6 +109,19 @@ for option in \
     CONFIG_SECCOMP_FILTER \
     CONFIG_INOTIFY_USER \
     CONFIG_FANOTIFY \
+    CONFIG_KEY_DH_OPERATIONS \
+    CONFIG_CRYPTO_USER_API_HASH \
+    CONFIG_CRYPTO_USER_API_SKCIPHER \
+    CONFIG_CRYPTO_ECB \
+    CONFIG_CRYPTO_CBC \
+    CONFIG_CRYPTO_MD5 \
+    CONFIG_CRYPTO_SHA1 \
+    CONFIG_CRYPTO_SHA256 \
+    CONFIG_CRYPTO_SHA512 \
+    CONFIG_CRYPTO_AES \
+    CONFIG_CRYPTO_DES \
+    CONFIG_CRYPTO_CMAC \
+    CONFIG_CRYPTO_HMAC \
     CONFIG_UNIX \
     CONFIG_INET \
     CONFIG_IPV6 \

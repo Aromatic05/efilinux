@@ -104,7 +104,7 @@ install_rootfs_overlay() {
             rm -f -- "$EFILINUX_ROOTFS$relative_path"
             remove_rootfs_owner "$relative_path"
         fi
-        install_rootfs_file "$package" "$entry" "$relative_path"
+        install_rootfs_overlay_file "$package" "$entry" "$relative_path"
     done < <(find "$source_root" -mindepth 1 -print0)
 }
 
@@ -123,6 +123,12 @@ install_runtime_package() {
     source_root=$(runtime_stage "$package")
     [[ ! -d "$source_root/usr/etc" ]] || \
         die "$package was built with the invalid /usr/etc sysconfdir"
+    rm -rf -- "$source_root/usr/include"
+    if [[ -d "$source_root/usr/lib" ]]; then
+        find "$source_root/usr/lib" -type f \
+            \( -name '*.a' -o -name '*.la' -o -name '*.pc' \) -delete
+        find "$source_root/usr/lib" -depth -type d -empty -delete
+    fi
     for relative in usr/bin usr/lib usr/libexec usr/share etc; do
         [[ -d "$source_root/$relative" ]] || continue
         install_rootfs_tree "$owner" "$source_root/$relative" "/$relative"
@@ -170,7 +176,7 @@ EOF
 log "Installing XFCE session defaults"
 rm -f "$EFILINUX_ROOTFS/etc/X11/xinit/xinitrc"
 remove_rootfs_owner /etc/X11/xinit/xinitrc
-install_rootfs_file \
+install_rootfs_overlay_file \
     desktop-config "$files_root/etc/X11/xinit/xinitrc" \
     /etc/X11/xinit/xinitrc
 install_rootfs_overlay \

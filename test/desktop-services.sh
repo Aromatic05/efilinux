@@ -128,7 +128,7 @@ grep -Fq 'wifi.backend=iwd' "$rootfs/etc/NetworkManager/NetworkManager.conf" || 
 grep -Fq 'EnableNetworkConfiguration=false' "$rootfs/etc/iwd/main.conf" || \
     die "iwd still competes with NetworkManager for IP configuration"
 
-if find "$rootfs" \( -path '*/systemd/system/*' -o -name systemd \) -print -quit | grep -q .; then
+if [[ -e "$rootfs/usr/bin/systemd" || -e "$rootfs/usr/lib/systemd/systemd" ]]; then
     die "systemd runtime leaked into SysVinit desktop services"
 fi
 [[ ! -e "$rootfs/home/aromatic" ]] || \

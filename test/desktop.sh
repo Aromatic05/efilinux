@@ -11,6 +11,18 @@ source "$ROOT/lib/common.sh"
 ensure_directories
 rootfs="$EFILINUX_ROOTFS"
 
+top_level_build="$ROOT/build.sh"
+graphical_stage_line=$(grep -nF 'run_component "$ROOT/003-graphical"' \
+    "$top_level_build" | cut -d: -f1 || true)
+desktop_stage_line=$(grep -nF 'run_component "$ROOT/004-desktop"' \
+    "$top_level_build" | cut -d: -f1 || true)
+kernel_stage_line=$(grep -nF 'run_component "$ROOT/000-kernel"' \
+    "$top_level_build" | cut -d: -f1 || true)
+[[ -n "$graphical_stage_line" && -n "$desktop_stage_line" && -n "$kernel_stage_line" ]] || \
+    die "top-level build does not include the complete desktop image pipeline"
+((graphical_stage_line < desktop_stage_line && desktop_stage_line < kernel_stage_line)) || \
+    die "top-level build does not assemble the desktop before the final kernel image"
+
 require_program() {
     local program=$1
     local path="$rootfs/usr/bin/$program"
@@ -81,6 +93,18 @@ grep -Fq '<property name="theme" type="string" value="Qogir"/>' \
     "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" || \
     die "XFWM does not select the Qogir window theme"
 
+session_config="$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml"
+grep -Fq '<property name="FailsafeSessionName" type="string" value="Failsafe"/>' \
+    "$session_config" || \
+    die "XFCE failsafe session name is missing"
+grep -Fq '<property name="IsFailsafe" type="bool" value="true"/>' \
+    "$session_config" || \
+    die "XFCE failsafe session definition is missing"
+for failsafe_program in xfwm4 xfsettingsd xfce4-panel Thunar xfdesktop; do
+    grep -Fq "value=\"$failsafe_program\"" "$session_config" || \
+        die "XFCE failsafe session is missing $failsafe_program"
+done
+
 skel_xfconf="$rootfs/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml"
 user_xfconf="$rootfs/home/user/.config/xfce4/xfconf/xfce-perchannel-xml"
 for channel in \
@@ -102,6 +126,8 @@ cmp -s \
     "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" \
     "$user_xfconf/xfwm4.xml" || \
     die "user XFCE profile does not preserve the system Qogir XFWM settings"
+cmp -s "$session_config" "$user_xfconf/xfce4-session.xml" || \
+    die "user XFCE profile does not preserve the system session defaults"
 [[ ! -d "$rootfs/root/.config/xfce4" ]] || \
     die "root desktop profile must not be seeded"
 [[ $(stat -c '%u:%g' "$rootfs/home/user") == 1000:1000 ]] || \
@@ -136,13 +162,110 @@ for plugin_library in \
     fi
 done
 
+python3 - "$rootfs" <<'PY'
+from pathlib import Path
+import os
+import re
+import subprocess
+import sys
+
+root = Path(sys.argv[1])
+artifacts = (
+    root / "usr/bin/xfce4-notifyd-config",
+    root / "usr/lib/xfce4/panel/plugins/libnotification-plugin.so",
+    root / "usr/lib/xfce4/notifyd/xfce4-notifyd",
+)
+library_directories = (root / "usr/lib", root / "lib")
+missing: list[tuple[str, str]] = []
+sqlite_contract_errors: list[str] = []
+
+for artifact in artifacts:
+    result = subprocess.run(
+        ["readelf", "-d", str(artifact)],
+        text=True,
+        capture_output=True,
+        check=True,
+        env={**os.environ, "LC_ALL": "C"},
+    )
+    needed = re.findall(r"Shared library: \[(.*?)\]", result.stdout)
+    if "libsqlite3.so" in needed:
+        sqlite_contract_errors.append(
+            f"{artifact.relative_to(root)}: depends on unversioned libsqlite3.so"
+        )
+    if "libsqlite3.so.0" not in needed:
+        sqlite_contract_errors.append(
+            f"{artifact.relative_to(root)}: does not depend on libsqlite3.so.0"
+        )
+    for soname in needed:
+        if not any((directory / soname).exists() for directory in library_directories):
+            missing.append((str(artifact.relative_to(root)), soname))
+
+if missing:
+    for artifact, soname in missing:
+        print(f"{artifact}: missing {soname}", file=sys.stderr)
+    raise SystemExit(1)
+if sqlite_contract_errors:
+    for error in sqlite_contract_errors:
+        print(error, file=sys.stderr)
+    raise SystemExit(1)
+
+tumbler_jpeg = root / "usr/lib/tumbler-1/plugins/tumbler-jpeg-thumbnailer.so"
+result = subprocess.run(
+    ["readelf", "-d", str(tumbler_jpeg)],
+    text=True,
+    capture_output=True,
+    check=True,
+    env={**os.environ, "LC_ALL": "C"},
+)
+tumbler_needed = re.findall(r"Shared library: \[(.*?)\]", result.stdout)
+if "libjpeg.so.62" not in tumbler_needed:
+    print(
+        "Tumbler JPEG thumbnailer does not use the target libjpeg.so.62 ABI",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+if "libjpeg.so.8" in tumbler_needed:
+    print(
+        "Tumbler JPEG thumbnailer links against the host libjpeg.so.8 ABI",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+
+for profile_root in "$rootfs/etc/skel" "$rootfs/home/user"; do
+    gtk2_settings="$profile_root/.gtkrc-2.0"
+    gtk3_settings="$profile_root/.config/gtk-3.0/settings.ini"
+    gtk4_settings="$profile_root/.config/gtk-4.0/settings.ini"
+    cursor_settings="$profile_root/.icons/default/index.theme"
+
+    [[ -f "$gtk2_settings" ]] || die "GTK 2 user theme defaults are missing: $gtk2_settings"
+    [[ -f "$gtk3_settings" ]] || die "GTK 3 user theme defaults are missing: $gtk3_settings"
+    [[ -f "$gtk4_settings" ]] || die "GTK 4 user theme defaults are missing: $gtk4_settings"
+    [[ -f "$cursor_settings" ]] || die "cursor theme defaults are missing: $cursor_settings"
+    grep -Fq 'gtk-theme-name="Qogir"' "$gtk2_settings" || \
+        die "GTK 2 user defaults do not select Qogir"
+    grep -Fq 'gtk-icon-theme-name="Qogir"' "$gtk2_settings" || \
+        die "GTK 2 user defaults do not select Qogir icons"
+    grep -Fq 'gtk-theme-name=Qogir' "$gtk3_settings" || \
+        die "GTK 3 user defaults do not select Qogir"
+    grep -Fq 'gtk-icon-theme-name=Qogir' "$gtk3_settings" || \
+        die "GTK 3 user defaults do not select Qogir icons"
+    grep -Fq 'gtk-theme-name=Qogir' "$gtk4_settings" || \
+        die "GTK 4 user defaults do not select Qogir"
+    grep -Fq 'gtk-icon-theme-name=Qogir' "$gtk4_settings" || \
+        die "GTK 4 user defaults do not select Qogir icons"
+    grep -Fq 'Inherits=Qogir' "$cursor_settings" || \
+        die "user cursor defaults do not select Qogir"
+done
+
 for required_theme_path in \
-    gtk-3.0/gtk.css xfwm4/themerc xfce-notify-4.0/gtk.css; do
+    gtk-2.0/gtkrc gtk-3.0/gtk.css gtk-4.0/gtk.css \
+    xfwm4/themerc xfce-notify-4.0/gtk.css; do
     [[ -f "$rootfs/usr/share/themes/Qogir/$required_theme_path" ]] || \
         die "Qogir desktop theme file is missing: $required_theme_path"
 done
 for excluded_theme_path in \
-    cinnamon gnome-shell gtk-2.0 gtk-4.0 labwc metacity-1 plank unity; do
+    cinnamon gnome-shell labwc metacity-1 plank unity; do
     [[ ! -e "$rootfs/usr/share/themes/Qogir/$excluded_theme_path" ]] || \
         die "excluded Qogir desktop subtree remains: $excluded_theme_path"
 done

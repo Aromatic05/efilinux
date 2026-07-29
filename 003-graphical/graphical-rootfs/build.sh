@@ -107,6 +107,7 @@ at-spi2 at-spi2-core-$AT_SPI2_CORE_VERSION
 gdk-pixbuf gdk-pixbuf-$GDK_PIXBUF_VERSION
 cairo cairo-$CAIRO_VERSION
 pango pango-$PANGO_VERSION
+librsvg librsvg-$LIBRSVG_VERSION
 gtk3 gtk-$GTK3_VERSION
 libICE libICE-$LIBICE_VERSION
 libSM libSM-$LIBSM_VERSION
@@ -142,6 +143,10 @@ install_stage_program iceauth "iceauth-$ICEAUTH_VERSION" iceauth
 install_stage_program util-linux "util-linux-$UTIL_LINUX_VERSION" mcookie
 install_stage_program gtk3 "gtk-$GTK3_VERSION" gtk3-demo
 install_stage_program gtk3 "gtk-$GTK3_VERSION" gtk3-widget-factory
+install_stage_program gdk-pixbuf \
+    "gdk-pixbuf-$GDK_PIXBUF_VERSION" gdk-pixbuf-query-loaders
+install_stage_program gdk-pixbuf \
+    "gdk-pixbuf-$GDK_PIXBUF_VERSION" gdk-pixbuf-csource
 install_stage_program fontconfig "fontconfig-$FONTCONFIG_VERSION" fc-cache
 install_stage_program fontconfig "fontconfig-$FONTCONFIG_VERSION" fc-match
 if [[ -d "$(stage "vte-$VTE_VERSION")/usr/libexec" ]]; then
@@ -222,6 +227,13 @@ install_new_rootfs_tree qogir-desktop-theme \
     "$(stage "qogir-desktop-theme-$QOGIR_THEME_VERSION")/usr/share/themes/Qogir" \
     /usr/share/themes/Qogir
 
+svg_loader_source=$(find "$(stage "librsvg-$LIBRSVG_VERSION")/usr/lib/gdk-pixbuf-2.0" \
+    -type f -name libpixbufloader-svg.so -print -quit)
+[[ -n "$svg_loader_source" ]] || \
+    die "librsvg package does not contain the GdkPixbuf SVG loader"
+svg_loader_relative=${svg_loader_source#"$(stage "librsvg-$LIBRSVG_VERSION")"}
+install_rootfs_file librsvg "$svg_loader_source" "$svg_loader_relative"
+
 schema_source="$(stage "gtk-$GTK3_VERSION")/usr/share/glib-2.0/schemas"
 while IFS= read -r -d '' schema; do
     install_rootfs_file gtk3 "$schema" \
@@ -233,8 +245,23 @@ glib-compile-schemas "$EFILINUX_ROOTFS/usr/share/glib-2.0/schemas"
 record_rootfs_owner graphical-schemas \
     /usr/share/glib-2.0/schemas/gschemas.compiled
 
+svg_loader=$(find "$EFILINUX_ROOTFS/usr/lib/gdk-pixbuf-2.0" \
+    -type f -name libpixbufloader-svg.so -print -quit)
+[[ -n "$svg_loader" ]] || die "librsvg did not install the GdkPixbuf SVG loader"
+svg_loader_relative=${svg_loader#"$EFILINUX_ROOTFS"}
+loader_cache_relative="$(dirname -- "$(dirname -- "$svg_loader_relative")")/loaders.cache"
+loader_cache="$assembly/loaders.cache"
+LD_LIBRARY_PATH="$EFILINUX_ROOTFS/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+    "$EFILINUX_ROOTFS/usr/lib/ld-linux-x86-64.so.2" \
+    --library-path "$EFILINUX_ROOTFS/usr/lib" \
+    "$EFILINUX_ROOTFS/usr/bin/gdk-pixbuf-query-loaders" \
+    "$svg_loader" > "$loader_cache"
+sed -i "s#$EFILINUX_ROOTFS##g" "$loader_cache"
+install_rootfs_file \
+    graphical-gdk-pixbuf-loaders "$loader_cache" "$loader_cache_relative"
+
 log "Installing runlevel 5 graphical session configuration"
-install_rootfs_tree graphical-config "$files_root/etc" /etc
+install_rootfs_overlay_tree graphical-config "$files_root/etc" /etc
 install_rootfs_symlink \
     graphical-config ../../usr/share/X11/xorg.conf.d /etc/X11/xorg.conf.d
 sed -E 's/^id:[0-6]:initdefault:$/id:5:initdefault:/' \

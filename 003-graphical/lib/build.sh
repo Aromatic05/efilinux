@@ -66,11 +66,8 @@ graphical_meson_install() {
     local build=$1
     local staging=$2
 
-    LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-        meson compile -C "$build" -j "$EFILINUX_JOBS"
-    DESTDIR="$staging" \
-    LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-        meson install -C "$build"
+    meson compile -C "$build" -j "$EFILINUX_JOBS"
+    DESTDIR="$staging" meson install -C "$build"
     graphical_normalize_pkg_config "$staging"
 }
 
@@ -86,6 +83,45 @@ graphical_normalize_pkg_config() {
     done < <(find "$staging/usr" -type f -name '*.pc' -print0 2>/dev/null)
 }
 
+_graphical_target_compiler() {
+    local compiler=$1
+    local wrapper_directory="$EFILINUX_BUILD/toolchain-wrappers"
+    local wrapper="$wrapper_directory/$compiler"
+
+    mkdir -p "$wrapper_directory"
+    cat > "$wrapper" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+compiler_name=$(basename -- "$0")
+case $compiler_name in
+    gcc|g++) real_compiler="/usr/bin/$compiler_name" ;;
+    *) printf 'unsupported compiler wrapper name: %s\n' "$compiler_name" >&2; exit 2 ;;
+esac
+
+sysroot=
+for argument in "$@"; do
+    case $argument in
+        --sysroot=*) sysroot=${argument#--sysroot=} ;;
+    esac
+done
+
+rewritten=()
+for argument in "$@"; do
+    if [[ -n $sysroot ]]; then
+        case $argument in
+            -L/usr/lib*|-L/lib*) argument="-L$sysroot${argument#-L}" ;;
+        esac
+    fi
+    rewritten+=("$argument")
+done
+
+exec "$real_compiler" "${rewritten[@]}"
+EOF
+    chmod 0755 "$wrapper"
+    printf '%s' "$wrapper"
+}
+
 graphical_autotools_configure() {
     local source=$1
     local build=$2
@@ -97,8 +133,8 @@ graphical_autotools_configure() {
     )
     (
         cd "$build"
-        CC=gcc \
-        CXX=g++ \
+        CC="$(_graphical_target_compiler gcc)" \
+        CXX="$(_graphical_target_compiler g++)" \
         CFLAGS="$(target_cflags)" \
         CXXFLAGS="$(target_cflags)" \
         LDFLAGS="$(target_ldflags)" \
@@ -110,6 +146,7 @@ graphical_autotools_configure() {
             "$source/configure" \
             --prefix=/usr \
             --libdir=/usr/lib \
+            --with-sysroot="$EFILINUX_SYSROOT" \
             "$@"
     )
 }
@@ -121,8 +158,8 @@ graphical_release_configure() {
 
     (
         cd "$build"
-        CC=gcc \
-        CXX=g++ \
+        CC="$(_graphical_target_compiler gcc)" \
+        CXX="$(_graphical_target_compiler g++)" \
         CFLAGS="$(target_cflags)" \
         CXXFLAGS="$(target_cflags)" \
         LDFLAGS="$(target_ldflags)" \
@@ -133,6 +170,7 @@ graphical_release_configure() {
             "$source/configure" \
             --prefix=/usr \
             --libdir=/usr/lib \
+            --with-sysroot="$EFILINUX_SYSROOT" \
             "$@"
     )
 }
@@ -141,10 +179,8 @@ graphical_make_install() {
     local build=$1
     local staging=$2
 
-    LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-        make -C "$build" -j"$EFILINUX_JOBS"
-    LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-        make -C "$build" DESTDIR="$staging" install
+    make -C "$build" -j"$EFILINUX_JOBS"
+    make -C "$build" DESTDIR="$staging" install
     find "$staging/usr/lib" -maxdepth 1 -name '*.la' -delete 2>/dev/null || true
     graphical_normalize_pkg_config "$staging"
 }
@@ -175,10 +211,7 @@ graphical_cmake_install() {
     local build=$1
     local staging=$2
 
-    LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-        cmake --build "$build" -j "$EFILINUX_JOBS"
-    DESTDIR="$staging" \
-    LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-        cmake --install "$build"
+    cmake --build "$build" -j "$EFILINUX_JOBS"
+    DESTDIR="$staging" cmake --install "$build"
     graphical_normalize_pkg_config "$staging"
 }

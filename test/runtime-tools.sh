@@ -54,6 +54,13 @@ for library in \
     [[ -e "$rootfs/usr/lib/$library" ]] || die "runtime library is missing: $library"
 done
 
+[[ ! -e "$rootfs/usr/lib/libsqlite3.so" ]] || \
+    die "SQLite development linker name leaked into the runtime rootfs"
+sqlite_runtime=$(readlink -f "$rootfs/usr/lib/libsqlite3.so.0")
+LC_ALL=C readelf -d "$sqlite_runtime" | \
+    grep -Fq 'Library soname: [libsqlite3.so.0]' || \
+    die "SQLite runtime library does not declare libsqlite3.so.0 as its SONAME"
+
 for data_file in \
     /etc/protocols \
     /etc/services \

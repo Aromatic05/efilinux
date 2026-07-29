@@ -38,10 +38,10 @@ assert_link /usr/sbin bin
 
 required_applets=(
     awk blkid cat chmod chown cp cpio cut date dd depmod df dmesg du env
-    find free grep gzip head hostname id init insmod kill killall ln ls
+    expr find free grep gzip head hostname id init insmod kill killall ln ls
     lsmod mdev mkdir mkfifo mknod modinfo modprobe mount mv ps pwd
     readlink realpath reboot rm rmdir rmmod sed setsid sh sleep sort stat
-    switch_root sync tail tar tee test touch tr true udhcpc umount uname
+    switch_root sync tail tar tee test touch tr true tty udhcpc umount uname
     uniq uptime vi wc xargs
 )
 

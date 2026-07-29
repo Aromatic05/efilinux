@@ -2,12 +2,19 @@
 
 set -euo pipefail
 
+readonly BINARY_PACKAGE_FORMAT=3
+
 target_cflags() {
     printf '%s' "-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic --sysroot=$EFILINUX_SYSROOT"
 }
 
+target_gcc_runtime_directory() {
+    printf '%s' "$EFILINUX_SYSROOT/usr/lib/gcc/$EFILINUX_TOOLCHAIN_TRIPLET/$GCC_RUNTIME_VERSION"
+}
+
 target_ldflags() {
-    printf '%s' "-B$EFILINUX_SYSROOT/usr/lib/ --sysroot=$EFILINUX_SYSROOT -Wl,-rpath-link,$EFILINUX_SYSROOT/usr/lib"
+    printf '%s' \
+        "-B$(target_gcc_runtime_directory)/ -B$EFILINUX_SYSROOT/usr/lib/ --sysroot=$EFILINUX_SYSROOT -Wl,-rpath-link,$EFILINUX_SYSROOT/usr/lib"
 }
 
 target_pkg_config() {
@@ -41,7 +48,7 @@ binary_package_recipe_hash() {
 
     [[ -f "$producer" ]] || die "binary package producer is missing: $producer"
     {
-        printf 'format=1\n'
+        printf 'format=%s\n' "$BINARY_PACKAGE_FORMAT"
         printf 'package=%s\n' "$package"
         printf 'arch=%s\n' "$EFILINUX_ARCH"
         printf 'x86_64_level=%s\n' "$EFILINUX_X86_64_LEVEL"
@@ -204,7 +211,7 @@ binary_package_create() {
     reset_directory "$metadata_dir"
 
     cat > "$metadata_dir/.PKGINFO" <<EOF
-format=1
+format=$BINARY_PACKAGE_FORMAT
 name=$package
 arch=$EFILINUX_ARCH
 x86_64_level=$EFILINUX_X86_64_LEVEL
@@ -224,7 +231,7 @@ EOF
         --sort=name \
         --mtime="@$source_epoch" \
         --owner=0 --group=0 --numeric-owner \
-        --transform='s#^\./#pkg/#' \
+        --transform='flags=rh;s#^\./#pkg/#' \
         -C "$staging" . \
         -C "$metadata_dir" .PKGINFO .FILELIST
     digest=$(sha256sum "$temporary" | awk '{print $1}')
@@ -371,6 +378,40 @@ install_rootfs_file() {
     record_rootfs_owner "$package" "$relative_path"
 }
 
+install_rootfs_file_mode() {
+    local package=$1
+    local source=$2
+    local relative_path=$3
+    local mode=$4
+    local destination="$EFILINUX_ROOTFS$relative_path"
+
+    install_rootfs_file "$package" "$source" "$relative_path"
+    [[ -L "$destination" ]] || chmod "$mode" -- "$destination"
+}
+
+rootfs_overlay_mode() {
+    local source=$1
+
+    if [[ -x "$source" && ! -L "$source" ]]; then
+        printf '0755'
+    else
+        printf '0644'
+    fi
+}
+
+install_rootfs_overlay_file() {
+    local package=$1
+    local source=$2
+    local relative_path=$3
+
+    if [[ -L "$source" ]]; then
+        install_rootfs_file "$package" "$source" "$relative_path"
+    else
+        install_rootfs_file_mode \
+            "$package" "$source" "$relative_path" "$(rootfs_overlay_mode "$source")"
+    fi
+}
+
 replace_rootfs_file() {
     local package=$1
     local expected_owner=$2
@@ -385,6 +426,33 @@ replace_rootfs_file() {
     rm -f -- "$destination"
     remove_rootfs_owner "$relative_path"
     install_rootfs_file "$package" "$source" "$relative_path"
+}
+
+replace_rootfs_file_mode() {
+    local package=$1
+    local expected_owner=$2
+    local source=$3
+    local relative_path=$4
+    local mode=$5
+    local destination="$EFILINUX_ROOTFS$relative_path"
+
+    replace_rootfs_file "$package" "$expected_owner" "$source" "$relative_path"
+    [[ -L "$destination" ]] || chmod "$mode" -- "$destination"
+}
+
+replace_rootfs_overlay_file() {
+    local package=$1
+    local expected_owner=$2
+    local source=$3
+    local relative_path=$4
+
+    if [[ -L "$source" ]]; then
+        replace_rootfs_file "$package" "$expected_owner" "$source" "$relative_path"
+    else
+        replace_rootfs_file_mode \
+            "$package" "$expected_owner" "$source" "$relative_path" \
+            "$(rootfs_overlay_mode "$source")"
+    fi
 }
 
 install_rootfs_symlink() {
@@ -436,6 +504,25 @@ install_rootfs_tree() {
             mkdir -p "$EFILINUX_ROOTFS$relative_path"
         else
             install_rootfs_file "$package" "$entry" "$relative_path"
+        fi
+    done < <(find "$source_root" -mindepth 1 -print0)
+}
+
+install_rootfs_overlay_tree() {
+    local package=$1
+    local source_root=$2
+    local destination_root=$3
+    local entry relative relative_path
+
+    [[ -d "$source_root" ]] || die "$package overlay tree is missing: $source_root"
+    while IFS= read -r -d '' entry; do
+        relative=${entry#"$source_root"/}
+        relative_path="$destination_root/$relative"
+        if [[ -d "$entry" && ! -L "$entry" ]]; then
+            mkdir -p "$EFILINUX_ROOTFS$relative_path"
+            chmod 0755 -- "$EFILINUX_ROOTFS$relative_path"
+        else
+            install_rootfs_overlay_file "$package" "$entry" "$relative_path"
         fi
     done < <(find "$source_root" -mindepth 1 -print0)
 }

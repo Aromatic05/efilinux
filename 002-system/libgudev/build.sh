@@ -47,11 +47,8 @@ PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/sha
         -Dgtk_doc=false
 
 log "Building libgudev"
-LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
-DESTDIR="$PACKAGE_STAGING" \
-LD_LIBRARY_PATH="$EFILINUX_SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    meson install -C "$PACKAGE_BUILD"
+meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
+DESTDIR="$PACKAGE_STAGING" meson install -C "$PACKAGE_BUILD"
 
 binary_package_publish_sysroot \
     "$package" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"
