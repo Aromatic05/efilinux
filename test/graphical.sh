@@ -60,8 +60,11 @@ require_directory /usr/lib/dri
 
 require_program Xorg xorg-server
 require_program xinit xinit
+require_program startx xinit
 require_program xkbcomp xkbcomp
 require_program xwininfo xwininfo
+require_program xauth xauth
+require_program mcookie util-linux
 require_program gtk3-demo gtk3
 require_program gtk3-widget-factory gtk3
 
@@ -76,6 +79,10 @@ require_library 'libcairo.so.2*' cairo
 require_library 'libpango-1.0.so.0*' pango
 require_library 'libfontconfig.so.1*' fontconfig
 require_library 'libfreetype.so.6*' freetype
+require_library 'libICE.so.6*' libICE
+require_library 'libSM.so.6*' libSM
+require_library 'libXt.so.6*' libXt
+require_library 'libXmu.so.6*' libXmu
 
 for driver in \
     iris_dri.so crocus_dri.so radeonsi_dri.so nouveau_dri.so \
