@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
+source "$ROOT/002-system/desktop-config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
@@ -29,6 +30,7 @@ stage() {
 sysv_stage=$(stage "sysvinit-$SYSVINIT_VERSION")
 sysklogd_stage=$(stage "sysklogd-$SYSKLOGD_VERSION")
 udev_stage=$(stage "systemd-$UDEV_SYSTEMD_VERSION")
+libgudev_stage=$(stage "libgudev-$LIBGUDEV_VERSION")
 pam_stage=$(stage "Linux-PAM-$LINUX_PAM_VERSION")
 shadow_stage=$(stage "shadow-$SHADOW_VERSION")
 openssl_stage=$(stage "openssl-$OPENSSL_VERSION")
@@ -152,6 +154,7 @@ install_rootfs_library_family linux-pam "$pam_stage" 'libpam.so.0*'
 install_rootfs_library_family linux-pam "$pam_stage" 'libpam_misc.so.0*'
 install_rootfs_library_family expat "$expat_stage" 'libexpat.so.1*'
 install_rootfs_library_family udev "$udev_stage" 'libudev.so.1*'
+install_rootfs_library_family libgudev "$libgudev_stage" 'libgudev-1.0.so.0*'
 install_rootfs_library_family dbus "$dbus_stage" 'libdbus-1.so.3*'
 
 log "Creating runtime directories and runlevels"
