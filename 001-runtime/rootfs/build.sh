@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/001-runtime/config.sh"
+source "$ROOT/001-runtime/desktop-libraries/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
@@ -93,6 +94,32 @@ for library in \
 done
 copy_runtime_libraries "libyaml-$LIBYAML_VERSION" 'libyaml-0.so.2*'
 copy_runtime_libraries "libexif-$LIBEXIF_VERSION" 'libexif.so.12*'
+for runtime_spec in \
+    "ncurses-$NCURSES_VERSION|libncursesw.so.6*" \
+    "readline-$READLINE_VERSION|libreadline.so.8*" \
+    "readline-$READLINE_VERSION|libhistory.so.8*" \
+    "lua-$LUA_VERSION|liblua.so.5.4*" \
+    "duktape-$DUKTAPE_VERSION|libduktape.so.207*" \
+    "alsa-lib-$ALSA_LIB_VERSION|libasound.so.2*" \
+    "ell-$ELL_VERSION|libell.so.0*" \
+    "libnl-$LIBNL_VERSION|libnl-3.so.200*" \
+    "libnl-$LIBNL_VERSION|libnl-genl-3.so.200*" \
+    "libnl-$LIBNL_VERSION|libnl-route-3.so.200*" \
+    "jansson-$JANSSON_VERSION|libjansson.so.4*" \
+    "libndp-$LIBNDP_VERSION|libndp.so.0*" \
+    "libarchive-$LIBARCHIVE_VERSION|libarchive.so.13*" \
+    "fuse-$FUSE3_VERSION|libfuse3.so.4*" \
+    "fuse-$FUSE3_VERSION|libfuse3.so.3*" \
+    "sqlite-$SQLITE_VERSION|libsqlite3.so.0*" \
+    "sqlite-$SQLITE_VERSION|libsqlite3.so.3*" \
+    "dconf-$DCONF_VERSION|libdconf.so.1*" \
+    "libgpg-error-$LIBGPG_ERROR_VERSION|libgpg-error.so.0*" \
+    "libgcrypt-$LIBGCRYPT_VERSION|libgcrypt.so.20*" \
+    "libsecret-$LIBSECRET_VERSION|libsecret-1.so.0*"; do
+    package_name=${runtime_spec%%|*}
+    library_pattern=${runtime_spec#*|}
+    copy_runtime_libraries "$package_name" "$library_pattern"
+done
 
 for program in xz unxz xzcat; do
     copy_program "xz-$XZ_VERSION" "$program"
@@ -103,6 +130,11 @@ done
 for program in gdbus gio gio-querymodules glib-compile-schemas gsettings; do
     copy_program "glib-$GLIB_VERSION" "$program"
 done
+copy_program "dconf-$DCONF_VERSION" dconf
+copy_program "fuse-$FUSE3_VERSION" fusermount3
+if [[ -x "$(stage "libsecret-$LIBSECRET_VERSION")/usr/bin/secret-tool" ]]; then
+    copy_program "libsecret-$LIBSECRET_VERSION" secret-tool
+fi
 
 for runtime_tree in gio glib-2.0; do
     source_tree="$(stage "glib-$GLIB_VERSION")/usr/lib/$runtime_tree"
@@ -110,6 +142,28 @@ for runtime_tree in gio glib-2.0; do
         install_rootfs_tree glib "$source_tree" "/usr/lib/$runtime_tree"
     fi
 done
+
+for data_spec in \
+    "alsa-lib-$ALSA_LIB_VERSION|/usr/share/alsa" \
+    "gsettings-desktop-schemas-$GSETTINGS_SCHEMAS_VERSION|/usr/share/glib-2.0/schemas"; do
+    package_name=${data_spec%%|*}
+    data_path=${data_spec#*|}
+    source_tree="$(stage "$package_name")$data_path"
+    if [[ -d "$source_tree" ]]; then
+        install_rootfs_tree "$package_name" "$source_tree" "$data_path"
+    fi
+done
+
+if [[ -f "$(stage "fuse-$FUSE3_VERSION")/etc/fuse.conf" ]]; then
+    install_rootfs_file "fuse-$FUSE3_VERSION" \
+        "$(stage "fuse-$FUSE3_VERSION")/etc/fuse.conf" /etc/fuse.conf
+fi
+
+if [[ -d "$rootfs_directory/usr/share/glib-2.0/schemas" ]]; then
+    "$rootfs_directory/usr/bin/glib-compile-schemas" \
+        "$rootfs_directory/usr/share/glib-2.0/schemas"
+    record_rootfs_owner glib /usr/share/glib-2.0/schemas/gschemas.compiled
+fi
 
 copy_glibc_runtime_file() {
     local file_name=$1
@@ -188,6 +242,8 @@ RESOLV
 cat > "$rootfs_directory/etc/mdev.conf" <<'MDEV'
 $MODALIAS=.* 0:0 660 @/usr/bin/modprobe "$MODALIAS"
 MDEV
+
+chmod 4755 "$rootfs_directory/usr/bin/fusermount3"
 
 for base_file in \
     /etc/passwd /etc/group /etc/nsswitch.conf /etc/hosts \

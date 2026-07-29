@@ -27,6 +27,7 @@ for program in \
     depmod insmod lsmod modinfo modprobe rmmod \
     mount umount findmnt lsblk blkid hwclock swapon swapoff \
     fdisk sfdisk wipefs rfkill \
+    dconf fusermount3 \
     e2fsck mke2fs mkfs.ext4 resize2fs tune2fs dumpe2fs \
     loadkeys setfont \
     btrfs mkfs.btrfs \
@@ -41,7 +42,13 @@ for library in \
     libattr.so.1 libacl.so.1 libcap.so.2 libcrypt.so.2 libkmod.so.2 \
     libblkid.so.1 libmount.so.1 libuuid.so.1 liblzo2.so.2 \
     libext2fs.so.2 libinih.so.0 liburcu.so.8 libhandle.so.1 \
-    libntfs-3g.so.90; do
+    libntfs-3g.so.90 \
+    libncursesw.so.6 libreadline.so.8 libhistory.so.8 \
+    libduktape.so.207 liblua.so.5.4 libasound.so.2 \
+    libell.so.0 \
+    libnl-3.so.200 libnl-genl-3.so.200 libjansson.so.4 libndp.so.0 \
+    libarchive.so.13 libfuse3.so.4 libsqlite3.so.0 libdconf.so.1 \
+    libgpg-error.so.0 libgcrypt.so.20 libsecret-1.so.0; do
     [[ -e "$rootfs/usr/lib/$library" ]] || die "runtime library is missing: $library"
 done
 
