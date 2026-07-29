@@ -22,6 +22,7 @@ configure_embedded_initramfs "$initramfs_tree" "$EFILINUX_INITRAMFS_DEVICES"
 remove_embedded_initramfs_outputs "$EFILINUX_KERNEL_BUILD"
 
 log "Building final EFILinux EFI executable"
+ZSTD_NBTHREADS="${EFILINUX_COMPRESSION_JOBS:-16}" \
 make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" \
     -j"$EFILINUX_JOBS" bzImage
 

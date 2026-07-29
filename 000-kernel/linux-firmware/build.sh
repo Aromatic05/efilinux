@@ -101,7 +101,7 @@ else
         ! -name 'README*' \
         ! -name 'LICENSE*' \
         -print0 |
-        xargs -0 -r zstd --quiet --threads=0 --rm
+        xargs -0 -r zstd --quiet --threads="${EFILINUX_COMPRESSION_JOBS:-16}" --rm
     find "$firmware_staging" -type f \
         \( -name 'README*' -o -name 'LICENSE*' \) -delete
 

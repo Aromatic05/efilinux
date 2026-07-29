@@ -218,7 +218,9 @@ EOF
     (cd "$staging" && find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort) \
         > "$metadata_dir/.FILELIST"
 
-    tar --create --zstd --file "$temporary" \
+    tar --create \
+        --use-compress-program="zstd --threads=${EFILINUX_COMPRESSION_JOBS:-16} --quiet" \
+        --file "$temporary" \
         --sort=name \
         --mtime="@$source_epoch" \
         --owner=0 --group=0 --numeric-owner \

@@ -61,7 +61,8 @@ publish_kernel_package() {
         "$kernel_staging$vmlinuz_path"
 
     log "Installing curated common-PC kernel modules"
-    make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" \
+    ZSTD_NBTHREADS="${EFILINUX_COMPRESSION_JOBS:-16}" \
+make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" \
         INSTALL_MOD_PATH="$kernel_staging" \
         MODLIB="$kernel_staging$module_directory" \
         INSTALL_MOD_STRIP=1 \
