@@ -5,95 +5,85 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
+source "$ROOT/000-kernel/linux/common.sh"
 
-require_command curl tar make gcc bc bison flex perl python3 openssl md5sum depmod strip zstd
+require_command bc bison curl depmod flex gcc make md5sum openssl perl python3 strip tar zstd
 ensure_directories
 
-mode=${1:-}
-archive="$EFILINUX_DOWNLOADS/linux-$LINUX_VERSION.tar.xz"
-source_directory="$EFILINUX_BUILD/sources/linux-$LINUX_VERSION-kernel"
-rootfs_directory="$EFILINUX_ROOTFS"
-module_directory="$rootfs_directory/usr/lib/modules/$LINUX_VERSION"
-config_fragment="$ROOT/000-kernel/linux/common-pc.config"
+producer=${BASH_SOURCE[0]}
+kernel_common="$ROOT/000-kernel/linux/common.sh"
+kernel_package="linux-$LINUX_VERSION"
+kernel_staging="$EFILINUX_BUILD/staging/$kernel_package"
+module_directory="/usr/lib/modules/$LINUX_VERSION"
+vmlinuz_path="/boot/vmlinuz-$LINUX_VERSION"
 
-[[ -d "$rootfs_directory" ]] || die "target runtime rootfs has not been built"
-[[ -f "$EFILINUX_INITRAMFS_DEVICES" ]] || \
-    die "initramfs device manifest has not been built"
+recipe_inputs=(
+    "$kernel_common"
+    "$kernel_config_fragment"
+    "$kernel_config_validator"
+)
 
-configure_kernel() {
-    download \
-        "https://www.kernel.org/pub/linux/kernel/v${LINUX_VERSION%%.*}.x/linux-$LINUX_VERSION.tar.xz" \
-        "$archive"
-    verify_md5 "$LINUX_MD5" "$archive"
-    extract_source "$archive" "$source_directory"
-    reset_directory "$EFILINUX_KERNEL_BUILD"
+install_modules_tree() {
+    local package_root=$1
+    local source="$package_root$module_directory"
 
-    log "Configuring curated common-PC kernel"
-    make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" tinyconfig
-    "$source_directory/scripts/kconfig/merge_config.sh" \
-        -m \
-        -O "$EFILINUX_KERNEL_BUILD" \
-        "$EFILINUX_KERNEL_BUILD/.config" \
-        "$config_fragment"
-
-    local scripts_config="$source_directory/scripts/config"
-    "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
-        --enable CMDLINE_BOOL \
-        --set-str CMDLINE "console=tty0 console=ttyS0,115200 rdinit=/init"
-    make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" olddefconfig
-    make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" prepare
-    python3 "$ROOT/000-kernel/linux/validate_config.py" \
-        "$config_fragment" \
-        "$EFILINUX_KERNEL_BUILD/.config"
+    [[ -d "$source" ]] || \
+        die "kernel package is missing $module_directory"
+    replace_rootfs_tree \
+        "$kernel_package" "$kernel_package" "$source" "$module_directory"
 }
 
-build_modules() {
-    configure_kernel
+restore_kernel_package() {
+    if ! binary_package_extract \
+        "$kernel_package" "$kernel_staging" "$producer" \
+        "${recipe_inputs[@]}"; then
+        return 1
+    fi
+    [[ -f "$kernel_staging$vmlinuz_path" ]] || \
+        die "kernel package is missing $vmlinuz_path"
+    [[ -d "$kernel_staging$module_directory" ]] || \
+        die "kernel package is missing $module_directory"
+    log "Using binary package $(basename -- "$PACKAGE_ARCHIVE")"
+    install_modules_tree "$kernel_staging"
+    rm -rf -- "$kernel_staging"
+}
 
-    log "Building kernel symbols and curated common-PC modules"
-    make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" \
-        -j"$EFILINUX_JOBS" vmlinux modules
+publish_kernel_package() {
+    reset_directory "$kernel_staging"
+    mkdir -p \
+        "$kernel_staging/boot" \
+        "$kernel_staging/usr/lib/modules"
+    ln -s usr/lib "$kernel_staging/lib"
 
-    rm -rf "$module_directory"
-    mkdir -p "$(dirname -- "$module_directory")"
-    make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" \
-        INSTALL_MOD_PATH="$rootfs_directory" \
-        MODLIB="$module_directory" \
+    install -m 0644 \
+        "$EFILINUX_KERNEL_BUILD/arch/x86/boot/bzImage" \
+        "$kernel_staging$vmlinuz_path"
+
+    log "Installing curated common-PC kernel modules"
+    make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" \
+        INSTALL_MOD_PATH="$kernel_staging" \
+        MODLIB="$kernel_staging$module_directory" \
         INSTALL_MOD_STRIP=1 \
         modules_install
-    rm -f "$module_directory/build" "$module_directory/source"
-    depmod -b "$rootfs_directory" "$LINUX_VERSION"
+    rm -f \
+        "$kernel_staging$module_directory/build" \
+        "$kernel_staging$module_directory/source"
+    depmod -b "$kernel_staging" "$LINUX_VERSION"
+
+    binary_package_create \
+        "$kernel_package" "$kernel_staging" "$producer" \
+        "${recipe_inputs[@]}"
+    install_modules_tree "$kernel_staging"
+    rm -rf -- "$kernel_staging"
 }
 
-build_efi() {
-    [[ -f "$EFILINUX_KERNEL_BUILD/.config" ]] || \
-        die "kernel modules must be built before the EFI image"
+if restore_kernel_package; then
+    exit 0
+fi
 
-    local scripts_config="$source_directory/scripts/config"
-    "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
-        --set-str INITRAMFS_SOURCE \
-            "$rootfs_directory $EFILINUX_INITRAMFS_DEVICES" \
-        --set-val INITRAMFS_ROOT_UID "$EFILINUX_INITRAMFS_ROOT_UID" \
-        --set-val INITRAMFS_ROOT_GID "$EFILINUX_INITRAMFS_ROOT_GID"
-    make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" olddefconfig
-
-    log "Building EFI-stub kernel with embedded rootfs"
-    make -C "$source_directory" O="$EFILINUX_KERNEL_BUILD" \
-        -j"$EFILINUX_JOBS" bzImage
-
-    mkdir -p "$EFILINUX_EFI_DIR/EFI/BOOT"
-    cp "$EFILINUX_KERNEL_BUILD/arch/x86/boot/bzImage" \
-        "$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
-}
-
-case "$mode" in
-    modules)
-        build_modules
-        ;;
-    efi)
-        build_efi
-        ;;
-    *)
-        die "usage: $0 {modules|efi}"
-        ;;
-esac
+configure_clean_kernel
+log "Building clean kernel image and curated common-PC modules"
+make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" \
+    -j"$EFILINUX_JOBS" bzImage modules
+publish_kernel_package
