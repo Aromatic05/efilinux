@@ -12,6 +12,23 @@ source "$ROOT/003-graphical/lib/build.sh"
 require_command autoreconf curl gcc make meson ninja pkg-config python3 sha256sum tar
 ensure_directories
 
+meson_install_clean() {
+    local build=$1 staging=$2
+
+    env -u LD_LIBRARY_PATH meson compile -C "$build" -j "$EFILINUX_JOBS"
+    env -u LD_LIBRARY_PATH DESTDIR="$staging" meson install -C "$build"
+    graphical_normalize_pkg_config "$staging"
+}
+
+make_install_clean() {
+    local build=$1 staging=$2
+
+    env -u LD_LIBRARY_PATH make -C "$build" -j"$EFILINUX_JOBS"
+    env -u LD_LIBRARY_PATH make -C "$build" DESTDIR="$staging" install
+    find "$staging/usr/lib" -maxdepth 1 -name '*.la' -delete 2>/dev/null || true
+    graphical_normalize_pkg_config "$staging"
+}
+
 build_autotools_component() {
     local package=$1
     local archive=$2
@@ -26,7 +43,7 @@ build_autotools_component() {
     graphical_autotools_configure \
         "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
         --disable-static --disable-docs "$@"
-    graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    make_install_clean "$PACKAGE_BUILD" "$PACKAGE_STAGING"
     graphical_binary_package_publish "$package"
 }
 
@@ -42,7 +59,7 @@ build_meson_component() {
     fi
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
-    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    meson_install_clean "$PACKAGE_BUILD" "$PACKAGE_STAGING"
     graphical_binary_package_publish "$package"
 }
 
@@ -97,6 +114,8 @@ if [[ ! -x "$EFILINUX_SYSROOT/usr/bin/xkbcomp" ]]; then
 fi
 
 if [[ ! -x "$EFILINUX_SYSROOT/usr/bin/Xorg" ||
+      ! -x "$EFILINUX_SYSROOT/usr/libexec/Xorg" ||
+      ! -x "$EFILINUX_SYSROOT/usr/libexec/Xorg.wrap" ||
       ! -e "$EFILINUX_SYSROOT/usr/include/xorg/dgaproc.h" ]]; then
     package="xorg-server-$XORG_SERVER_VERSION"
     if ! graphical_binary_package_restore "$package"; then
@@ -122,7 +141,7 @@ if [[ ! -x "$EFILINUX_SYSROOT/usr/bin/Xorg" ||
             -Dlisten_unix=true \
             -Dlisten_local=true \
             -Dint10=false \
-            -Dsuid_wrapper=false \
+            -Dsuid_wrapper=true \
             -Dpciaccess=true \
             -Dudev=true \
             -Dudev_kms=true \
@@ -155,7 +174,7 @@ if [[ ! -x "$EFILINUX_SYSROOT/usr/bin/Xorg" ||
             -Dxkb_default_layout=us \
             -Dfallback_input_driver=libinput
         log "Building Xorg Server"
-        graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+        meson_install_clean "$PACKAGE_BUILD" "$PACKAGE_STAGING"
         graphical_binary_package_publish "$package"
     fi
 fi
@@ -172,7 +191,7 @@ if ! graphical_binary_package_restore "$package"; then
         -Dsdkdir=/usr/include/xorg \
         -Dxorg-module-dir=/usr/lib/xorg/modules/input \
         -Dxorg-conf-dir=/usr/share/X11/xorg.conf.d
-    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    meson_install_clean "$PACKAGE_BUILD" "$PACKAGE_STAGING"
     install -Dm644 \
         "$PACKAGE_SOURCE/include/libinput-properties.h" \
         "$PACKAGE_STAGING/usr/include/xorg/libinput-properties.h"
@@ -202,6 +221,8 @@ build_meson_component \
 
 for artifact in \
     usr/bin/Xorg \
+    usr/libexec/Xorg \
+    usr/libexec/Xorg.wrap \
     usr/bin/xinit \
     usr/bin/startx \
     usr/bin/xkbcomp \

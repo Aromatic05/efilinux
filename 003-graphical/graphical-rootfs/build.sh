@@ -7,6 +7,7 @@ source "$ROOT/config.sh"
 source "$ROOT/001-runtime/config.sh"
 source "$ROOT/003-graphical/config.sh"
 source "$ROOT/003-graphical/desktop-support/config.sh"
+source "$ROOT/003-graphical/session-support/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 
@@ -117,11 +118,21 @@ libXpresent libXpresent-$LIBXPRESENT_VERSION
 startup-notification startup-notification-$STARTUP_NOTIFICATION_VERSION
 libnotify libnotify-$LIBNOTIFY_VERSION
 libwnck libwnck-$LIBWNCK_VERSION
+libXss libXScrnSaver-$LIBXSS_VERSION
+libxklavier libxklavier-$LIBXKLAVIER_VERSION
+dbus-glib dbus-glib-$DBUS_GLIB_VERSION
+vte vte-$VTE_VERSION
 EOF
 
 log "Installing Xorg and GTK session programs"
 install_stage_program xorg-server "xorg-server-$XORG_SERVER_VERSION" Xorg
 install_stage_program xorg-server "xorg-server-$XORG_SERVER_VERSION" X
+install_rootfs_file xorg-server \
+    "$(stage "xorg-server-$XORG_SERVER_VERSION")/usr/libexec/Xorg" \
+    /usr/libexec/Xorg
+install_rootfs_file xorg-server \
+    "$(stage "xorg-server-$XORG_SERVER_VERSION")/usr/libexec/Xorg.wrap" \
+    /usr/libexec/Xorg.wrap
 install_stage_program xinit "xinit-$XINIT_VERSION" xinit
 install_stage_program xinit "xinit-$XINIT_VERSION" startx
 install_stage_program xkbcomp "xkbcomp-$XKBCOMP_VERSION" xkbcomp
@@ -133,6 +144,14 @@ install_stage_program gtk3 "gtk-$GTK3_VERSION" gtk3-demo
 install_stage_program gtk3 "gtk-$GTK3_VERSION" gtk3-widget-factory
 install_stage_program fontconfig "fontconfig-$FONTCONFIG_VERSION" fc-cache
 install_stage_program fontconfig "fontconfig-$FONTCONFIG_VERSION" fc-match
+if [[ -d "$(stage "vte-$VTE_VERSION")/usr/libexec" ]]; then
+    install_rootfs_tree vte \
+        "$(stage "vte-$VTE_VERSION")/usr/libexec" /usr/libexec
+fi
+if [[ -d "$(stage "vte-$VTE_VERSION")/usr/share/vte" ]]; then
+    install_rootfs_tree vte \
+        "$(stage "vte-$VTE_VERSION")/usr/share/vte" /usr/share/vte
+fi
 
 log "Installing graphics drivers, input data, fonts, and toolkit resources"
 install_rootfs_tree mesa \
@@ -181,6 +200,12 @@ install_rootfs_tree noto-sans-cjk-sc \
 install_new_rootfs_tree qogir-icon-theme \
     "$(stage "qogir-icon-theme-$QOGIR_ICON_VERSION")/usr/share/icons/Qogir" \
     /usr/share/icons/Qogir
+install_rootfs_tree iso-codes \
+    "$(stage "iso-codes-$ISO_CODES_VERSION")/usr/share/xml/iso-codes" \
+    /usr/share/xml/iso-codes
+install_rootfs_tree iso-codes \
+    "$(stage "iso-codes-$ISO_CODES_VERSION")/usr/share/locale/zh_CN" \
+    /usr/share/locale/zh_CN
 
 install_rootfs_tree at-spi2 \
     "$(stage "at-spi2-core-$AT_SPI2_CORE_VERSION")/usr/libexec" /usr/libexec
@@ -198,12 +223,15 @@ install_new_rootfs_tree qogir-desktop-theme \
     /usr/share/themes/Qogir
 
 schema_source="$(stage "gtk-$GTK3_VERSION")/usr/share/glib-2.0/schemas"
-schema_assembly="$assembly/usr/share/glib-2.0/schemas"
-mkdir -p "$schema_assembly"
-find "$schema_source" -maxdepth 1 -type f -name '*.xml' \
-    -exec cp -a -t "$schema_assembly" {} +
-glib-compile-schemas "$schema_assembly"
-install_rootfs_tree gtk3 "$schema_assembly" /usr/share/glib-2.0/schemas
+while IFS= read -r -d '' schema; do
+    install_rootfs_file gtk3 "$schema" \
+        "/usr/share/glib-2.0/schemas/$(basename -- "$schema")"
+done < <(find "$schema_source" -maxdepth 1 -type f -name '*.xml' -print0)
+rm -f "$EFILINUX_ROOTFS/usr/share/glib-2.0/schemas/gschemas.compiled"
+remove_rootfs_owner /usr/share/glib-2.0/schemas/gschemas.compiled
+glib-compile-schemas "$EFILINUX_ROOTFS/usr/share/glib-2.0/schemas"
+record_rootfs_owner graphical-schemas \
+    /usr/share/glib-2.0/schemas/gschemas.compiled
 
 log "Installing runlevel 5 graphical session configuration"
 install_rootfs_tree graphical-config "$files_root/etc" /etc
@@ -230,7 +258,15 @@ chmod 0755 \
     "$EFILINUX_ROOTFS/etc/X11/xinit/xinitrc" \
     "$EFILINUX_ROOTFS/etc/rc.d/init.d/graphical"
 
+find "$EFILINUX_ROOTFS/usr/lib/xorg" -type f -name '*.la' -delete
+if find "$EFILINUX_ROOTFS" -type f \
+    \( -name '*.a' -o -name '*.la' -o -name '*.pc' \) \
+    -print -quit | grep -q .; then
+    die "development artifact leaked into graphical rootfs"
+fi
+
 strip_rootfs_elf
+chmod 4755 "$EFILINUX_ROOTFS/usr/libexec/Xorg.wrap"
 
 python3 - "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path
@@ -240,13 +276,21 @@ import subprocess
 import sys
 
 root = Path(sys.argv[1])
-library_names = {
-    path.name
-    for path in (root / "usr/lib").iterdir()
-    if path.is_file() or path.is_symlink()
-}
 missing: dict[str, set[str]] = {}
-pattern = re.compile(r"Shared library: \[([^]]+)]")
+needed_pattern = re.compile(r"Shared library: \[([^]]+)]")
+path_pattern = re.compile(r"Library (?:runpath|rpath): \[(.*?)\]", re.IGNORECASE)
+
+def expand_search_directory(artifact: Path, value: str) -> Path:
+    origin = artifact.parent
+    value = value.replace("${ORIGIN}", str(origin)).replace("$ORIGIN", str(origin))
+    path = Path(value)
+    if path.is_absolute():
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            relative = Path(str(path).lstrip("/"))
+        return root / relative
+    return origin / path
 
 for artifact in sorted((root / "usr").rglob("*")):
     if artifact.is_symlink() or not artifact.is_file():
@@ -259,8 +303,17 @@ for artifact in sorted((root / "usr").rglob("*")):
     )
     if result.returncode != 0:
         continue
+
+    search_directories = [root / "usr/lib", root / "lib"]
+    for encoded_path in path_pattern.findall(result.stdout):
+        for entry in encoded_path.split(":"):
+            if entry:
+                search_directories.append(expand_search_directory(artifact, entry))
+
     unresolved = {
-        name for name in pattern.findall(result.stdout) if name not in library_names
+        name
+        for name in needed_pattern.findall(result.stdout)
+        if not any((directory / name).exists() for directory in search_directories)
     }
     if unresolved:
         missing[str(artifact.relative_to(root))] = unresolved

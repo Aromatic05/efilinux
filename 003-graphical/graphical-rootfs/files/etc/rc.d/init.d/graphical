@@ -3,22 +3,14 @@ set -eu
 . /etc/rc.d/init.d/functions
 
 start_graphical() {
-    mkdir -p /run/user/0 /tmp/.X11-unix /var/cache/fontconfig /var/lib/xkb
-    chmod 0700 /run/user/0
+    mkdir -p /run/user/1000 /tmp/.X11-unix /var/cache/fontconfig /var/lib/xkb
+    chown 1000:1000 /run/user/1000
+    chmod 0700 /run/user/1000
     chmod 1777 /tmp/.X11-unix
 
-    export DISPLAY=:0
-    export GDK_BACKEND=x11
-    export HOME=/root
-    export LOGNAME=root
-    export PATH=/usr/bin
-    export USER=root
-    export XAUTHORITY=/root/.Xauthority
-    export XDG_RUNTIME_DIR=/run/user/0
-
     start_daemon graphical \
-        /usr/bin/startx /etc/X11/xinit/xinitrc -- \
-        /usr/bin/Xorg :0 -nolisten tcp -noreset \
+        /usr/bin/su -s /usr/bin/sh - user -c \
+        'exec env DISPLAY=:0 GDK_BACKEND=x11 HOME=/home/user LOGNAME=user PATH=/usr/bin USER=user XAUTHORITY=/home/user/.Xauthority XDG_RUNTIME_DIR=/run/user/1000 /usr/bin/startx /etc/X11/xinit/xinitrc -- /usr/bin/Xorg :0 -nolisten tcp -noreset' \
         >>/var/log/graphical.log 2>&1
 }
 

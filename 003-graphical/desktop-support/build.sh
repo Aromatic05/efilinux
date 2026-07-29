@@ -62,7 +62,10 @@ build_autotools_snapshot() {
         --disable-static \
         --disable-silent-rules \
         "$@"
-    graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    make -C "$PACKAGE_BUILD" -j"$EFILINUX_JOBS"
+    make -C "$PACKAGE_BUILD" DESTDIR="$PACKAGE_STAGING" install
+    find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 -name '*.la' -delete 2>/dev/null || true
+    graphical_normalize_pkg_config "$PACKAGE_STAGING"
     prune_translations "$PACKAGE_STAGING"
     publish_package "$package"
 }
@@ -80,7 +83,10 @@ build_release_archive() {
         --disable-static \
         --disable-silent-rules \
         "$@"
-    graphical_make_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    make -C "$PACKAGE_BUILD" -j"$EFILINUX_JOBS"
+    make -C "$PACKAGE_BUILD" DESTDIR="$PACKAGE_STAGING" install
+    find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 -name '*.la' -delete 2>/dev/null || true
+    graphical_normalize_pkg_config "$PACKAGE_STAGING"
     prune_translations "$PACKAGE_STAGING"
     publish_package "$package"
 }
@@ -95,7 +101,9 @@ build_meson_archive() {
     restore_package "$package" && return
     graphical_prepare_archive "$package" "$archive" "$sha256" "$url"
     graphical_meson_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$@"
-    graphical_meson_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+    meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
+    DESTDIR="$PACKAGE_STAGING" meson install -C "$PACKAGE_BUILD"
+    graphical_normalize_pkg_config "$PACKAGE_STAGING"
     prune_translations "$PACKAGE_STAGING"
     publish_package "$package"
 }

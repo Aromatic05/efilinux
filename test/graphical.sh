@@ -52,6 +52,7 @@ require_file /etc/X11/xorg.conf.d/40-libinput.conf
 require_file /etc/gtk-3.0/settings.ini
 require_file /etc/fonts/fonts.conf
 require_file /etc/rc.d/init.d/graphical
+require_file /etc/X11/Xwrapper.config
 require_directory /usr/share/fonts/truetype/dejavu
 require_directory /usr/share/fonts/opentype/noto
 require_directory /usr/share/icons/Qogir
@@ -61,6 +62,11 @@ require_directory /usr/lib/xorg/modules/input
 require_directory /usr/lib/dri
 
 require_program Xorg xorg-server
+[[ -x "$rootfs/usr/libexec/Xorg" ]] || die "real Xorg server is missing"
+[[ -x "$rootfs/usr/libexec/Xorg.wrap" ]] || die "Xorg setuid wrapper is missing"
+[[ $(stat -c '%a' "$rootfs/usr/libexec/Xorg.wrap") == 4755 ]] ||     die "Xorg wrapper is not setuid root"
+grep -Fxq 'allowed_users=anybody' "$rootfs/etc/X11/Xwrapper.config" ||     die "Xorg wrapper does not permit the live user"
+grep -Fxq 'needs_root_rights=yes' "$rootfs/etc/X11/Xwrapper.config" ||     die "Xorg wrapper does not retain required device privileges"
 require_program xinit xinit
 require_program startx xinit
 require_program xkbcomp xkbcomp
@@ -107,6 +113,18 @@ for font in DejaVuSans.ttf DejaVuSansMono.ttf; do
 done
 require_file /usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf
 require_file /usr/share/icons/Qogir/index.theme
+require_file /usr/share/xml/iso-codes/iso_639-2.xml
+require_file /usr/share/xml/iso-codes/iso_3166-1.xml
+[[ -L "$rootfs/usr/share/xml/iso-codes/iso_639.xml" ]] || \
+    die "legacy ISO 639 data link is missing"
+[[ -L "$rootfs/usr/share/xml/iso-codes/iso_3166.xml" ]] || \
+    die "legacy ISO 3166 data link is missing"
+require_file /usr/share/locale/zh_CN/LC_MESSAGES/iso_639-2.mo
+require_file /usr/share/locale/zh_CN/LC_MESSAGES/iso_3166-1.mo
+if find "$rootfs/usr/share/xml/iso-codes" -maxdepth 1 -type f \
+    ! -name 'iso_639-2.xml' ! -name 'iso_3166-1.xml' -print -quit | grep -q .; then
+    die "unneeded ISO code domains leaked into the graphical rootfs"
+fi
 [[ -e "$rootfs/usr/share/icons/Qogir/cursors/left_ptr" ]] || \
     die "Qogir cursor theme is missing left_ptr"
 
@@ -123,6 +141,11 @@ grep -Eq '^id:5:initdefault:$' "$rootfs/etc/inittab" || \
     die "graphical image does not default to runlevel 5"
 grep -Fq 'GDK_BACKEND=x11' "$rootfs/etc/rc.d/init.d/graphical" || \
     die "graphical service does not force the GTK X11 backend"
+grep -Fq '/usr/bin/su -s /usr/bin/sh - user -c'     "$rootfs/etc/rc.d/init.d/graphical" ||     die "graphical service does not launch the normal user"
+grep -Fq 'HOME=/home/user' "$rootfs/etc/rc.d/init.d/graphical" ||     die "graphical service does not use the normal user home"
+if grep -Eq '/run/user/0|HOME=/root|USER=root' "$rootfs/etc/rc.d/init.d/graphical"; then
+    die "graphical service still starts a root desktop session"
+fi
 
 if find "$rootfs" \
     \( -name 'libwayland-*.so*' -o -name 'Xwayland' -o -path '*/wayland-protocols/*' \) \
@@ -151,12 +174,19 @@ for artifact in sorted((root / "usr").rglob("*")):
         raise SystemExit(1)
 PY
 
-"$loader" --library-path "$library_path" "$rootfs/usr/bin/Xorg" -version 2>&1 | \
-    grep -q 'X.Org X Server'
+if ! "$loader" --library-path "$library_path" \
+    "$rootfs/usr/libexec/Xorg" -version 2>&1 | grep -q 'X.Org X Server'; then
+    die "real Xorg server does not execute against the target library closure"
+fi
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/gtk3-demo" --help-all >/dev/null
 FONTCONFIG_SYSROOT="$rootfs" \
     "$loader" --library-path "$library_path" \
     "$rootfs/usr/bin/fc-match" -f '%{family}\n' ':lang=zh-cn' | \
     grep -Fq 'Noto Sans CJK SC'
+
+require_library 'libXss.so.1*' libXss
+require_library 'libxklavier.so.16*' libxklavier
+require_library 'libdbus-glib-1.so.2*' dbus-glib
+require_library 'libvte-2.91.so.0*' vte
 
 log "003-graphical Xorg, Mesa, GTK, bilingual fonts, Qogir, and no-Wayland contract passed"
