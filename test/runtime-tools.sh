@@ -48,7 +48,9 @@ for library in \
     libell.so.0 \
     libnl-3.so.200 libnl-genl-3.so.200 libjansson.so.4 libndp.so.0 \
     libarchive.so.13 libfuse3.so.4 libsqlite3.so.0 libdconf.so.1 \
-    libgpg-error.so.0 libgcrypt.so.20 libsecret-1.so.0; do
+    libgpg-error.so.0 libgcrypt.so.20 libsecret-1.so.0 \
+    libgmp.so.10 libmpfr.so.6 libjson-c.so.5 libpopt.so.0 \
+    libkeyutils.so.1; do
     [[ -e "$rootfs/usr/lib/$library" ]] || die "runtime library is missing: $library"
 done
 
