@@ -23,7 +23,8 @@ prepare() {
 build() {
     cd "$builddir"
     target_env "$srcdir/rsync/configure" --prefix=/usr --disable-static \
-        --with-included-zlib=no --with-included-popt=no --enable-acl --disable-xxhash
+        --with-included-zlib=no --with-included-popt=no --enable-acl \
+        --disable-openssl --disable-xxhash --disable-zstd --disable-lz4
     make -j"$EFILINUX_JOBS"
     make DESTDIR="$develdir" install
 }
