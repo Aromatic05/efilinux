@@ -31,12 +31,9 @@ prepare() {
 build() {
     make -C "$srcdir/squashfs-tools/squashfs-tools" \
         -j"$EFILINUX_JOBS" \
+        CONFIG=1 \
         COMP_DEFAULT=zstd \
-        XZ_SUPPORT=0 \
-        LZ4_SUPPORT=0 \
-        LZO_SUPPORT=0 \
-        LZMA_XZ_SUPPORT=0 \
-        GZIP_SUPPORT=0 \
+        ZSTD_SUPPORT=1 \
         CC="$CC" \
         CFLAGS="$CFLAGS" \
         LDFLAGS="$LDFLAGS"
