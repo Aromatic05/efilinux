@@ -37,7 +37,10 @@ pkgver=1.0
 
 depends=()
 builddepends=()
-makedepends=(grep install setcap setfacl)
+makedepends=(grep install)
+
+package_capability /usr/bin/mock-cap cap_net_raw=ep
+package_acl /usr/share/mock/payload.txt 'user::rw-,user:1234:r--,group::r--,mask::r--,other::---'
 
 prepare() {
     input_file "\$recipedir/payload.txt" "\$srcdir/payload.txt"
@@ -56,8 +59,6 @@ check() {
 
 devel() {
     chmod 0640 "\$develdir/usr/share/mock/payload.txt"
-    setfacl -m user:1234:r-- "\$develdir/usr/share/mock/payload.txt"
-    setcap cap_net_raw=ep "\$develdir/usr/bin/mock-cap"
 }
 
 package() {
@@ -71,6 +72,8 @@ chmod 0755 "$recipe_directory/build.sh"
 metadata=$($recipe_directory/build.sh --print-metadata)
 grep -Fq '"pkgname":"mock"' <<<"$metadata"
 grep -Fq 'input-file=' <<<"$metadata"
+grep -Fq '"capabilities":["/usr/bin/mock-cap\tcap_net_raw=ep"]' <<<"$metadata"
+grep -Fq '"acls":["/usr/share/mock/payload.txt\tuser::rw-,user:1234:r--,group::r--,mask::r--,other::---"]' <<<"$metadata"
 [[ ! -e "$work/build" ]] || {
     printf 'metadata query created build state\n' >&2
     exit 1
@@ -136,8 +139,8 @@ archive_count_after=$(find "$EFILINUX_PACKAGES" -maxdepth 1 -name '*.pkg.tar.zst
 dependency_root="$work/dependency-root"
 dependency_directory="$dependency_root/stage/dependency"
 consumer_directory="$dependency_root/stage/consumer"
-mkdir -p "$dependency_directory" "$consumer_directory" "$dependency_root/config"
-cp "$ROOT/config/makepkg.conf" "$dependency_root/config/makepkg.conf"
+mkdir -p "$dependency_directory" "$consumer_directory" "$dependency_root/profiles"
+cp "$ROOT/profiles/makepkg.conf" "$dependency_root/profiles/makepkg.conf"
 
 cat > "$dependency_directory/build.sh" <<EOF
 #!/usr/bin/env bash

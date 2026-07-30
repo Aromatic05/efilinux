@@ -4,49 +4,57 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/002-system/desktop-config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl gcc meson ninja pkg-config sha256sum tar
-ensure_directories
+pkgname=libgudev
+pkgver=238
 
-package="libgudev-$LIBGUDEV_VERSION"
-recipe_inputs=(
-    "$ROOT/002-system/desktop-config.sh"
-)
-if binary_package_restore_sysroot \
-    "$package" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"; then
-    exit 0
-fi
+depends=(glib udev)
+builddepends=()
+makedepends=(gcc meson ninja pkg-config)
 
-archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
-prepare_package "$package"
-download \
-    "https://download.gnome.org/sources/libgudev/$LIBGUDEV_VERSION/$package.tar.xz" \
-    "$archive"
-verify_sha256 "$LIBGUDEV_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/libgudev-$pkgver.tar.xz"
 
-log "Configuring libgudev against the SysVinit udev runtime"
-CC=gcc \
-CFLAGS="$(target_cflags)" \
-LDFLAGS="$(target_ldflags)" \
-PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
-PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
-    meson setup "$PACKAGE_BUILD" "$PACKAGE_SOURCE" \
-        --prefix=/usr \
-        --libdir=lib \
-        --buildtype=release \
-        --wrap-mode=nodownload \
-        -Dtests=disabled \
-        -Dintrospection=disabled \
-        -Dvapi=disabled \
-        -Dgtk_doc=false
+    download \
+        "https://download.gnome.org/sources/libgudev/$pkgver/libgudev-$pkgver.tar.xz" \
+        "$archive"
+    checksum sha256 61266ab1afc9d73dbc60a8b2af73e99d2fdff47d99544d085760e4fa667b5dd1 "$archive"
+    extract "$archive" "$srcdir/libgudev"
+}
 
-log "Building libgudev"
-meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
-DESTDIR="$PACKAGE_STAGING" meson install -C "$PACKAGE_BUILD"
+build() {
+    log "Configuring libgudev against the SysVinit udev runtime"
+    CC="$CC" \
+    CFLAGS="$CFLAGS" \
+    LDFLAGS="$LDFLAGS" \
+    PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
+    PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
+        meson setup "$builddir" "$srcdir/libgudev" \
+            --prefix=/usr \
+            --libdir=lib \
+            --buildtype=release \
+            --wrap-mode=nodownload \
+            -Dtests=disabled \
+            -Dintrospection=disabled \
+            -Dvapi=disabled \
+            -Dgtk_doc=false
 
-binary_package_publish_sysroot \
-    "$package" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"
+    log "Building libgudev"
+    meson compile -C "$builddir" -j "$EFILINUX_JOBS"
+    DESTDIR="$develdir" meson install -C "$builddir"
+}
+
+devel() {
+    strip_all "$develdir/usr/lib"
+}
+
+package() {
+    local -a keep=()
+    package_add_library_family keep 'libgudev-1.0.so.0*'
+    package_keep "${keep[@]}"
+}
+
+recipe_main "$@"

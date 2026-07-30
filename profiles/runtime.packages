@@ -1,5 +1,7 @@
 # Minimal EFI Linux runtime image.
 base-files
+runtime-init
+runtime-config
 
 glibc
 gcc-libs

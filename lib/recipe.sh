@@ -3,12 +3,38 @@
 set -euo pipefail
 
 readonly EFILINUX_RECIPE_API=1
-readonly EFILINUX_MAKEPKG_CONF="$EFILINUX_ROOT/config/makepkg.conf"
+readonly EFILINUX_MAKEPKG_CONF="$EFILINUX_ROOT/profiles/makepkg.conf"
 readonly EFILINUX_RECIPE_FILE=$(readlink -f -- "${BASH_SOURCE[1]}")
 
 RECIPE_INPUT_MODE=execute
 RECIPE_PHASE=metadata
 declare -ag RECIPE_INPUT_RECORDS=()
+declare -ag RECIPE_DECLARED_CAPABILITIES=()
+declare -ag RECIPE_DECLARED_ACLS=()
+
+package_capability() {
+    local path=$1
+    local capability=$2
+
+    [[ "$RECIPE_PHASE" == metadata ]] || \
+        die "package_capability may only be declared at recipe scope"
+    recipe_validate_target_path "$path"
+    [[ -n $capability && $capability != *[$'\t\r\n']* ]] || \
+        die "invalid capability declaration for $path"
+    RECIPE_DECLARED_CAPABILITIES+=("$path"$'\t'"$capability")
+}
+
+package_acl() {
+    local path=$1
+    local acl=$2
+
+    [[ "$RECIPE_PHASE" == metadata ]] || \
+        die "package_acl may only be declared at recipe scope"
+    recipe_validate_target_path "$path"
+    [[ -n $acl && $acl != *[$'\t\r\n']* ]] || \
+        die "invalid ACL declaration for $path"
+    RECIPE_DECLARED_ACLS+=("$path"$'\t'"$acl")
+}
 
 recipe_relative_path() {
     local base=$1
@@ -213,6 +239,14 @@ package_keep() {
         fi
     done
 
+    for path in \
+        "/etc/filemeta/acls/$pkgname" \
+        "/etc/filemeta/caps/$pkgname"; do
+        if [[ -f "$pkgdir$path" ]]; then
+            exact_paths+=("$path")
+        fi
+    done
+
     while IFS= read -r -d '' entry; do
         relative=/${entry#"$pkgdir/"}
         keep=false
@@ -287,13 +321,33 @@ recipe_append_generated_filemeta() {
 }
 
 recipe_generate_filemeta() {
-    local entry relative capability acl existing
+    local entry relative capability acl existing record path value extra target
 
     if [[ -d "$develdir/etc/filemeta" ]]; then
         existing=$(find "$develdir/etc/filemeta" -mindepth 1 -print -quit)
         [[ -z "$existing" ]] || \
             die "reserved /etc/filemeta content must not be installed by build() or devel(): ${existing#"$develdir"}"
     fi
+
+    for record in "${RECIPE_DECLARED_CAPABILITIES[@]}"; do
+        IFS=$'\t' read -r path value extra <<<"$record"
+        [[ -n "$path" && -n "$value" && -z ${extra:-} ]] || \
+            die "malformed declared capability for $pkgname"
+        target="$develdir$path"
+        [[ -f "$target" && ! -L "$target" ]] || \
+            die "declared capability target is not a regular file: $path"
+        recipe_append_generated_filemeta caps EFILINUX-CAPS-1 "$path" "$value"
+    done
+
+    for record in "${RECIPE_DECLARED_ACLS[@]}"; do
+        IFS=$'\t' read -r path value extra <<<"$record"
+        [[ -n "$path" && -n "$value" && -z ${extra:-} ]] || \
+            die "malformed declared ACL for $pkgname"
+        target="$develdir$path"
+        [[ -e "$target" && ! -L "$target" ]] || \
+            die "declared ACL target is missing or symbolic: $path"
+        recipe_append_generated_filemeta acls EFILINUX-ACLS-1 "$path" "$value"
+    done
 
     while IFS= read -r -d '' entry; do
         capability=$(getcap -n "$entry" 2>/dev/null || true)
@@ -333,6 +387,11 @@ recipe_normalize_filemeta() {
             printf '%s\n' "$header"
             tail -n +2 "$metadata" | LC_ALL=C sort -u
         } > "$temporary"
+        awk -F '\t' '
+            NR == 1 { next }
+            seen[$1] && seen[$1] != $2 { exit 1 }
+            { seen[$1] = $2 }
+        ' "$temporary" || die "conflicting $kind declarations for $pkgname"
         mv -- "$temporary" "$metadata"
     done
 }
@@ -492,6 +551,8 @@ recipe_print_metadata() {
     printf ',"builddepends":'; recipe_json_array "${builddepends[@]}"
     printf ',"makedepends":'; recipe_json_array "${makedepends[@]}"
     printf ',"sysroot":%s' "$sysroot"
+    printf ',"capabilities":'; recipe_json_array "${RECIPE_DECLARED_CAPABILITIES[@]}"
+    printf ',"acls":'; recipe_json_array "${RECIPE_DECLARED_ACLS[@]}"
     printf ',"sources":'; recipe_json_array "${RECIPE_INPUT_RECORDS[@]}"
     printf ',"recipe_key":'; recipe_json_quote "$recipe_key"
     printf '}\n'

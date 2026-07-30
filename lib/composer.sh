@@ -152,6 +152,7 @@ compose_finalize_rootfs() {
     local owners=$2
     local schemas="$rootfs/usr/share/glib-2.0/schemas"
     local modules="$rootfs/usr/lib/gio/modules"
+    local ownership="$rootfs/etc/filemeta/ownership.tsv"
 
     if [[ -d "$schemas" ]]; then
         [[ -x "$rootfs/usr/bin/glib-compile-schemas" ]] || \
@@ -174,6 +175,17 @@ compose_finalize_rootfs() {
             printf '/usr/lib/gio/modules/giomodule.cache\tfile\t@composer\n' >> "$owners"
         fi
     fi
+
+    [[ ! -e "$ownership" && ! -L "$ownership" ]] || \
+        die "package content conflicts with composer ownership metadata"
+    install -d -m0755 "$rootfs/etc/filemeta"
+    {
+        printf 'path\ttype\towner\n'
+        tail -n +2 "$owners" | LC_ALL=C sort -t $'\t' -k1,1 -k3,3
+    } > "$ownership"
+    chown 0:0 "$ownership"
+    chmod 0644 "$ownership"
+    printf '/etc/filemeta/ownership.tsv\tfile\t@composer\n' >> "$owners"
 }
 
 compose_profile() {

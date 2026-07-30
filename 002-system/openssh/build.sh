@@ -1,44 +1,86 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl gcc make pkg-config sha256sum tar
-ensure_directories
+pkgname=openssh
+pkgver=10.4p1
+sysroot=false
 
-package="openssh-$OPENSSH_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
+depends=(glibc libxcrypt linux-pam openssl zlib)
+builddepends=(linux-headers)
+makedepends=(gcc make pkg-config)
 
-prepare_package "$package"
-download "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/$package.tar.gz" "$archive"
-verify_sha256 "$OPENSSH_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/openssh-$pkgver.tar.gz"
 
-cd "$PACKAGE_SOURCE"
-log "Configuring OpenSSH"
-CC=gcc CFLAGS="$(target_cflags)" CPPFLAGS="--sysroot=$EFILINUX_SYSROOT" \
-LDFLAGS="$(target_ldflags)" \
-PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
-PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
-ac_cv_search_SHA256Update=no \
-    ./configure \
-        --prefix=/usr --sysconfdir=/etc/ssh \
-        --libexecdir=/usr/lib/ssh --localstatedir=/var \
-        --with-privsep-path=/var/empty --with-privsep-user=sshd \
-        --with-pam --with-zlib="$EFILINUX_SYSROOT/usr" \
-        --with-ssl-dir="$EFILINUX_SYSROOT/usr" \
-        --without-openssl-header-check --without-ldns \
-        --without-libedit --without-kerberos5 \
-        --with-sandbox=seccomp_filter --without-security-key-builtin
+    download \
+        "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$pkgver.tar.gz" \
+        "$archive"
+    checksum sha256 ef6026dd2aea8d56059638d5d3262902c892ceba9f88395835e0d06d3fb63238 "$archive"
+    extract "$archive" "$srcdir/openssh"
+}
 
-log "Building OpenSSH"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install-nokeys
-rm -rf "$PACKAGE_STAGING/usr/share/man"
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+build() {
+    cd "$srcdir/openssh"
+    log "Configuring OpenSSH"
+    CC="$CC" \
+    CFLAGS="$CFLAGS" \
+    CPPFLAGS="$CPPFLAGS" \
+    LDFLAGS="$LDFLAGS" \
+    PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
+    PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
+    ac_cv_search_SHA256Update=no \
+        ./configure \
+            --prefix=/usr \
+            --sysconfdir=/etc/ssh \
+            --libexecdir=/usr/lib/ssh \
+            --localstatedir=/var \
+            --with-privsep-path=/var/empty \
+            --with-privsep-user=sshd \
+            --with-pam \
+            --with-zlib="$EFILINUX_SYSROOT/usr" \
+            --with-ssl-dir="$EFILINUX_SYSROOT/usr" \
+            --without-openssl-header-check \
+            --without-ldns \
+            --without-libedit \
+            --without-kerberos5 \
+            --with-sandbox=seccomp_filter \
+            --without-security-key-builtin
+
+    log "Building OpenSSH"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install-nokeys
+}
+
+devel() {
+    rm -rf "$develdir/usr/share/man"
+    if [[ -d "$develdir/usr/sbin" ]]; then
+        install -d -m0755 "$develdir/usr/bin"
+        mv "$develdir/usr/sbin"/* "$develdir/usr/bin/"
+        rmdir "$develdir/usr/sbin"
+    fi
+    strip_all "$develdir/usr/bin" "$develdir/usr/lib"
+}
+
+package() {
+    package_keep \
+        /etc/ssh/ssh_config \
+        /etc/ssh/moduli \
+        /usr/bin/scp \
+        /usr/bin/sftp \
+        /usr/bin/ssh \
+        /usr/bin/ssh-add \
+        /usr/bin/ssh-agent \
+        /usr/bin/ssh-keygen \
+        /usr/bin/ssh-keyscan \
+        /usr/bin/sshd \
+        /usr/lib/ssh/
+}
+
+recipe_main "$@"

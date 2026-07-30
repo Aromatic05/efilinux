@@ -134,11 +134,15 @@ package() {
     rm -f \
         "$pkgdir/usr/bin/blkid" \
         "$pkgdir/usr/bin/depmod" \
+        "$pkgdir/usr/bin/halt" \
         "$pkgdir/usr/bin/insmod" \
+        "$pkgdir/usr/bin/init" \
         "$pkgdir/usr/bin/lsmod" \
         "$pkgdir/usr/bin/modinfo" \
         "$pkgdir/usr/bin/modprobe" \
         "$pkgdir/usr/bin/mount" \
+        "$pkgdir/usr/bin/poweroff" \
+        "$pkgdir/usr/bin/reboot" \
         "$pkgdir/usr/bin/rmmod" \
         "$pkgdir/usr/bin/umount"
 }

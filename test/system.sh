@@ -5,11 +5,25 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
-source "$ROOT/lib/package.sh"
 
 rootfs="$EFILINUX_ROOTFS"
 loader="$rootfs/usr/lib/ld-linux-x86-64.so.2"
 library_path="$rootfs/usr/lib"
+
+[[ -f "$EFILINUX_ROOTFS_OWNERS" ]] || die "rootfs ownership manifest is missing"
+[[ -f "$EFILINUX_ROOTFS_FAKEROOT_STATE" ]] || die "rootfs fakeroot metadata is missing"
+
+rootfs_owner() {
+    local path=$1
+    awk -F '\t' -v path="$path" \
+        'NR > 1 && $1 == path && $2 != "directory" { print $3; exit }' \
+        "$EFILINUX_ROOTFS_OWNERS"
+}
+
+rootfs_stat() {
+    fakeroot -i "$EFILINUX_ROOTFS_FAKEROOT_STATE" -- \
+        stat -c "$1" "$rootfs$2"
+}
 
 require_file() {
     local path=$1
@@ -35,8 +49,13 @@ require_service() {
     [[ -x "$path" ]] || die "service script is missing: $name"
 }
 
-[[ -L "$rootfs/init" && $(readlink -- "$rootfs/init") == /usr/bin/init ]] || \
-    die "final /init does not select SysVinit"
+[[ -f "$rootfs/init" && -x "$rootfs/init" ]] || \
+    die "final /init is not an executable system-init wrapper"
+[[ $(rootfs_owner /init) == system-init ]] || die "/init is not owned by system-init"
+grep -Fq '/usr/bin/fsmeta-replay' "$rootfs/init" || \
+    die "/init does not replay ACL and capability metadata"
+grep -Fq 'exec /usr/bin/init "$@"' "$rootfs/init" || \
+    die "/init does not enter SysVinit after metadata replay"
 
 for file in \
     /etc/inittab /etc/rc.d/rcS /etc/rc.d/rc /etc/rc.d/rc.shutdown \
@@ -44,7 +63,8 @@ for file in \
     /etc/syslog.conf /etc/crontab /etc/dbus-1/system.conf \
     /etc/dhcpcd.conf /etc/ssh/sshd_config \
     /etc/pam.d/system-auth /etc/pam.d/login /etc/pam.d/sshd \
-    /etc/passwd /etc/group /etc/shadow /etc/gshadow; do
+    /etc/passwd /etc/group /etc/shadow /etc/gshadow \
+    /etc/filemeta/ownership.tsv /etc/filemeta/caps/iputils; do
     require_file "$file"
 done
 
@@ -59,11 +79,12 @@ for service in mountvirtfs udev localnet setclock syslog dbus cron dhcpcd sshd; 
 done
 
 require_program init sysvinit
+require_program fsmeta-replay fsmeta-replay
 require_program telinit sysvinit
 require_program shutdown sysvinit
 require_program udevadm udev
 require_program '[' busybox
-require_program hwclock "util-linux-$UTIL_LINUX_VERSION"
+require_program hwclock util-linux
 require_program login shadow
 require_program passwd shadow
 require_program useradd shadow
@@ -87,19 +108,20 @@ for helper in ata_id cdrom_id dmi_memory_id fido_id iocost mtd_probe scsi_id v4l
 done
 [[ -x "$rootfs/usr/lib/ssh/sftp-server" ]] || die "OpenSSH SFTP server is missing"
 
-[[ $(stat -c '%a' "$rootfs/etc/shadow") == 600 ]] || die "/etc/shadow permissions are not 0600"
-[[ $(stat -c '%a' "$rootfs/etc/gshadow") == 600 ]] || die "/etc/gshadow permissions are not 0600"
+[[ $(rootfs_stat '%a' /etc/shadow) == 600 ]] || die "/etc/shadow permissions are not 0600"
+[[ $(rootfs_stat '%a' /etc/gshadow) == 600 ]] || die "/etc/gshadow permissions are not 0600"
 for public_config in \
     /etc/passwd /etc/group /etc/nsswitch.conf /etc/hosts \
     /etc/pam.d/system-auth /etc/pam.d/login /etc/profile; do
-    [[ $(stat -c '%a' "$rootfs$public_config") == 644 ]] || \
+    [[ $(rootfs_stat '%a' "$public_config") == 644 ]] || \
         die "$public_config permissions are not 0644"
 done
-[[ $(stat -c '%a' "$rootfs/root/.ssh") == 700 ]] || die "/root/.ssh permissions are not 0700"
+[[ $(rootfs_stat '%a' /root/.ssh) == 700 ]] || die "/root/.ssh permissions are not 0700"
 for privileged_file in \
     /usr/bin/passwd /usr/bin/su /usr/bin/newgrp /usr/bin/crontab \
+    /usr/bin/pkexec /usr/lib/polkit-1/polkit-agent-helper-1 \
     /usr/libexec/dbus-daemon-launch-helper; do
-    [[ $(stat -c '%a' "$rootfs$privileged_file") == 4755 ]] || \
+    [[ $(rootfs_stat '%a' "$privileged_file") == 4755 ]] || \
         die "$privileged_file permissions are not 4755"
 done
 
@@ -129,7 +151,7 @@ grep -Eq '^wheel:x:10:([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/group" || \
     die "user is not a member of wheel"
 grep -Eq '^wheel:\*::([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/gshadow" || \
     die "user wheel membership is missing from gshadow"
-[[ $(stat -c '%u:%g:%a' "$rootfs/home/user") == '1000:1000:750' ]] || \
+[[ $(rootfs_stat '%u:%g:%a' /home/user) == '1000:1000:750' ]] || \
     die "/home/user ownership or permissions are incorrect"
 grep -q '^sshd:' "$rootfs/etc/passwd" || die "sshd user is missing"
 grep -q '^dbus:' "$rootfs/etc/passwd" || die "dbus user is missing"

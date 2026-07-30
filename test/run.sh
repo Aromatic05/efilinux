@@ -8,6 +8,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 "$ROOT/test/runtime.sh"
 "$ROOT/test/runtime-tools.sh"
 "$ROOT/test/system.sh"
+"$ROOT/test/fsmeta-replay.sh"
 "$ROOT/test/desktop-services.sh"
 "$ROOT/test/packages.sh"
 "$ROOT/test/graphical-core.sh"

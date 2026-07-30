@@ -6,7 +6,12 @@ installed into the target system and no toolchain bootstrap is performed.
 
 ## Current milestone
 
-The current build covers the first three package groups:
+The runtime and multi-user system layers use directly executable Bash recipes.
+Each package provides a complete devel tree plus a generated, declarative
+installation subset. Profiles compose packages into the target rootfs without
+running package scripts or allowing undeclared file replacement.
+
+The current build covers:
 
 ```text
 000-kernel
@@ -24,31 +29,30 @@ The current build covers the first three package groups:
 ├── e2fsprogs, btrfs-progs, xfsprogs
 ├── dosfstools, exfatprogs, NTFS maintenance tools
 ├── kbd, iana-etc, tzdata
-└── rootfs, runtime-tools merged-/usr system assembly
+└── base-files, runtime-init, runtime-config
 
 002-system
-├── SysVinit             PID 1, runlevels, console lifecycle, shutdown
-├── standalone Udev      device events, persistent naming, hwdb
-├── Linux-PAM, Shadow    authentication and account management
-├── Sysklogd, D-Bus, Cronie
-├── iproute2, iputils, dhcpcd
-├── OpenSSL, Expat
-├── OpenSSH              key-only remote maintenance
-└── system-rootfs        accounts, PAM policy, services, and runlevels
+├── sysvinit, sysklogd, udev, dbus, cronie
+├── linux-pam, shadow, elogind, polkit, upower
+├── iproute2, iputils, dhcpcd, openssh, iwd, networkmanager
+├── pulseaudio, pipewire, wireplumber
+├── device-mapper, cryptsetup, mdadm, libblockdev
+├── udisks, gvfs
+└── efilinux-system-config
 ```
 
 BusyBox `ash` provides `/bin/sh` and rescue implementations of basic commands.
 Formal module, mount, block-device, partition, console, and filesystem tools
-replace the corresponding BusyBox links through an explicit ownership
-manifest. Bash, GNU coreutils, and other broad utility suites are not installed.
+own their paths directly; conflicting BusyBox applets are removed from the
+BusyBox installation subset. Bash, GNU coreutils, and other broad utility
+suites are not installed.
 Headers, static libraries, pkg-config files, and documentation remain in the
-build sysroot or staging trees and are not copied into the target rootfs.
+package devel trees and are not copied into the target rootfs.
 
 The target userspace baseline is `x86-64-v2`. SysVinit is the final PID 1;
 BusyBox remains the rescue shell and compact implementation of basic commands.
-The kernel initramfs generator maps the build user's UID and GID to root, so
-security-sensitive target paths have deterministic ownership without requiring
-the host build to run as root.
+The composer preserves fakeroot ownership, modes, device nodes, and declared
+ACL/capability replay metadata without requiring the host build to run as root.
 
 The maintenance environment can create, inspect, and repair ext4, Btrfs, XFS,
 FAT, exFAT, and NTFS filesystems. NTFS mounting uses the in-kernel `ntfs3`
@@ -56,11 +60,9 @@ driver; NTFS-3G contributes maintenance programs only, not the FUSE mount
 driver.
 
 Runlevel 3 starts Udev, local networking, Sysklogd, the D-Bus system bus,
-Cronie, dhcpcd, and OpenSSH. The root password is locked in the image. Local
-serial-console access is available for maintenance, while SSH permits root only
-with an authorized key and disables password and keyboard-interactive
-authentication. Host keys and the D-Bus machine ID are generated at boot and
-are never shared between built images.
+elogind, polkit, Cronie, IWD, NetworkManager, UDisks, and OpenSSH. Host keys and
+the D-Bus machine ID are generated at boot and are never shared between built
+images.
 
 ## Single-rootfs model
 

@@ -1,27 +1,54 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
-require_command curl gcc make sha256sum tar
-ensure_directories
-package="sysklogd-$SYSKLOGD_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
-prepare_package "$package"
-download "https://github.com/troglobit/sysklogd/releases/download/v$SYSKLOGD_VERSION/$package.tar.gz" "$archive"
-verify_sha256 "$SYSKLOGD_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
-log "Configuring Sysklogd"
-cd "$PACKAGE_BUILD"
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-    "$PACKAGE_SOURCE/configure" --prefix=/usr --sbindir=/usr/bin \
-        --sysconfdir=/etc --runstatedir=/run --without-logger \
-        --disable-static --disable-man-pages
-log "Building Sysklogd"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+source "$ROOT/lib/recipe.sh"
+
+pkgname=sysklogd
+pkgver=2.7.2
+sysroot=false
+
+depends=(glibc)
+builddepends=(linux-headers)
+makedepends=(gcc make)
+
+prepare() {
+    local archive="$downloaddir/sysklogd-$pkgver.tar.gz"
+    download \
+        "https://github.com/troglobit/sysklogd/releases/download/v$pkgver/sysklogd-$pkgver.tar.gz" \
+        "$archive"
+    checksum sha256 bc410ca64551a11fac6518b418fb6b8afbd888a70af2c5eb353334a706727bca "$archive"
+    extract "$archive" "$srcdir/sysklogd"
+}
+
+build() {
+    log "Configuring Sysklogd"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        "$srcdir/sysklogd/configure" \
+            --prefix=/usr \
+            --sbindir=/usr/bin \
+            --sysconfdir=/etc \
+            --runstatedir=/run \
+            --without-logger \
+            --disable-static \
+            --disable-man-pages
+
+    log "Building Sysklogd"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    strip_all "$develdir/usr/bin"
+}
+
+package() {
+    package_keep /usr/bin/syslogd
+}
+
+recipe_main "$@"

@@ -1,39 +1,70 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl gcc meson ninja pkg-config sha256sum tar
-ensure_directories
+pkgname=iputils
+pkgver=20250605
+sysroot=false
 
-package="iputils-$IPUTILS_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
+depends=(glibc libcap)
+builddepends=(linux-headers)
+makedepends=(gcc meson ninja pkg-config)
 
-prepare_package "$package"
-download "https://github.com/iputils/iputils/releases/download/$IPUTILS_VERSION/$package.tar.xz" "$archive"
-verify_sha256 "$IPUTILS_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+package_capability /usr/bin/ping cap_net_raw=ep
+package_capability /usr/bin/arping cap_net_raw=ep
 
-log "Configuring iputils"
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
-PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
-    meson setup "$PACKAGE_BUILD" "$PACKAGE_SOURCE" \
-        --prefix=/usr --sbindir=bin --buildtype=release \
-        -DUSE_CAP=true -DUSE_IDN=false -DUSE_GETTEXT=false \
-        -DBUILD_ARPING=true -DBUILD_CLOCKDIFF=false \
-        -DBUILD_PING=true -DBUILD_TRACEPATH=true \
-        -DBUILD_MANS=false -DBUILD_HTML_MANS=false \
-        -DNO_SETCAP_OR_SUID=true -DINSTALL_SYSTEMD_UNITS=false \
-        -DSKIP_TESTS=true
+prepare() {
+    local archive="$downloaddir/iputils-$pkgver.tar.xz"
 
-log "Building iputils"
-meson compile -C "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
-DESTDIR="$PACKAGE_STAGING" meson install -C "$PACKAGE_BUILD"
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+    download \
+        "https://github.com/iputils/iputils/releases/download/$pkgver/iputils-$pkgver.tar.xz" \
+        "$archive"
+    checksum sha256 6f213700dbf96b5cc4499ca70cb15ecd69c09f405b06785bb4a1a10b572b6276 "$archive"
+    extract "$archive" "$srcdir/iputils"
+}
+
+build() {
+    log "Configuring iputils"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+    PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
+    PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
+        meson setup "$builddir" "$srcdir/iputils" \
+            --prefix=/usr \
+            --sbindir=bin \
+            --buildtype=release \
+            -DUSE_CAP=true \
+            -DUSE_IDN=false \
+            -DUSE_GETTEXT=false \
+            -DBUILD_ARPING=true \
+            -DBUILD_CLOCKDIFF=false \
+            -DBUILD_PING=true \
+            -DBUILD_TRACEPATH=true \
+            -DBUILD_MANS=false \
+            -DBUILD_HTML_MANS=false \
+            -DNO_SETCAP_OR_SUID=true \
+            -DINSTALL_SYSTEMD_UNITS=false \
+            -DSKIP_TESTS=true
+
+    log "Building iputils"
+    meson compile -C "$builddir" -j "$EFILINUX_JOBS"
+    DESTDIR="$develdir" meson install -C "$builddir"
+}
+
+devel() {
+    strip_all "$develdir/usr/bin"
+}
+
+package() {
+    package_keep \
+        /usr/bin/ping \
+        /usr/bin/arping \
+        /usr/bin/tracepath
+}
+
+recipe_main "$@"
