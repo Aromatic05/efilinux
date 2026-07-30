@@ -1,0 +1,16 @@
+diff --git a/meson.build b/meson.build
+index e5768f5..5be4978 100644
+--- a/meson.build
++++ b/meson.build
+@@ -61,10 +61,7 @@ enable_plugin += {'shortcuts': deps[-1].found()}
+ plugin_deps += {'test': base_deps}
+ enable_plugin += {'test': not get_option('test-plugin').disabled()}
+ 
+-gio_schemasdir = gio.get_variable(
+-  pkgconfig: 'schemasdir',
+-  pkgconfig_define: ['datadir', get_option('prefix') / get_option('datadir')]
+-)
++gio_schemasdir = get_option('datadir') / 'glib-2.0' / 'schemas'
+ 
+ feature_cflags = []
+ 

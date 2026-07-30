@@ -12,17 +12,20 @@ pkgname=mousepad
 pkgver=0.6.5
 depends=(glib glibc gtk3 gtksourceview4 xfce)
 builddepends=()
-makedepends=(gcc meson ninja pkg-config python3)
+makedepends=(gcc meson ninja patch pkg-config python3)
 
 prepare() {
     local archive="$downloaddir/mousepad-$pkgver.tar.xz"
     download "https://archive.xfce.org/src/apps/mousepad/0.6/mousepad-$pkgver.tar.xz" "$archive"
     checksum sha256 21762bc8c3c4f120a4a509ce39f4a5a58dbc10e3f0da66cdc6d9a8c735fff2ac "$archive"
     extract "$archive" "$srcdir/source"
+    input_file "$recipedir/patches/0001-use-target-gsettings-schema-path.patch" \
+        "$srcdir/use-target-gsettings-schema-path.patch"
     input_shared_file "$ROOT/lib/target-build.sh" "$srcdir/target-build.sh"
 }
 
 build() {
+    patch -d "$srcdir/source" -Np1 < "$srcdir/use-target-gsettings-schema-path.patch"
     target_meson_setup "$srcdir/source" "$builddir" \
         -Dgtksourceview4=enabled \
         -Dpolkit=disabled \

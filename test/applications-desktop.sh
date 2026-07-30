@@ -60,6 +60,7 @@ if grep -Eq 'depends=\([^)]*libcanberra|005-applications/libcanberra' \
     exit 1
 fi
 require_text "$ROOT/005-applications/mousepad/build.sh" 'gtksourceview4'
+require_text "$ROOT/005-applications/mousepad/build.sh" '0001-use-target-gsettings-schema-path.patch'
 
 require_command readelf tar
 pavucontrol_archive=$(awk -F '\t' '$1 == "pavucontrol" { print $5; exit }' "$EFILINUX_PACKAGE_INDEX")
@@ -69,4 +70,14 @@ trap 'rm -rf -- "$work"' EXIT
 tar -xf "$EFILINUX_PACKAGES/$pavucontrol_archive" -C "$work" devel/usr/bin/pavucontrol
 if readelf -d "$work/devel/usr/bin/pavucontrol" | grep -Fq 'libcanberra'; then
     die "pavucontrol package links the optional libcanberra event-sound stack"
+fi
+
+mousepad_archive=$(awk -F '\t' '$1 == "mousepad" { print $5; exit }' "$EFILINUX_PACKAGE_INDEX")
+[[ -n "$mousepad_archive" ]] || die "mousepad package is missing from the package index"
+mousepad_members="$work/mousepad.members"
+tar -tf "$EFILINUX_PACKAGES/$mousepad_archive" > "$mousepad_members"
+grep -Fxq 'devel/usr/share/glib-2.0/schemas/org.xfce.mousepad.gschema.xml' "$mousepad_members" || \
+    die "mousepad package does not install its GSettings schema in the target path"
+if grep -Eq '^devel/(home|tmp)/|/build/sysroot/' "$mousepad_members"; then
+    die "mousepad package contains a build-host installation path"
 fi
