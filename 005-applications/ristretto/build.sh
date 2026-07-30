@@ -10,7 +10,7 @@ source "$ROOT/lib/target-build.sh"
 
 pkgname=ristretto
 pkgver=0.13.4
-depends=(gdk-pixbuf glib glibc gtk3 libexif xfce)
+depends=(file gdk-pixbuf glib glibc gtk3 libexif xfce)
 builddepends=()
 makedepends=(gcc meson ninja pkg-config python3)
 
