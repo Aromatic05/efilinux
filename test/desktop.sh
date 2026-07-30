@@ -131,6 +131,11 @@ for autostart in \
 done
 [[ -x "$rootfs/usr/lib/xfce-polkit/xfce-polkit" ]] || \
     die "XFCE PolicyKit authentication agent is missing"
+screensaver_pam="$rootfs/etc/pam.d/xfce4-screensaver"
+[[ -f "$screensaver_pam" ]] || \
+    die "XFCE screensaver PAM service is missing"
+grep -Fqx 'auth include system-auth' "$screensaver_pam" || \
+    die "XFCE screensaver PAM service does not use system-auth"
 [[ -f "$rootfs/etc/skel/.config/xfce4/panel/whiskermenu-1.rc" ]] || \
     die "Whisker menu user defaults are missing"
 [[ -f "$rootfs/home/user/.config/xfce4/panel/whiskermenu-1.rc" ]] || \

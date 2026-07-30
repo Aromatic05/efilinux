@@ -13,7 +13,7 @@ pkgver=1
 sysroot=false
 
 depends=(
-    efilinux-system-config libnma network-manager-applet qogir-desktop-theme
+    efilinux-system-config libnma linux-pam network-manager-applet qogir-desktop-theme
     qogir-icon-theme xfce xorg-server
 )
 builddepends=()
