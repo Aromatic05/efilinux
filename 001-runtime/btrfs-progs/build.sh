@@ -61,7 +61,10 @@ build() {
 
     log "Building Btrfs-progs"
     make -j"$EFILINUX_JOBS"
-    make DESTDIR="$develdir" install
+    make DESTDIR="$develdir" \
+        udevdir=/usr/lib/udev \
+        udevruledir=/usr/lib/udev/rules.d \
+        install
 }
 
 devel() {
@@ -80,6 +83,7 @@ package() {
         /usr/bin/btrfstune
         /usr/bin/fsck.btrfs
         /usr/bin/mkfs.btrfs
+        /usr/lib/udev/rules.d/64-btrfs-dm.rules
     )
     local -a libraries=()
 
