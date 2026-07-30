@@ -75,6 +75,17 @@ for data_file in \
     [[ -f "$rootfs$data_file" ]] || die "runtime data is missing: $data_file"
 done
 
+for dconf_file in \
+    /usr/lib/gio/modules/libdconfsettings.so \
+    /usr/libexec/dconf-service \
+    /usr/share/dbus-1/services/ca.desrt.dconf.service; do
+    [[ -e "$rootfs$dconf_file" ]] || die "dconf runtime component is missing: $dconf_file"
+done
+if grep -Fq 'SystemdService=' \
+    "$rootfs/usr/share/dbus-1/services/ca.desrt.dconf.service"; then
+    die "dconf D-Bus activation still requires systemd"
+fi
+
 [[ -L "$rootfs/etc/localtime" ]] || die "/etc/localtime is not a symbolic link"
 [[ $(readlink -- "$rootfs/etc/localtime") == /usr/share/zoneinfo/UTC ]] || \
     die "/etc/localtime does not default to UTC"

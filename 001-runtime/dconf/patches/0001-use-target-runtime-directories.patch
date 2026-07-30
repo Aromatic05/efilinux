@@ -1,0 +1,17 @@
+diff --git a/meson.build b/meson.build
+index 6ad4f12..e01d669 100644
+--- a/meson.build
++++ b/meson.build
+@@ -45,8 +45,10 @@ gio_dep = dependency('gio-2.0', version: gio_req_version)
+ gio_unix_dep = dependency('gio-unix-2.0', version: gio_req_version)
+ glib_dep = dependency('glib-2.0', version: '>= 2.44.0')
+ 
+-gio_module_dir = gio_dep.get_pkgconfig_variable('giomoduledir', define_variable: ['libdir', dconf_libdir])
+-dbus_session_service_dir = dependency('dbus-1').get_pkgconfig_variable('session_bus_services_dir', define_variable: ['datadir', dconf_datadir])
++dependency('dbus-1')
++
++gio_module_dir = join_paths(dconf_libdir, 'gio', 'modules')
++dbus_session_service_dir = join_paths(dconf_datadir, 'dbus-1', 'services')
+ 
+ systemd_userunitdir = get_option('systemduserunitdir')
+ 
