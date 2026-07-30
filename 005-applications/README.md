@@ -14,7 +14,7 @@ theme does not preinstall icons for unloaded software.
 
 - Mousepad, a lightweight GTK3 text editor;
 - Ristretto, the XFCE image viewer;
-- Pavucontrol 5.0 for PipeWire's PulseAudio compatibility API;
+- Pavucontrol 5.0 for PipeWire's PulseAudio compatibility API, built without optional event sounds;
 - XFCE Task Manager;
 - XFCE Screenshooter;
 - Xarchiver and the Thunar Archive Plugin;

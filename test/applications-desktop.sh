@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
+source "$ROOT/config.sh"
+source "$ROOT/lib/common.sh"
 
 require_text() {
     local file=$1 text=$2
@@ -51,4 +53,20 @@ require_text "$ROOT/005-applications/thunar-archive-plugin/build.sh" 'xarchiver'
 require_text "$ROOT/005-applications/gparted/build.sh" 'parted'
 require_text "$ROOT/005-applications/gparted/build.sh" 'polkit'
 require_text "$ROOT/005-applications/pavucontrol/build.sh" 'gtkmm'
+require_text "$ROOT/005-applications/pavucontrol/build.sh" '0001-disable-event-sounds.patch'
+if grep -Eq 'depends=\([^)]*libcanberra|005-applications/libcanberra' \
+    "$ROOT/005-applications/pavucontrol/build.sh" "$ROOT/005-applications/build.sh"; then
+    printf 'Pavucontrol still pulls the optional libcanberra event-sound stack\n' >&2
+    exit 1
+fi
 require_text "$ROOT/005-applications/mousepad/build.sh" 'gtksourceview4'
+
+require_command readelf tar
+pavucontrol_archive=$(awk -F '\t' '$1 == "pavucontrol" { print $5; exit }' "$EFILINUX_PACKAGE_INDEX")
+[[ -n "$pavucontrol_archive" ]] || die "pavucontrol package is missing from the package index"
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
+tar -xf "$EFILINUX_PACKAGES/$pavucontrol_archive" -C "$work" devel/usr/bin/pavucontrol
+if readelf -d "$work/devel/usr/bin/pavucontrol" | grep -Fq 'libcanberra'; then
+    die "pavucontrol package links the optional libcanberra event-sound stack"
+fi
