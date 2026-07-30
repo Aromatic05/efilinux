@@ -9,7 +9,7 @@ source "$ROOT/lib/recipe.sh"
 
 pkgname=rsync
 pkgver=3.4.4
-depends=(acl glibc popt zlib)
+depends=(acl glibc popt zlib zstd)
 builddepends=()
 makedepends=(gcc make pkg-config)
 
@@ -21,12 +21,14 @@ prepare() {
 }
 
 build() {
-    cd "$builddir"
-    target_env "$srcdir/rsync/configure" --prefix=/usr --disable-static \
-        --with-included-zlib=no --with-included-popt=no --enable-acl \
-        --disable-openssl --disable-xxhash --disable-zstd --disable-lz4
-    make -j"$EFILINUX_JOBS"
-    make DESTDIR="$develdir" install
+    (
+        cd "$builddir"
+        target_env "$srcdir/rsync/configure.sh" --srcdir="$srcdir/rsync" --prefix=/usr \
+            --with-included-zlib=no --with-included-popt=no \
+            --disable-openssl --disable-xxhash --enable-zstd --disable-lz4
+        make -j"$EFILINUX_JOBS"
+        make DESTDIR="$develdir" install
+    )
 }
 
 devel() { strip_all "$develdir/usr/bin"; }
