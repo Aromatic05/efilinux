@@ -8,15 +8,15 @@ source "$ROOT/lib/package.sh"
 source "$ROOT/lib/recipe.sh"
 
 pkgname=xarchiver
-pkgver=0.5.4.25
+pkgver=0.5.4.27
 depends=(glibc gtk3 libarchive sevenzip)
 builddepends=()
 makedepends=(gcc make pkg-config)
 
 prepare() {
     local archive="$downloaddir/xarchiver-$pkgver.tar.gz"
-    download "https://github.com/ib/xarchiver/releases/download/$pkgver/xarchiver-$pkgver.tar.gz" "$archive"
-    checksum sha256 9a80c2f6a9ea17f66df4085a97f7d94021ae82f3386c90c1467009121683a445 "$archive"
+    download "https://github.com/ib/xarchiver/archive/refs/tags/$pkgver.tar.gz" "$archive"
+    checksum sha256 a52db2697f433621346dc4af59952728192878471e29f46b4b4221b7d5623a86 "$archive"
     extract "$archive" "$srcdir/xarchiver"
 }
 

@@ -16,7 +16,7 @@ makedepends=(gcc make)
 prepare() {
     local archive="$downloaddir/strace-$pkgver.tar.xz"
     download "https://github.com/strace/strace/releases/download/v$pkgver/strace-$pkgver.tar.xz" "$archive"
-    checksum sha256 2aa1e5a8a7315a5f440a4d5d01cf4cd4a317026f320de8144e81c9ff178a0f9f "$archive"
+    checksum sha256 0a7c7bedc7efc076f3242a0310af2ae63c292a36dd4236f079e88a93e98cb9c0 "$archive"
     extract "$archive" "$srcdir/strace"
 }
 

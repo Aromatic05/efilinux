@@ -16,7 +16,7 @@ makedepends=(gcc g++ make)
 prepare() {
     local archive="$downloaddir/7z${pkgver//./}-src.tar.xz"
     download "https://www.7-zip.org/a/7z${pkgver//./}-src.tar.xz" "$archive"
-    checksum sha256 4d4aa7a41f3f2ec04ed1040b76c2c2405cc2c12045d36bb1e0891c3455e92f15 "$archive"
+    checksum sha256 ed087f83ee789c1ea5f39c464c55a5c9d4008deb0efe900814f2df262b82c36e "$archive"
     extract "$archive" "$srcdir/sevenzip"
 }
 

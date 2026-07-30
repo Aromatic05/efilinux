@@ -16,7 +16,7 @@ makedepends=(gcc make)
 prepare() {
     local archive="$downloaddir/lsof-$pkgver.tar.gz"
     download "https://github.com/lsof-org/lsof/releases/download/$pkgver/lsof-$pkgver.tar.gz" "$archive"
-    checksum sha256 12a3f1d974d90bb2e5657c8faf5ba1a1f3790db27333166aa52b61c0f8d5c9c0 "$archive"
+    checksum sha256 4682c2491ec8b3d62f84e135afc1d9ead1bad5f034b50716f0c3826a4ee7d229 "$archive"
     extract "$archive" "$srcdir/lsof"
 }
 

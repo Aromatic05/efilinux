@@ -25,7 +25,8 @@ build() {
     target_env "$srcdir/curl/configure" --prefix=/usr --libdir=/usr/lib \
         --disable-static --with-openssl --with-zlib --without-libpsl --without-nghttp2 \
         --without-brotli --without-zstd --without-libssh2 --without-libssh \
-        --without-gnutls --without-gssapi --disable-ldap --disable-ldaps \
+        --without-libidn2 --without-gnutls --without-gssapi \
+        --disable-ldap --disable-ldaps \
         --disable-manual --disable-docs --with-ca-path=/etc/ssl/certs
     make -j"$EFILINUX_JOBS"
     make DESTDIR="$develdir" install

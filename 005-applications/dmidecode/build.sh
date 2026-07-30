@@ -16,7 +16,7 @@ makedepends=(gcc make)
 prepare() {
     local archive="$downloaddir/dmidecode-$pkgver.tar.xz"
     download "https://download.savannah.gnu.org/releases/dmidecode/dmidecode-$pkgver.tar.xz" "$archive"
-    checksum sha256 0e5d3e59ba982b5cc6c4f35af4e75d5e64e5bbd767f6e41e802d78f0ea8d2a13 "$archive"
+    checksum sha256 2c3aed12c85a1e6a9410d406d5e417c455466dc1bc7c89278bb32cf7cad91e8a "$archive"
     extract "$archive" "$srcdir/dmidecode"
 }
 

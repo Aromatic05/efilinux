@@ -16,7 +16,7 @@ makedepends=(gcc make)
 prepare() {
     local archive="$downloaddir/less-$pkgver.tar.gz"
     download "https://www.greenwoodsoftware.com/less/less-$pkgver.tar.gz" "$archive"
-    checksum sha256 6a39bcc1c6a8e30c90d9d43cefa0412a0c72686c7f4ab5cc0fb5f55c9be8c7b5 "$archive"
+    checksum sha256 9b68820c34fa8a0af6b0e01b74f0298bcdd40a0489c61649b47058908a153d78 "$archive"
     extract "$archive" "$srcdir/less"
 }
 

@@ -16,7 +16,7 @@ makedepends=(gcc make)
 prepare() {
     local archive="$downloaddir/ddrescue-$pkgver.tar.lz"
     download "https://download.savannah.gnu.org/releases/ddrescue/ddrescue-$pkgver.tar.lz" "$archive"
-    checksum sha256 7cbd5b59ee4fc3b029b8e7800c77f38dbfbdac7a64d0d73e0e43ba9fc3c46421 "$archive"
+    checksum sha256 2264622d309d6c87a1cfc19148292b8859a688e9bc02d4702f5cd4f288745542 "$archive"
     extract "$archive" "$srcdir/ddrescue"
 }
 
