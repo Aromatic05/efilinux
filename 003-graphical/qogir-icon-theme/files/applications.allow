@@ -1,0 +1,24 @@
+# Application icons retained in the immutable base theme.
+# Optional ZXM modules must install their own icons under hicolor.
+application-x-executable
+applications-*
+accessories-*
+audio-*
+computer
+dialog-*
+gtk-*
+help-*
+internet-*
+mail-*
+multimedia-*
+network-*
+nm-*
+org.xfce.*
+preferences-*
+system-*
+text-editor
+utilities-*
+web-browser
+xfce*
+xfsm-*
+thunar*

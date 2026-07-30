@@ -13,6 +13,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 "$ROOT/test/packages.sh"
 "$ROOT/test/graphical-core.sh"
 "$ROOT/test/graphical.sh"
+"$ROOT/test/qogir-theme.sh"
 "$ROOT/test/desktop.sh"
 "$ROOT/test/screensaver-pam.sh"
 "$ROOT/test/command-closure.sh"

@@ -1,0 +1,26 @@
+# System indicators retained for the XFCE panel and notification area.
+audio-*
+battery-*
+bluetooth-*
+camera-*
+device-*
+dialog-*
+display-*
+drive-*
+input-*
+mail-*
+media-*
+microphone-*
+network-*
+nm-*
+notification-*
+power-*
+printer-*
+security-*
+software-*
+system-*
+user-*
+volume-*
+weather-*
+xfce-*
+xfpm-*
