@@ -55,6 +55,9 @@ require_text "$ROOT/005-applications/gparted/build.sh" 'parted'
 require_text "$ROOT/005-applications/gparted/build.sh" 'polkit'
 require_text "$ROOT/005-applications/pavucontrol/build.sh" 'gtkmm'
 require_text "$ROOT/005-applications/pavucontrol/build.sh" '0001-disable-event-sounds.patch'
+require_text "$ROOT/005-applications/galculator/build.sh" '0001-fix-duplicate-preferences-definition.patch'
+require_text "$ROOT/005-applications/galculator/build.sh" '/usr/share/galculator/ui/'
+require_text "$ROOT/005-applications/galculator/build.sh" '-std=gnu17'
 if grep -Eq 'depends=\([^)]*libcanberra|005-applications/libcanberra' \
     "$ROOT/005-applications/pavucontrol/build.sh" "$ROOT/005-applications/build.sh"; then
     printf 'Pavucontrol still pulls the optional libcanberra event-sound stack\n' >&2
@@ -119,3 +122,35 @@ tar -tf "$EFILINUX_PACKAGES/$screenshooter_archive" > "$screenshooter_members"
 if grep -Eqi 'imgur|libsoup|\.la$' "$screenshooter_members"; then
     die "xfce4-screenshooter devel archive contains disabled or libtool payload"
 fi
+
+galculator_archive=$(awk -F '\t' '$1 == "galculator" { print $5; exit }' "$EFILINUX_PACKAGE_INDEX")
+[[ -n "$galculator_archive" ]] || die "galculator package is missing from the package index"
+galculator_members="$work/galculator.members"
+tar -tf "$EFILINUX_PACKAGES/$galculator_archive" > "$galculator_members"
+for member in \
+    devel/usr/bin/galculator \
+    devel/usr/share/applications/galculator.desktop \
+    devel/usr/share/galculator/ui/main_frame.ui \
+    devel/usr/share/galculator/ui/basic_buttons_gtk3.ui \
+    devel/usr/share/galculator/ui/scientific_buttons_gtk3.ui \
+    devel/usr/share/galculator/ui/prefs_gtk3.ui; do
+    grep -Fxq "$member" "$galculator_members" || die "galculator package is missing $member"
+done
+galculator_install="$work/galculator.install"
+tar -xOf "$EFILINUX_PACKAGES/$galculator_archive" .INSTALL > "$galculator_install"
+if grep -Eq 'galculator/ui/.*(gtk2|hildon|ume)' "$galculator_install"; then
+    die "galculator runtime subset retains unused legacy UI definitions"
+fi
+for path in \
+    /usr/share/galculator/ui/main_frame.ui \
+    /usr/share/galculator/ui/basic_buttons_gtk3.ui \
+    /usr/share/galculator/ui/scientific_buttons_gtk3.ui \
+    /usr/share/galculator/ui/prefs_gtk3.ui; do
+    grep -Fxq "$path" "$galculator_install" || die "galculator runtime subset is missing $path"
+done
+tar -xf "$EFILINUX_PACKAGES/$galculator_archive" -C "$work" devel/usr/bin/galculator
+galculator_help="$work/galculator.help"
+"$EFILINUX_SYSROOT/usr/lib/ld-linux-x86-64.so.2" \
+    --library-path "$work/devel/usr/lib:$EFILINUX_SYSROOT/usr/lib" \
+    "$work/devel/usr/bin/galculator" --help > "$galculator_help"
+grep -Fq 'galculator v2.1.4' "$galculator_help" || die "galculator target binary did not execute"
