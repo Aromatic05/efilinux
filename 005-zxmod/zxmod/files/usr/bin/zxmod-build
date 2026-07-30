@@ -38,6 +38,7 @@ root=$1
 output=$2
 [ -d "$root" ] || { printf 'zxmod-build: ROOT is not a directory\n' >&2; exit 1; }
 [ ! -e "$output" ] || { printf 'zxmod-build: refusing to replace %s\n' "$output" >&2; exit 1; }
+case $output in *.zxm) ;; *) printf 'zxmod-build: output must end in .zxm\n' >&2; exit 1 ;; esac
 
 for entry in "$root"/*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue

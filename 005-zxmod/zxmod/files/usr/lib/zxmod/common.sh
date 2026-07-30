@@ -102,8 +102,13 @@ zxmod_validate_paths() {
             *'//'|*'/./'*|*'/../'*|*'/..'|*'/'|*"$(printf '\n')"*)
                 zxmod_die "unsafe payload path: $zxmod_relative" ;;
         esac
-        [ -d "$zxmod_path" ] && [ ! -L "$zxmod_path" ] && continue
         zxmod_base="$ZXMOD_RUN_ROOT/base/$zxmod_relative"
+        if [ -d "$zxmod_path" ] && [ ! -L "$zxmod_path" ]; then
+            if zxmod_path_exists "$zxmod_base" && { [ ! -d "$zxmod_base" ] || [ -L "$zxmod_base" ]; }; then
+                zxmod_die "module directory conflicts with base system: /$zxmod_relative"
+            fi
+            continue
+        fi
         zxmod_path_exists "$zxmod_base" && zxmod_die "module path conflicts with base system: /$zxmod_relative"
         while IFS='\t' read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
             [ -n "$zxmod_active_id" ] || continue
