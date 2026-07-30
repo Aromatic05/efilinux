@@ -23,15 +23,16 @@ prepare() {
 }
 
 build() {
-    target_release_configure "$srcdir/source" "$builddir" --disable-static
+    target_release_configure "$srcdir/source" "$builddir" --disable-static --sbindir=/usr/bin
     target_make_install "$builddir" "$develdir"
 }
 
 devel() { strip_all "$develdir/usr/bin" "$develdir/usr/lib"; }
 
 package() {
-    local -a keep=(/usr/bin/parted)
+    local -a keep=(/usr/bin/parted /usr/bin/partprobe)
     package_add_library_family keep 'libparted.so.2*'
+    package_add_library_family keep 'libparted-fs-resize.so.0*'
     [[ ! -d "$pkgdir/usr/share/parted" ]] || keep+=(/usr/share/parted/)
     package_keep "${keep[@]}"
 }

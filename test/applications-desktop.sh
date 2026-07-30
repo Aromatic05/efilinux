@@ -154,3 +154,15 @@ galculator_help="$work/galculator.help"
     --library-path "$work/devel/usr/lib:$EFILINUX_SYSROOT/usr/lib" \
     "$work/devel/usr/bin/galculator" --help > "$galculator_help"
 grep -Fq 'galculator v2.1.4' "$galculator_help" || die "galculator target binary did not execute"
+
+parted_archive=$(awk -F '\t' '$1 == "parted" { print $5; exit }' "$EFILINUX_PACKAGE_INDEX")
+[[ -n "$parted_archive" ]] || die "parted package is missing from the package index"
+parted_install="$work/parted.install"
+tar -xOf "$EFILINUX_PACKAGES/$parted_archive" .INSTALL > "$parted_install"
+for path in \
+    /usr/bin/parted \
+    /usr/bin/partprobe \
+    /usr/lib/libparted.so.2 \
+    /usr/lib/libparted-fs-resize.so.0; do
+    grep -Fxq "$path" "$parted_install" || die "parted runtime subset is missing $path"
+done
