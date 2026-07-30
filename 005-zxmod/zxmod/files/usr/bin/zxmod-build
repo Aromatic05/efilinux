@@ -1,0 +1,62 @@
+#!/bin/sh
+
+set -eu
+
+usage() {
+    cat >&2 <<'USAGE'
+usage: zxmod-build --id ID --version VERSION [--arch ARCH] [--description TEXT] ROOT OUTPUT.zxm
+
+ROOT may contain only usr/ and opt/.  Metadata is written as metadata/manifest.
+USAGE
+    exit 2
+}
+
+id=
+version=
+arch=$(uname -m)
+description=
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        --id) id=${2:-}; shift 2 ;;
+        --version) version=${2:-}; shift 2 ;;
+        --arch) arch=${2:-}; shift 2 ;;
+        --description) description=${2:-}; shift 2 ;;
+        --) shift; break ;;
+        -*) usage ;;
+        *) break ;;
+    esac
+done
+
+[ $# -eq 2 ] && [ -n "$id" ] && [ -n "$version" ] || usage
+case $id in [a-z0-9][a-z0-9._-]*) [ ${#id} -le 64 ] || exit 2 ;; *) exit 2 ;; esac
+case $version in *[!A-Za-z0-9._+:-]*|'') exit 2 ;; esac
+case $arch in *[!A-Za-z0-9._-]*|'') exit 2 ;; esac
+case $description in *"$(printf '\n')"*|*=*) exit 2 ;; esac
+
+root=$1
+output=$2
+[ -d "$root" ] || { printf 'zxmod-build: ROOT is not a directory\n' >&2; exit 1; }
+[ ! -e "$output" ] || { printf 'zxmod-build: refusing to replace %s\n' "$output" >&2; exit 1; }
+
+for entry in "$root"/*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    case $(basename -- "$entry") in
+        usr|opt) [ -d "$entry" ] && [ ! -L "$entry" ] || exit 1 ;;
+        *) printf 'zxmod-build: ROOT may only contain usr and opt\n' >&2; exit 1 ;;
+    esac
+done
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT HUP INT TERM
+mkdir -p "$work/metadata" "$work/root"
+cp -a "$root/." "$work/root/"
+{
+    printf 'format=1\n'
+    printf 'id=%s\n' "$id"
+    printf 'arch=%s\n' "$arch"
+    printf 'version=%s\n' "$version"
+    [ -n "$description" ] && printf 'description=%s\n' "$description"
+} > "$work/metadata/manifest"
+mksquashfs "$work" "$output" -noappend -comp zstd -Xcompression-level 19 \
+    -all-root -no-xattrs -no-exports -mkfs-time 0 -all-time 0 >/dev/null
