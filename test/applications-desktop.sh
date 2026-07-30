@@ -49,6 +49,7 @@ galculator	/usr/share/applications/	/usr/share/pixmaps
 gparted	/usr/share/polkit-1/actions/	/usr/libexec/gpartedbin
 APPLICATIONS
 
+require_text "$ROOT/005-applications/xfce4-screenshooter/build.sh" '0001-disable-imgur-upload.patch'
 require_text "$ROOT/005-applications/thunar-archive-plugin/build.sh" 'xarchiver'
 require_text "$ROOT/005-applications/gparted/build.sh" 'parted'
 require_text "$ROOT/005-applications/gparted/build.sh" 'polkit'
@@ -80,4 +81,41 @@ grep -Fxq 'devel/usr/share/glib-2.0/schemas/org.xfce.mousepad.gschema.xml' "$mou
     die "mousepad package does not install its GSettings schema in the target path"
 if grep -Eq '^devel/(home|tmp)/|/build/sysroot/' "$mousepad_members"; then
     die "mousepad package contains a build-host installation path"
+fi
+
+screenshooter_archive=$(awk -F '\t' '$1 == "xfce4-screenshooter" { print $5; exit }' "$EFILINUX_PACKAGE_INDEX")
+[[ -n "$screenshooter_archive" ]] || die "xfce4-screenshooter package is missing from the package index"
+tar -xf "$EFILINUX_PACKAGES/$screenshooter_archive" -C "$work" \
+    devel/usr/bin/xfce4-screenshooter \
+    devel/usr/lib/xfce4/panel/plugins/libscreenshooterplugin.so
+for executable in \
+    "$work/devel/usr/bin/xfce4-screenshooter" \
+    "$work/devel/usr/lib/xfce4/panel/plugins/libscreenshooterplugin.so"; do
+    if readelf -d "$executable" | grep -Eqi 'libsoup'; then
+        die "xfce4-screenshooter package links the disabled libsoup upload stack"
+    fi
+done
+screenshooter_help="$work/screenshooter.help"
+"$EFILINUX_SYSROOT/usr/lib/ld-linux-x86-64.so.2" \
+    --library-path "$work/devel/usr/lib:$EFILINUX_SYSROOT/usr/lib" \
+    "$work/devel/usr/bin/xfce4-screenshooter" --help > "$screenshooter_help" 2>&1
+if grep -Eqi 'imgur|upload' "$screenshooter_help"; then
+    die "xfce4-screenshooter still exposes the disabled upload interface"
+fi
+screenshooter_install="$work/screenshooter.install"
+tar -xOf "$EFILINUX_PACKAGES/$screenshooter_archive" .INSTALL > "$screenshooter_install"
+for path in \
+    /usr/bin/xfce4-screenshooter \
+    /usr/lib/xfce4/panel/plugins/libscreenshooterplugin.so \
+    /usr/share/applications/xfce4-screenshooter.desktop; do
+    grep -Fxq "$path" "$screenshooter_install" || \
+        die "xfce4-screenshooter install subset is missing $path"
+done
+if grep -Eqi 'imgur|libsoup|\.la$' "$screenshooter_install"; then
+    die "xfce4-screenshooter install subset contains disabled or development payload"
+fi
+screenshooter_members="$work/screenshooter.members"
+tar -tf "$EFILINUX_PACKAGES/$screenshooter_archive" > "$screenshooter_members"
+if grep -Eqi 'imgur|libsoup|\.la$' "$screenshooter_members"; then
+    die "xfce4-screenshooter devel archive contains disabled or libtool payload"
 fi
