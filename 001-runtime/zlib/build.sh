@@ -6,28 +6,61 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-ensure_directories
-package="zlib-$ZLIB_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
+pkgname=zlib
+pkgver=1.3.2
 
-require_command curl gcc make md5sum tar
-prepare_package "$package"
-archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
+depends=(
+    glibc
+)
 
-download "https://zlib.net/fossils/$package.tar.gz" "$archive"
-verify_md5 "$ZLIB_MD5" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+builddepends=()
 
-log "Configuring zlib"
-cd "$PACKAGE_SOURCE"
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-    ./configure --prefix=/usr --libdir=/usr/lib
+makedepends=(
+    gcc
+    make
+)
 
-log "Building zlib"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
+prepare() {
+    local archive="$downloaddir/zlib-$pkgver.tar.gz"
 
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+    download \
+        "https://zlib.net/fossils/zlib-$pkgver.tar.gz" \
+        "$archive"
+    checksum \
+        md5 \
+        a1e6c958597af3c67d162995a342138a \
+        "$archive"
+    extract "$archive" "$srcdir/zlib"
+}
+
+build() {
+    log "Configuring zlib"
+    cd "$srcdir/zlib"
+    CC=gcc CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        ./configure --prefix=/usr --libdir=/usr/lib
+
+    log "Building zlib"
+    make
+    make DESTDIR="$develdir" install
+}
+
+check() {
+    make -C "$srcdir/zlib" check
+}
+
+devel() {
+    rm -rf "$develdir/usr/share/man"
+    find "$develdir/usr/share" -depth -type d -empty -delete 2>/dev/null || true
+    strip_all "$develdir/usr/lib"
+}
+
+package() {
+    rm -rf \
+        "$pkgdir/usr/include" \
+        "$pkgdir/usr/lib/pkgconfig"
+    find "$pkgdir/usr/lib" -type f -name '*.a' -delete
+}
+
+recipe_main "$@"

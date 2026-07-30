@@ -4,41 +4,72 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/001-runtime/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl gcc make sha256sum tar
-ensure_directories
+pkgname=libyaml
+pkgver=0.2.5
 
-package="libyaml-$LIBYAML_VERSION"
-recipe_inputs=("$ROOT/001-runtime/config.sh")
-if binary_package_restore_sysroot \
-    "$package" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"; then
-    exit 0
-fi
-
-archive="$EFILINUX_DOWNLOADS/yaml-$LIBYAML_VERSION.tar.gz"
-prepare_package "$package"
-download "https://pyyaml.org/download/libyaml/yaml-$LIBYAML_VERSION.tar.gz" "$archive"
-verify_sha256 "$LIBYAML_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
-
-log "Configuring libyaml"
-(
-    cd "$PACKAGE_BUILD"
-    CC=gcc \
-    CFLAGS="$(target_cflags)" \
-    LDFLAGS="$(target_ldflags)" \
-        "$PACKAGE_SOURCE/configure" \
-        --prefix=/usr \
-        --libdir=/usr/lib \
-        --disable-static
+depends=(
+    glibc
 )
-log "Building libyaml"
-make -C "$PACKAGE_BUILD" -j"$EFILINUX_JOBS"
-make -C "$PACKAGE_BUILD" DESTDIR="$PACKAGE_STAGING" install
-find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 -name '*.la' -delete
+builddepends=()
+makedepends=(
+    gcc
+    make
+)
 
-binary_package_publish_sysroot \
-    "$package" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"
+prepare() {
+    local archive="$downloaddir/yaml-$pkgver.tar.gz"
+
+    download \
+        "https://pyyaml.org/download/libyaml/yaml-$pkgver.tar.gz" \
+        "$archive"
+    checksum \
+        sha256 \
+        c642ae9b75fee120b2d96c712538bd2cf283228d2337df2cf2988e3c02678ef4 \
+        "$archive"
+    extract "$archive" "$srcdir/libyaml"
+}
+
+build() {
+    log "Configuring libyaml"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        "$srcdir/libyaml/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            --disable-static
+
+    log "Building libyaml"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    find "$develdir/usr/lib" -maxdepth 1 -name '*.la' -delete
+    strip_all "$develdir/usr/lib"
+}
+
+package() {
+    local library relative
+    local -a keep=()
+    local -a libraries=()
+
+    mapfile -d '' -t libraries < <(
+        find "$pkgdir/usr/lib" -maxdepth 1 \
+            \( -type f -o -type l \) \
+            -name 'libyaml-0.so.*' \
+            -print0 | LC_ALL=C sort -z
+    )
+    ((${#libraries[@]} > 0)) || die "libyaml runtime library is missing"
+    for library in "${libraries[@]}"; do
+        relative=/${library#"$pkgdir/"}
+        keep+=("$relative")
+    done
+
+    package_keep "${keep[@]}"
+}
+
+recipe_main "$@"

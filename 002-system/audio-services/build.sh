@@ -4,8 +4,6 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/001-runtime/config.sh"
-source "$ROOT/001-runtime/desktop-libraries/config.sh"
 source "$ROOT/002-system/desktop-services/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
@@ -14,7 +12,6 @@ require_command curl gcc meson ninja pkg-config sha256sum tar
 ensure_directories
 
 recipe_inputs=(
-    "$ROOT/001-runtime/config.sh"
     "$ROOT/002-system/desktop-services/config.sh"
 )
 

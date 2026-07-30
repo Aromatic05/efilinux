@@ -6,36 +6,63 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl gcc make sha256sum tar
-ensure_directories
+pkgname=libffi
+pkgver=3.7.1
 
-package="libffi-$LIBFFI_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
-prepare_package "$package"
+depends=(
+    glibc
+)
+builddepends=()
+makedepends=(
+    gcc
+    make
+)
 
-download \
-    "https://github.com/libffi/libffi/releases/download/v$LIBFFI_VERSION/$package.tar.gz" \
-    "$archive"
-verify_sha256 "$LIBFFI_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/libffi-$pkgver.tar.gz"
 
-log "Configuring libffi"
-cd "$PACKAGE_BUILD"
-CC=gcc \
-CFLAGS="$(target_cflags)" \
-LDFLAGS="$(target_ldflags)" \
-    "$PACKAGE_SOURCE/configure" \
-    --prefix=/usr \
-    --libdir=/usr/lib \
-    --disable-static \
-    --disable-docs
+    download \
+        "https://github.com/libffi/libffi/releases/download/v$pkgver/libffi-$pkgver.tar.gz" \
+        "$archive"
+    checksum \
+        sha256 \
+        d5e9a6638ddbd2513ddb54518eb67e4bbe6fa707bcc01c10f6212f0a088d819d \
+        "$archive"
+    extract "$archive" "$srcdir/libffi"
+}
 
-log "Building libffi"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
-rm -f "$PACKAGE_STAGING/usr/lib"/*.la
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+build() {
+    log "Configuring libffi"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        "$srcdir/libffi/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            --disable-static \
+            --disable-docs
+
+    log "Building libffi"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    rm -f "$develdir/usr/lib"/*.la
+    strip_all "$develdir/usr/lib"
+}
+
+package() {
+    local library_target
+
+    library_target=$(readlink -- "$pkgdir/usr/lib/libffi.so.8")
+    [[ -f "$pkgdir/usr/lib/$library_target" ]] || \
+        die "libffi SONAME target is missing: $library_target"
+
+    package_keep \
+        /usr/lib/libffi.so.8 \
+        "/usr/lib/$library_target"
+}
+
+recipe_main "$@"

@@ -4,7 +4,6 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/001-runtime/config.sh"
 source "$ROOT/002-system/desktop-config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
@@ -14,7 +13,6 @@ ensure_directories
 
 package="libgudev-$LIBGUDEV_VERSION"
 recipe_inputs=(
-    "$ROOT/001-runtime/config.sh"
     "$ROOT/002-system/desktop-config.sh"
 )
 if binary_package_restore_sysroot \

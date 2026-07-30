@@ -6,28 +6,40 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-ensure_directories
-package="linux-headers-$LINUX_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
+pkgname=linux-headers
+pkgver=6.18.10
 
-require_command curl make md5sum tar
-prepare_package "$package"
-archive="$EFILINUX_DOWNLOADS/linux-$LINUX_VERSION.tar.xz"
+depends=()
+builddepends=()
+makedepends=(
+    make
+)
 
-download \
-    "https://www.kernel.org/pub/linux/kernel/v${LINUX_VERSION%%.*}.x/linux-$LINUX_VERSION.tar.xz" \
-    "$archive"
-verify_md5 "$LINUX_MD5" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/linux-$pkgver.tar.xz"
 
-log "Installing Linux UAPI headers"
-make -C "$PACKAGE_SOURCE" mrproper
-make -C "$PACKAGE_SOURCE" headers
-find "$PACKAGE_SOURCE/usr/include" -type f ! -name '*.h' -delete
-mkdir -p "$PACKAGE_STAGING/usr"
-cp -a "$PACKAGE_SOURCE/usr/include" "$PACKAGE_STAGING/usr/"
+    download \
+        "https://www.kernel.org/pub/linux/kernel/v${pkgver%%.*}.x/linux-$pkgver.tar.xz" \
+        "$archive"
+    checksum \
+        md5 \
+        660e706a43f634b1fcd911f8839d2f61 \
+        "$archive"
+    extract "$archive" "$srcdir/linux"
+}
 
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+build() {
+    make -C "$srcdir/linux" mrproper
+    make -C "$srcdir/linux" headers
+    find "$srcdir/linux/usr/include" -type f ! -name '*.h' -delete
+    mkdir -p "$develdir/usr"
+    cp -a "$srcdir/linux/usr/include" "$develdir/usr/"
+}
+
+package() {
+    package_keep
+}
+
+recipe_main "$@"

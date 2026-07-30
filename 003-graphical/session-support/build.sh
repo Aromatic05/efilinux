@@ -4,7 +4,6 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/001-runtime/config.sh"
 source "$ROOT/002-system/desktop-config.sh"
 source "$ROOT/003-graphical/config.sh"
 source "$ROOT/003-graphical/session-support/config.sh"
@@ -16,7 +15,6 @@ require_command autoreconf curl find gcc make meson ninja pkg-config sha256sum t
 ensure_directories
 
 recipe_inputs=(
-    "$ROOT/001-runtime/config.sh"
     "$ROOT/002-system/desktop-config.sh"
     "$ROOT/003-graphical/config.sh"
     "$ROOT/003-graphical/session-support/config.sh"

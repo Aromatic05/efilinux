@@ -4,7 +4,6 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/001-runtime/config.sh"
 source "$ROOT/003-graphical/config.sh"
 source "$ROOT/003-graphical/desktop-support/config.sh"
 source "$ROOT/003-graphical/session-support/config.sh"

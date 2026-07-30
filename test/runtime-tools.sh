@@ -13,6 +13,13 @@ rootfs="$EFILINUX_ROOTFS"
 loader="$rootfs/usr/lib/ld-linux-x86-64.so.2"
 library_path="$rootfs/usr/lib"
 
+rootfs_owner() {
+    local path=$1
+    awk -F '\t' -v path="$path" \
+        'NR > 1 && $1 == path && $2 != "directory" { print $3; exit }' \
+        "$EFILINUX_ROOTFS_OWNERS"
+}
+
 require_formal_program() {
     local name=$1
     local path="$rootfs/usr/bin/$name"
@@ -213,10 +220,10 @@ require_runtime_library() {
     die "runtime library family is missing: $pattern"
 }
 
-require_runtime_library 'libgcc_s.so.1*' "gcc-runtime-$GCC_RUNTIME_VERSION"
-require_runtime_library 'libstdc++.so.6*' "gcc-runtime-$GCC_RUNTIME_VERSION"
-require_runtime_library 'libffi.so.8*' "libffi-$LIBFFI_VERSION"
-require_runtime_library 'libpcre2-8.so.0*' "pcre2-$PCRE2_VERSION"
+require_runtime_library 'libgcc_s.so.1*' gcc-libs
+require_runtime_library 'libstdc++.so.6*' gcc-libs
+require_runtime_library 'libffi.so.8*' libffi
+require_runtime_library 'libpcre2-8.so.0*' pcre2
 
 for compiler in gcc g++ cc c++ cpp gcov; do
     [[ ! -e "$rootfs/usr/bin/$compiler" ]] || \
@@ -233,7 +240,7 @@ if find "$rootfs" -type f \( -name '*.a' -o -name '*.la' -o -name '*.pc' \) \
 fi
 [[ ! -d "$rootfs/usr/include" ]] || die "target headers leaked into rootfs"
 
-if awk -F '\t' '{ count[$1]++ } END { for (path in count) if (count[path] > 1) exit 1 }' \
+if awk -F '\t' 'NR > 1 && $2 != "directory" { count[$1]++ } END { for (path in count) if (count[path] > 1) exit 1 }' \
     "$EFILINUX_ROOTFS_OWNERS"; then
     :
 else

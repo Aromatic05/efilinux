@@ -7,7 +7,7 @@ source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/000-kernel/linux/common.sh"
 
-require_command bc bison curl flex gcc make md5sum openssl perl python3
+require_command bc bison curl fakeroot flex gcc make md5sum openssl perl python3
 ensure_directories
 
 initramfs_tree="$EFILINUX_ROOTFS"
@@ -16,14 +16,14 @@ manifest_generator="$ROOT/000-kernel/image/gen_initramfs_manifest.py"
 efi_image="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
 
 [[ -d "$initramfs_tree" ]] || die "initramfs tree has not been built"
-[[ -f "$EFILINUX_INITRAMFS_DEVICES" ]] || \
-    die "initramfs device manifest has not been built"
+[[ -f "$EFILINUX_ROOTFS_FAKEROOT_STATE" ]] || \
+    die "rootfs fakeroot metadata has not been built"
 
 ensure_clean_kernel_build_tree
-python3 "$manifest_generator" \
-    --rootfs "$initramfs_tree" \
-    --devices "$EFILINUX_INITRAMFS_DEVICES" \
-    --output "$initramfs_manifest"
+fakeroot -i "$EFILINUX_ROOTFS_FAKEROOT_STATE" -- \
+    python3 "$manifest_generator" \
+        --rootfs "$initramfs_tree" \
+        --output "$initramfs_manifest"
 configure_embedded_initramfs "$initramfs_manifest"
 remove_embedded_initramfs_outputs "$EFILINUX_KERNEL_BUILD"
 

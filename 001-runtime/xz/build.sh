@@ -6,35 +6,68 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-ensure_directories
-package="xz-$XZ_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
+pkgname=xz
+pkgver=5.8.2
 
-require_command curl gcc make md5sum tar
-prepare_package "$package"
-archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
+depends=(
+    glibc
+)
+builddepends=()
+makedepends=(
+    gcc
+    make
+)
 
-download \
-    "https://github.com/tukaani-project/xz/releases/download/v$XZ_VERSION/$package.tar.xz" \
-    "$archive"
-verify_md5 "$XZ_MD5" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/xz-$pkgver.tar.xz"
 
-log "Configuring XZ Utils"
-cd "$PACKAGE_BUILD"
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-    "$PACKAGE_SOURCE/configure" \
-        --prefix=/usr \
-        --libdir=/usr/lib \
-        --disable-static \
-        --disable-doc \
-        --disable-nls
+    download \
+        "https://github.com/tukaani-project/xz/releases/download/v$pkgver/xz-$pkgver.tar.xz" \
+        "$archive"
+    checksum \
+        md5 \
+        87c8bb8addf7189d3a51f6a5f03163fc \
+        "$archive"
+    extract "$archive" "$srcdir/xz"
+}
 
-log "Building XZ Utils"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
+build() {
+    log "Configuring XZ Utils"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        "$srcdir/xz/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            --disable-static \
+            --disable-doc \
+            --disable-nls
 
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+    log "Building XZ Utils"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    strip_all \
+        "$develdir/usr/bin" \
+        "$develdir/usr/lib"
+}
+
+package() {
+    local liblzma_target
+
+    liblzma_target=$(readlink -- "$pkgdir/usr/lib/liblzma.so.5")
+    [[ -f "$pkgdir/usr/lib/$liblzma_target" ]] || \
+        die "XZ runtime SONAME target is missing: $liblzma_target"
+
+    package_keep \
+        /usr/bin/xz \
+        /usr/bin/unxz \
+        /usr/bin/xzcat \
+        /usr/lib/liblzma.so.5 \
+        "/usr/lib/$liblzma_target"
+}
+
+recipe_main "$@"

@@ -1,25 +1,59 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
-require_command autoreconf curl gcc make patch python3 sha256sum tar
-ensure_directories
-package="kbd-$KBD_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
-patch_file="$EFILINUX_DOWNLOADS/$package-backspace-1.patch"
-prepare_package "$package"
-download "https://www.kernel.org/pub/linux/utils/kbd/$package.tar.xz" "$archive"
-download "https://www.linuxfromscratch.org/patches/lfs/development/$package-backspace-1.patch" "$patch_file"
-verify_sha256 "$KBD_SHA256" "$archive"
-verify_sha256 "$KBD_BACKSPACE_SHA256" "$patch_file"
-extract_source "$archive" "$PACKAGE_SOURCE"
-patch -d "$PACKAGE_SOURCE" -Np1 < "$patch_file"
-python3 - "$PACKAGE_SOURCE/configure.ac" <<'PY'
+source "$ROOT/lib/recipe.sh"
+
+pkgname=kbd
+pkgver=2.10.0
+
+depends=(
+    glibc
+    xz
+    zlib
+    zstd
+)
+builddepends=(
+    linux-headers
+)
+makedepends=(
+    autoreconf
+    gcc
+    make
+    patch
+    python3
+)
+
+prepare() {
+    local archive="$downloaddir/kbd-$pkgver.tar.xz"
+    local patch_file="$downloaddir/kbd-$pkgver-backspace-1.patch"
+
+    download \
+        "https://www.kernel.org/pub/linux/utils/kbd/kbd-$pkgver.tar.xz" \
+        "$archive"
+    download \
+        "https://www.linuxfromscratch.org/patches/lfs/development/kbd-$pkgver-backspace-1.patch" \
+        "$patch_file"
+    checksum \
+        sha256 \
+        6e5ca4f8d76ee9e3a8db700b667f13e12aac9933828a64e1aaad93d26be9b479 \
+        "$archive"
+    checksum \
+        sha256 \
+        8be28dcb11420624a500f2ea4fe975f771174bffee50e54ec8cd295a2dec104e \
+        "$patch_file"
+    extract "$archive" "$srcdir/kbd"
+}
+
+build() {
+    local patch_file="$downloaddir/kbd-$pkgver-backspace-1.patch"
+
+    patch -d "$srcdir/kbd" -Np1 < "$patch_file"
+    python3 - "$srcdir/kbd/configure.ac" <<'PY'
 from pathlib import Path
 import sys
 
@@ -31,14 +65,43 @@ if source.count(old) != 1:
     raise SystemExit("unexpected Kbd bzip2 fallback structure")
 path.write_text(source.replace(old, new))
 PY
-autoreconf -fi "$PACKAGE_SOURCE"
-log "Configuring Kbd"
-cd "$PACKAGE_BUILD"
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-    "$PACKAGE_SOURCE/configure" --prefix=/usr --bindir=/usr/bin \
-        --disable-vlock --disable-nls --disable-tests --disable-xkb \
-        --with-zlib --without-bzip2 --with-lzma --with-zstd
-log "Building Kbd"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+    autoreconf -fi "$srcdir/kbd"
+
+    log "Configuring Kbd"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        "$srcdir/kbd/configure" \
+            --prefix=/usr \
+            --bindir=/usr/bin \
+            --disable-vlock \
+            --disable-nls \
+            --disable-tests \
+            --disable-xkb \
+            --with-zlib \
+            --without-bzip2 \
+            --with-lzma \
+            --with-zstd
+
+    log "Building Kbd"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    strip_all "$develdir/usr/bin"
+}
+
+package() {
+    package_keep \
+        /usr/bin/dumpkeys \
+        /usr/bin/kbd_mode \
+        /usr/bin/loadkeys \
+        /usr/bin/setfont \
+        /usr/bin/showkey \
+        /usr/share/keymaps/ \
+        /usr/share/consolefonts/ \
+        /usr/share/consoletrans/ \
+        /usr/share/unimaps/
+}
+
+recipe_main "$@"

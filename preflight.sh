@@ -11,7 +11,10 @@ required_commands=(
     depmod
     flex
     file
+    fakeroot
     find
+    getcap
+    getfacl
     g++
     gawk
     gcc
@@ -36,6 +39,8 @@ required_commands=(
     sort
     strip
     tar
+    tclsh
+    unzip
     xargs
     xgettext
     zstd

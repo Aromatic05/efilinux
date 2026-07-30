@@ -6,38 +6,67 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl gcc make sha256sum tar
-ensure_directories
+pkgname=pcre2
+pkgver=10.47
 
-package="pcre2-$PCRE2_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.bz2"
-prepare_package "$package"
+depends=(
+    glibc
+)
+builddepends=()
+makedepends=(
+    gcc
+    make
+)
 
-download \
-    "https://github.com/PCRE2Project/pcre2/releases/download/$package/$package.tar.bz2" \
-    "$archive"
-verify_sha256 "$PCRE2_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/pcre2-$pkgver.tar.bz2"
 
-log "Configuring PCRE2"
-cd "$PACKAGE_BUILD"
-CC=gcc \
-CFLAGS="$(target_cflags)" \
-LDFLAGS="$(target_ldflags)" \
-    "$PACKAGE_SOURCE/configure" \
-    --prefix=/usr \
-    --libdir=/usr/lib \
-    --disable-static \
-    --disable-pcre2-16 \
-    --disable-pcre2-32 \
-    --enable-jit
+    download \
+        "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-$pkgver/pcre2-$pkgver.tar.bz2" \
+        "$archive"
+    checksum \
+        sha256 \
+        47fe8c99461250d42f89e6e8fdaeba9da057855d06eb7fc08d9ca03fd08d7bc7 \
+        "$archive"
+    extract "$archive" "$srcdir/pcre2"
+}
 
-log "Building PCRE2"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
-rm -f "$PACKAGE_STAGING/usr/lib"/*.la
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+build() {
+    log "Configuring PCRE2"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        "$srcdir/pcre2/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            --disable-static \
+            --disable-pcre2-16 \
+            --disable-pcre2-32 \
+            --enable-jit
+
+    log "Building PCRE2"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    rm -f "$develdir/usr/lib"/*.la
+    strip_all \
+        "$develdir/usr/bin" \
+        "$develdir/usr/lib"
+}
+
+package() {
+    local library_target
+
+    library_target=$(readlink -- "$pkgdir/usr/lib/libpcre2-8.so.0")
+    [[ -f "$pkgdir/usr/lib/$library_target" ]] || \
+        die "PCRE2 SONAME target is missing: $library_target"
+
+    package_keep \
+        /usr/lib/libpcre2-8.so.0 \
+        "/usr/lib/$library_target"
+}
+
+recipe_main "$@"

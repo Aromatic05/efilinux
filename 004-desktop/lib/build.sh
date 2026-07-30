@@ -3,7 +3,6 @@
 set -euo pipefail
 
 DESKTOP_RECIPE_INPUTS=(
-    "$ROOT/001-runtime/config.sh"
     "$ROOT/002-system/desktop-config.sh"
     "$ROOT/003-graphical/config.sh"
     "$ROOT/003-graphical/desktop-support/config.sh"

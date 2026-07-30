@@ -34,7 +34,7 @@ ensure_directories() {
         "$EFILINUX_SYSROOT"
 }
 
-download() {
+download_file() {
     local url=$1
     local output=$2
     local partial="$output.part"

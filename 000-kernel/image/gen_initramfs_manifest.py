@@ -6,27 +6,15 @@ import argparse
 import os
 import stat
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Iterator
 
 
-@dataclass(frozen=True)
-class OwnershipRule:
-    path: PurePosixPath
-    uid: int
-    gid: int
-
-    def applies_to(self, candidate: PurePosixPath) -> bool:
-        return candidate == self.path or self.path in candidate.parents
-
-
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a deterministic gen_init_cpio manifest for the EFILinux rootfs."
+        description="Generate a deterministic gen_init_cpio manifest for the EFI Linux rootfs."
     )
     parser.add_argument("--rootfs", required=True, type=Path)
-    parser.add_argument("--devices", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
 
@@ -36,56 +24,11 @@ def reject_whitespace(value: str, description: str) -> None:
         raise ValueError(f"{description} contains whitespace unsupported by gen_init_cpio: {value}")
 
 
-def path_exists_without_following_ancestor_symlinks(rootfs: Path, path: PurePosixPath) -> bool:
-    current = rootfs
-    for index, component in enumerate(path.parts[1:]):
-        current = current / component
-        try:
-            metadata = current.lstat()
-        except FileNotFoundError:
-            return False
-        if index + 1 < len(path.parts[1:]) and stat.S_ISLNK(metadata.st_mode):
-            return False
-    return True
-
-
-def parse_home_ownership_rules(rootfs: Path) -> list[OwnershipRule]:
-    passwd_path = rootfs / "etc/passwd"
-    homes: dict[PurePosixPath, set[tuple[int, int]]] = {}
-
-    with passwd_path.open(encoding="utf-8") as passwd_file:
-        for line_number, raw_line in enumerate(passwd_file, start=1):
-            line = raw_line.rstrip("\n")
-            if not line or line.startswith("#"):
-                continue
-            fields = line.split(":")
-            if len(fields) != 7:
-                raise ValueError(f"invalid passwd entry at {passwd_path}:{line_number}")
-            _, _, uid_text, gid_text, _, home_text, _ = fields
-            home = PurePosixPath(home_text)
-            if not home.is_absolute() or home == PurePosixPath("/"):
-                continue
-            if not path_exists_without_following_ancestor_symlinks(rootfs, home):
-                continue
-            homes.setdefault(home, set()).add((int(uid_text), int(gid_text)))
-
-    rules = [
-        OwnershipRule(path=home, uid=next(iter(owners))[0], gid=next(iter(owners))[1])
-        for home, owners in homes.items()
-        if len(owners) == 1
-    ]
-    return sorted(rules, key=lambda rule: len(rule.path.parts), reverse=True)
-
-
-def ownership_for(path: PurePosixPath, rules: Iterable[OwnershipRule]) -> tuple[int, int]:
-    for rule in rules:
-        if rule.applies_to(path):
-            return rule.uid, rule.gid
-    return 0, 0
-
-
 def walk_rootfs(rootfs: Path) -> Iterator[tuple[Path, PurePosixPath, os.stat_result]]:
-    def visit(directory: Path, archive_directory: PurePosixPath) -> Iterator[tuple[Path, PurePosixPath, os.stat_result]]:
+    def visit(
+        directory: Path,
+        archive_directory: PurePosixPath,
+    ) -> Iterator[tuple[Path, PurePosixPath, os.stat_result]]:
         with os.scandir(directory) as entries:
             ordered_entries = sorted(entries, key=lambda entry: os.fsencode(entry.name))
         for entry in ordered_entries:
@@ -107,11 +50,11 @@ def manifest_line(
     source: Path,
     archive_path: PurePosixPath,
     metadata: os.stat_result,
-    ownership_rules: Iterable[OwnershipRule],
 ) -> str:
     archive_name = archive_path.as_posix()
     reject_whitespace(archive_name, "archive path")
-    uid, gid = ownership_for(archive_path, ownership_rules)
+    uid = metadata.st_uid
+    gid = metadata.st_gid
     mode = format_mode(metadata.st_mode)
 
     if stat.S_ISREG(metadata.st_mode):
@@ -128,24 +71,17 @@ def manifest_line(
         return f"pipe {archive_name} {mode} {uid} {gid}"
     if stat.S_ISSOCK(metadata.st_mode):
         return f"sock {archive_name} {mode} {uid} {gid}"
+    if stat.S_ISCHR(metadata.st_mode):
+        return (
+            f"nod {archive_name} {mode} {uid} {gid} c "
+            f"{os.major(metadata.st_rdev)} {os.minor(metadata.st_rdev)}"
+        )
+    if stat.S_ISBLK(metadata.st_mode):
+        return (
+            f"nod {archive_name} {mode} {uid} {gid} b "
+            f"{os.major(metadata.st_rdev)} {os.minor(metadata.st_rdev)}"
+        )
     raise ValueError(f"unsupported rootfs entry type: {source}")
-
-
-def read_device_entries(device_manifest: Path) -> list[str]:
-    entries: list[str] = []
-    with device_manifest.open(encoding="utf-8") as manifest_file:
-        for line_number, raw_line in enumerate(manifest_file, start=1):
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            fields = line.split()
-            if len(fields) != 8 or fields[0] != "nod":
-                raise ValueError(
-                    f"unsupported entry at {device_manifest}:{line_number}; expected nod"
-                )
-            reject_whitespace(fields[1], "device path")
-            entries.append(" ".join(fields))
-    return entries
 
 
 def write_manifest(output: Path, lines: Iterable[str]) -> None:
@@ -169,22 +105,17 @@ def write_manifest(output: Path, lines: Iterable[str]) -> None:
 def main() -> None:
     arguments = parse_arguments()
     rootfs = arguments.rootfs.absolute()
-    devices = arguments.devices.absolute()
     output = arguments.output.absolute()
 
     if not rootfs.is_dir():
         raise ValueError(f"rootfs directory does not exist: {rootfs}")
-    if not devices.is_file():
-        raise ValueError(f"device manifest does not exist: {devices}")
     if not (rootfs / "etc/passwd").is_file():
         raise ValueError(f"rootfs passwd database does not exist: {rootfs / 'etc/passwd'}")
 
-    ownership_rules = parse_home_ownership_rules(rootfs)
     lines = [
-        manifest_line(source, archive_path, metadata, ownership_rules)
+        manifest_line(source, archive_path, metadata)
         for source, archive_path, metadata in walk_rootfs(rootfs)
     ]
-    lines.extend(read_device_entries(devices))
     write_manifest(output, lines)
 
 

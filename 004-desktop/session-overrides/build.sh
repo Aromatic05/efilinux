@@ -4,7 +4,6 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/001-runtime/config.sh"
 source "$ROOT/002-system/desktop-config.sh"
 source "$ROOT/003-graphical/config.sh"
 source "$ROOT/003-graphical/desktop-support/config.sh"
@@ -17,12 +16,9 @@ source "$ROOT/003-graphical/lib/build.sh"
 require_command curl find gcc make pkg-config sha256sum tar
 ensure_directories
 
-"$ROOT/004-desktop/host-tools/build.sh"
-export PATH="$EFILINUX_BUILD/host-tools/intltool-$INTLTOOL_VERSION/bin:$PATH"
 require_command intltool-extract intltool-merge intltool-update
 
 recipe_inputs=(
-    "$ROOT/001-runtime/config.sh"
     "$ROOT/002-system/desktop-config.sh"
     "$ROOT/003-graphical/config.sh"
     "$ROOT/003-graphical/desktop-support/config.sh"

@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-
-# Generic application runtime libraries shared by system and graphical layers.
-export GLIB_VERSION="${GLIB_VERSION:-2.88.2}"
-export GLIB_SHA256="${GLIB_SHA256:-cf3f215a640c8a4257f14317586b8f1fdd25a10a93cb4bdda147c0f9ad88e74f}"
-export LIBYAML_VERSION="${LIBYAML_VERSION:-0.2.5}"
-export LIBYAML_SHA256="${LIBYAML_SHA256:-c642ae9b75fee120b2d96c712538bd2cf283228d2337df2cf2988e3c02678ef4}"
-export LIBEXIF_VERSION="${LIBEXIF_VERSION:-0.6.25}"
-export LIBEXIF_SHA256="${LIBEXIF_SHA256:-62f74cf3bf673a6e24d2de68f6741643718541f83aca5947e76e3978c25dce83}"

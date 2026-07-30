@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 
+"$ROOT/test/recipe.sh"
 "$ROOT/test/runtime.sh"
 "$ROOT/test/runtime-tools.sh"
 "$ROOT/test/system.sh"

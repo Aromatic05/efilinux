@@ -1,28 +1,77 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
-require_command curl gcc make pkg-config sha256sum tar
-ensure_directories
-package="acl-$ACL_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
-prepare_package "$package"
-download "https://download.savannah.gnu.org/releases/acl/$package.tar.xz" "$archive"
-verify_sha256 "$ACL_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
-log "Configuring ACL"
-cd "$PACKAGE_BUILD"
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
-PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig" \
-    "$PACKAGE_SOURCE/configure" --prefix=/usr --libdir=/usr/lib --disable-static --disable-nls
-log "Building ACL"
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
-rm -f "$PACKAGE_STAGING/usr/lib"/*.la
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+source "$ROOT/lib/recipe.sh"
+
+pkgname=acl
+pkgver=2.4.0
+
+depends=(
+    glibc
+    attr
+)
+builddepends=()
+makedepends=(
+    gcc
+    make
+    pkg-config
+)
+
+prepare() {
+    local archive="$downloaddir/acl-$pkgver.tar.xz"
+
+    download \
+        "https://download.savannah.gnu.org/releases/acl/acl-$pkgver.tar.xz" \
+        "$archive"
+    checksum \
+        sha256 \
+        e661131456d2708a01c614a0f400e11d7d1bfaeb6f3e74b75bb980b72f0161a3 \
+        "$archive"
+    extract "$archive" "$srcdir/acl"
+}
+
+build() {
+    log "Configuring ACL"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+    PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
+    PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig" \
+        "$srcdir/acl/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            --disable-static \
+            --disable-nls
+
+    log "Building ACL"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    rm -f "$develdir/usr/lib"/*.la
+    strip_all \
+        "$develdir/usr/bin" \
+        "$develdir/usr/lib"
+}
+
+package() {
+    local library_target
+
+    library_target=$(readlink -- "$pkgdir/usr/lib/libacl.so.1")
+    [[ -f "$pkgdir/usr/lib/$library_target" ]] || \
+        die "ACL SONAME target is missing: $library_target"
+
+    package_keep \
+        /usr/bin/chacl \
+        /usr/bin/getfacl \
+        /usr/bin/setfacl \
+        /usr/lib/libacl.so.1 \
+        "/usr/lib/$library_target"
+}
+
+recipe_main "$@"

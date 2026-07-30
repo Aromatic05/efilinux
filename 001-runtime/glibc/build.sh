@@ -6,64 +6,107 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-ensure_directories
-package="glibc-$GLIBC_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
+pkgname=glibc
+pkgver=2.43
 
-require_command bison curl g++ gawk gcc make md5sum perl python3 tar
-prepare_package "$package"
-archive="$EFILINUX_DOWNLOADS/glibc-$GLIBC_VERSION.tar.xz"
+depends=()
+builddepends=(
+    linux-headers
+)
+makedepends=(
+    bison
+    g++
+    gawk
+    gcc
+    make
+    perl
+    python3
+)
 
-download \
-    "https://ftpmirror.gnu.org/glibc/glibc-$GLIBC_VERSION.tar.xz" \
-    "$archive"
-verify_md5 "$GLIBC_MD5" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/glibc-$pkgver.tar.xz"
 
-log "Configuring glibc"
-cd "$PACKAGE_BUILD"
-CFLAGS="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic" \
-CXXFLAGS="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic" \
-"$PACKAGE_SOURCE/configure" \
-    --prefix=/usr \
-    --with-headers="$EFILINUX_SYSROOT/usr/include" \
-    --enable-kernel=6.1 \
-    --disable-werror \
-    libc_cv_slibdir=/usr/lib
+    download \
+        "https://ftpmirror.gnu.org/glibc/glibc-$pkgver.tar.xz" \
+        "$archive"
+    checksum \
+        md5 \
+        7ec2588300b299215a65aec7e6afa04f \
+        "$archive"
+    extract "$archive" "$srcdir/glibc"
+}
 
-log "Building glibc"
-CFLAGS="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic" \
-CXXFLAGS="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic" \
-make -j"$EFILINUX_JOBS"
-make DESTDIR="$PACKAGE_STAGING" install
+build() {
+    local bootstrap_cflags="-O2 -march=$EFILINUX_X86_64_LEVEL -mtune=generic"
 
-log "Generating compact English and Simplified Chinese locale archive"
-mkdir -p "$PACKAGE_STAGING/usr/lib/locale"
-for locale_name in en_US zh_CN; do
-    I18NPATH="$PACKAGE_STAGING/usr/share/i18n" \
-        "$PACKAGE_STAGING/usr/lib/ld-linux-x86-64.so.2" \
-        --library-path "$PACKAGE_STAGING/usr/lib" \
-        "$PACKAGE_STAGING/usr/bin/localedef" \
-        --prefix="$PACKAGE_STAGING" \
-        --no-archive \
-        -i "$locale_name" \
-        -f UTF-8 \
-        "$locale_name.UTF-8"
-done
+    log "Configuring glibc"
+    cd "$builddir"
+    CFLAGS="$bootstrap_cflags" \
+    CXXFLAGS="$bootstrap_cflags" \
+        "$srcdir/glibc/configure" \
+            --prefix=/usr \
+            --with-headers="$EFILINUX_SYSROOT/usr/include" \
+            --enable-kernel=6.1 \
+            --disable-werror \
+            libc_cv_slibdir=/usr/lib
 
-I18NPATH="$PACKAGE_STAGING/usr/share/i18n" \
-    "$PACKAGE_STAGING/usr/lib/ld-linux-x86-64.so.2" \
-    --library-path "$PACKAGE_STAGING/usr/lib" \
-    "$PACKAGE_STAGING/usr/bin/localedef" \
-    --prefix="$PACKAGE_STAGING" \
-    --add-to-archive \
-    "$PACKAGE_STAGING/usr/lib/locale/en_US.utf8" \
-    "$PACKAGE_STAGING/usr/lib/locale/zh_CN.utf8"
-rm -rf \
-    "$PACKAGE_STAGING/usr/lib/locale/en_US.utf8" \
-    "$PACKAGE_STAGING/usr/lib/locale/zh_CN.utf8"
+    log "Building glibc"
+    CFLAGS="$bootstrap_cflags" \
+    CXXFLAGS="$bootstrap_cflags" \
+        make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
 
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+    log "Generating compact English and Simplified Chinese locale archive"
+    mkdir -p "$develdir/usr/lib/locale"
+    for locale_name in en_US zh_CN; do
+        env -u LD_PRELOAD -u LD_LIBRARY_PATH \
+            I18NPATH="$develdir/usr/share/i18n" \
+            "$develdir/usr/lib/ld-linux-x86-64.so.2" \
+            --library-path "$develdir/usr/lib" \
+            "$develdir/usr/bin/localedef" \
+            --prefix="$develdir" \
+            --no-archive \
+            -i "$locale_name" \
+            -f UTF-8 \
+            "$locale_name.UTF-8"
+    done
+
+    env -u LD_PRELOAD -u LD_LIBRARY_PATH \
+        I18NPATH="$develdir/usr/share/i18n" \
+        "$develdir/usr/lib/ld-linux-x86-64.so.2" \
+        --library-path "$develdir/usr/lib" \
+        "$develdir/usr/bin/localedef" \
+        --prefix="$develdir" \
+        --add-to-archive \
+        "$develdir/usr/lib/locale/en_US.utf8" \
+        "$develdir/usr/lib/locale/zh_CN.utf8"
+    rm -rf \
+        "$develdir/usr/lib/locale/en_US.utf8" \
+        "$develdir/usr/lib/locale/zh_CN.utf8"
+}
+
+devel() {
+    strip_all \
+        "$develdir/sbin" \
+        "$develdir/usr/bin" \
+        "$develdir/usr/lib"
+}
+
+package() {
+    package_keep \
+        /usr/bin/locale \
+        /usr/lib/ld-linux-x86-64.so.2 \
+        /usr/lib/libc.so.6 \
+        /usr/lib/libdl.so.2 \
+        /usr/lib/libm.so.6 \
+        /usr/lib/libnss_dns.so.2 \
+        /usr/lib/libnss_files.so.2 \
+        /usr/lib/libpthread.so.0 \
+        /usr/lib/libresolv.so.2 \
+        /usr/lib/librt.so.1 \
+        /usr/lib/locale/locale-archive
+}
+
+recipe_main "$@"

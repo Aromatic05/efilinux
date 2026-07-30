@@ -6,37 +6,71 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-ensure_directories
-package="zstd-$ZSTD_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
+pkgname=zstd
+pkgver=1.5.7
 
-require_command curl gcc make md5sum tar
-prepare_package "$package"
-archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
+depends=(
+    glibc
+)
+builddepends=()
+makedepends=(
+    gcc
+    make
+)
 
-download \
-    "https://github.com/facebook/zstd/releases/download/v$ZSTD_VERSION/$package.tar.gz" \
-    "$archive"
-verify_md5 "$ZSTD_MD5" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local archive="$downloaddir/zstd-$pkgver.tar.gz"
 
-log "Building Zstandard"
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-make -C "$PACKAGE_SOURCE" -j"$EFILINUX_JOBS" \
-    ZSTD_LEGACY_SUPPORT=0 \
-    ZSTD_BUILD_STATIC=0
+    download \
+        "https://github.com/facebook/zstd/releases/download/v$pkgver/zstd-$pkgver.tar.gz" \
+        "$archive"
+    checksum \
+        md5 \
+        780fc1896922b1bc52a4e90980cdda48 \
+        "$archive"
+    extract "$archive" "$srcdir/zstd"
+}
 
-CC=gcc CFLAGS="$(target_cflags)" LDFLAGS="$(target_ldflags)" \
-make -C "$PACKAGE_SOURCE" \
-    prefix=/usr \
-    libdir=/usr/lib \
-    DESTDIR="$PACKAGE_STAGING" \
-    ZSTD_LEGACY_SUPPORT=0 \
-    ZSTD_BUILD_STATIC=0 \
-    install
+build() {
+    log "Building Zstandard"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        make -C "$srcdir/zstd" -j"$EFILINUX_JOBS" \
+            ZSTD_LEGACY_SUPPORT=0 \
+            ZSTD_BUILD_STATIC=0
 
-rm -f "$PACKAGE_STAGING/usr/lib/libzstd.a"
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        make -C "$srcdir/zstd" \
+            prefix=/usr \
+            libdir=/usr/lib \
+            DESTDIR="$develdir" \
+            ZSTD_LEGACY_SUPPORT=0 \
+            ZSTD_BUILD_STATIC=0 \
+            install
+
+    rm -f "$develdir/usr/lib/libzstd.a"
+}
+
+devel() {
+    strip_all \
+        "$develdir/usr/bin" \
+        "$develdir/usr/lib"
+}
+
+package() {
+    local libzstd_target
+
+    libzstd_target=$(readlink -- "$pkgdir/usr/lib/libzstd.so.1")
+    [[ -f "$pkgdir/usr/lib/$libzstd_target" ]] || \
+        die "Zstandard runtime SONAME target is missing: $libzstd_target"
+
+    package_keep \
+        /usr/bin/zstd \
+        /usr/bin/unzstd \
+        /usr/bin/zstdcat \
+        /usr/lib/libzstd.so.1 \
+        "/usr/lib/$libzstd_target"
+}
+
+recipe_main "$@"

@@ -1,21 +1,42 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
-require_command curl sha256sum tar
-ensure_directories
-package="iana-etc-$IANA_ETC_VERSION"
-if binary_package_restore_sysroot "$package" "${BASH_SOURCE[0]}"; then
-    exit 0
-fi
-archive="$EFILINUX_DOWNLOADS/$package.tar.gz"
-prepare_package "$package"
-download "https://github.com/Mic92/iana-etc/releases/download/$IANA_ETC_VERSION/$package.tar.gz" "$archive"
-verify_sha256 "$IANA_ETC_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
-mkdir -p "$PACKAGE_STAGING/etc"
-install -m 0644 "$PACKAGE_SOURCE/protocols" "$PACKAGE_STAGING/etc/protocols"
-install -m 0644 "$PACKAGE_SOURCE/services" "$PACKAGE_STAGING/etc/services"
-binary_package_publish_sysroot "$package" "${BASH_SOURCE[0]}"
+source "$ROOT/lib/recipe.sh"
+
+pkgname=iana-etc
+pkgver=20260617
+
+depends=()
+builddepends=()
+makedepends=(
+    install
+)
+
+prepare() {
+    local archive="$downloaddir/iana-etc-$pkgver.tar.gz"
+
+    download \
+        "https://github.com/Mic92/iana-etc/releases/download/$pkgver/iana-etc-$pkgver.tar.gz" \
+        "$archive"
+    checksum \
+        sha256 \
+        236bf9bf41e7d576f7343284d1ad7e37a7570b05cea58c5490fa56ad237a6497 \
+        "$archive"
+    extract "$archive" "$srcdir/iana-etc"
+}
+
+build() {
+    install -Dm0644 "$srcdir/iana-etc/protocols" "$develdir/etc/protocols"
+    install -Dm0644 "$srcdir/iana-etc/services" "$develdir/etc/services"
+}
+
+package() {
+    :
+}
+
+recipe_main "$@"

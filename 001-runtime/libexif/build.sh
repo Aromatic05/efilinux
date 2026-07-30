@@ -4,44 +4,73 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/001-runtime/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl gcc make sha256sum tar
-ensure_directories
+pkgname=libexif
+pkgver=0.6.25
 
-package="libexif-$LIBEXIF_VERSION"
-recipe_inputs=("$ROOT/001-runtime/config.sh")
-if binary_package_restore_sysroot \
-    "$package" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"; then
-    exit 0
-fi
-
-archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
-prepare_package "$package"
-download \
-    "https://github.com/libexif/libexif/releases/download/v$LIBEXIF_VERSION/$package.tar.xz" \
-    "$archive"
-verify_sha256 "$LIBEXIF_SHA256" "$archive"
-extract_source "$archive" "$PACKAGE_SOURCE"
-
-log "Configuring libexif"
-(
-    cd "$PACKAGE_BUILD"
-    CC=gcc \
-    CFLAGS="$(target_cflags)" \
-    LDFLAGS="$(target_ldflags)" \
-        "$PACKAGE_SOURCE/configure" \
-        --prefix=/usr \
-        --libdir=/usr/lib \
-        --disable-static \
-        --disable-docs
+depends=(
+    glibc
 )
-log "Building libexif"
-make -C "$PACKAGE_BUILD" -j"$EFILINUX_JOBS"
-make -C "$PACKAGE_BUILD" DESTDIR="$PACKAGE_STAGING" install
-find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 -name '*.la' -delete
+builddepends=()
+makedepends=(
+    gcc
+    make
+)
 
-binary_package_publish_sysroot \
-    "$package" "${BASH_SOURCE[0]}" "${recipe_inputs[@]}"
+prepare() {
+    local archive="$downloaddir/libexif-$pkgver.tar.xz"
+
+    download \
+        "https://github.com/libexif/libexif/releases/download/v$pkgver/libexif-$pkgver.tar.xz" \
+        "$archive"
+    checksum \
+        sha256 \
+        62f74cf3bf673a6e24d2de68f6741643718541f83aca5947e76e3978c25dce83 \
+        "$archive"
+    extract "$archive" "$srcdir/libexif"
+}
+
+build() {
+    log "Configuring libexif"
+    cd "$builddir"
+    CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" \
+        "$srcdir/libexif/configure" \
+            --prefix=/usr \
+            --libdir=/usr/lib \
+            --disable-static \
+            --disable-docs
+
+    log "Building libexif"
+    make -j"$EFILINUX_JOBS"
+    make DESTDIR="$develdir" install
+}
+
+devel() {
+    find "$develdir/usr/lib" -maxdepth 1 -name '*.la' -delete
+    strip_all "$develdir/usr/lib"
+}
+
+package() {
+    local library relative
+    local -a keep=()
+    local -a libraries=()
+
+    mapfile -d '' -t libraries < <(
+        find "$pkgdir/usr/lib" -maxdepth 1 \
+            \( -type f -o -type l \) \
+            -name 'libexif.so.12*' \
+            -print0 | LC_ALL=C sort -z
+    )
+    ((${#libraries[@]} > 0)) || die "libexif runtime library is missing"
+    for library in "${libraries[@]}"; do
+        relative=/${library#"$pkgdir/"}
+        keep+=("$relative")
+    done
+
+    package_keep "${keep[@]}"
+}
+
+recipe_main "$@"
