@@ -4,8 +4,8 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 
-cli_recipes=(file less curl rsync sevenzip strace lsof dmidecode pciutils ddrescue)
-gui_recipes=(xarchiver)
+cli_recipes=(file less curl rsync sevenzip strace lsof dmidecode pciutils ddrescue parted)
+gui_recipes=(xarchiver mousepad ristretto pavucontrol xfce4-taskmanager xfce4-screenshooter thunar-archive-plugin galculator gparted)
 
 for recipe in "${cli_recipes[@]}"; do
     [[ -f "$ROOT/005-utils/$recipe/build.sh" ]] || {

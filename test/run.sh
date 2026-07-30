@@ -6,6 +6,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 
 "$ROOT/test/recipe.sh"
 "$ROOT/test/layer-ownership.sh"
+"$ROOT/test/applications-desktop.sh"
 "$ROOT/test/runtime.sh"
 "$ROOT/test/runtime-tools.sh"
 "$ROOT/test/system.sh"

@@ -29,6 +29,6 @@ build() {
 }
 
 devel() { strip_all "$develdir/usr/bin"; }
-package() { package_keep /usr/bin/xarchiver /usr/share/applications/xarchiver.desktop; }
+package() { package_keep /usr/bin/xarchiver /usr/share/applications/xarchiver.desktop /usr/share/icons/hicolor/; }
 
 recipe_main "$@"

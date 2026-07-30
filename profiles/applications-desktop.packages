@@ -2,3 +2,10 @@
 @include desktop.packages
 
 xarchiver
+mousepad
+ristretto
+pavucontrol
+xfce4-taskmanager
+xfce4-screenshooter
+thunar-archive-plugin
+galculator

@@ -11,3 +11,4 @@ lsof
 dmidecode
 pciutils
 ddrescue
+parted
