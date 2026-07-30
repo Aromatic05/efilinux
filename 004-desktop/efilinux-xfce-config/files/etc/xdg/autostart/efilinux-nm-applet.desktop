@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Network Manager Applet
-Exec=/usr/bin/nm-applet
-OnlyShowIn=XFCE;
-NoDisplay=true
-X-GNOME-Autostart-enabled=true

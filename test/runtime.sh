@@ -18,6 +18,8 @@ test_directory="$EFILINUX_TEST/runtime"
 [[ -x "$rootfs/usr/bin/xz" ]] || die "xz is missing from target rootfs"
 [[ -x "$rootfs/usr/bin/zstd" ]] || die "zstd is missing from target rootfs"
 [[ -x "$rootfs/usr/bin/locale" ]] || die "locale is missing from target rootfs"
+[[ -x "$rootfs/usr/bin/tput" ]] || die "tput is missing from target rootfs"
+[[ -x "$rootfs/usr/bin/infocmp" ]] || die "infocmp is missing from target rootfs"
 [[ -x "$loader" ]] || die "glibc loader is missing from target rootfs"
 [[ -f "$rootfs/usr/lib/locale/locale-archive" ]] || \
     die "compiled locale archive is missing from target rootfs"
@@ -77,6 +79,15 @@ for locale_name in en_US.UTF-8 zh_CN.UTF-8; do
         "$rootfs/usr/bin/locale" charmap | grep -Fxq UTF-8 || \
         die "$locale_name does not use UTF-8"
 done
+
+for terminfo_entry in linux xterm xterm-256color screen screen-256color tmux tmux-256color; do
+    TERM="$terminfo_entry" "$loader" --library-path "$library_path" \
+        "$rootfs/usr/bin/infocmp" "$terminfo_entry" >/dev/null || \
+        die "required terminfo entry is missing: $terminfo_entry"
+done
+TERM=xterm-256color "$loader" --library-path "$library_path" \
+    "$rootfs/usr/bin/tput" colors | grep -Fxq 256 || \
+    die "xterm-256color does not expose 256 colors"
 
 for binary in busybox xz zstd; do
     if LC_ALL=C readelf --dynamic "$rootfs/usr/bin/$binary" |

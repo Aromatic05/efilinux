@@ -125,10 +125,14 @@ done
     die "desktop user home ownership is incorrect"
 
 for autostart in \
-    xfce-polkit.desktop efilinux-nm-applet.desktop; do
+    xfce-polkit.desktop nm-applet.desktop; do
     [[ -f "$rootfs/etc/xdg/autostart/$autostart" ]] || \
         die "desktop autostart entry is missing: $autostart"
 done
+[[ ! -e "$rootfs/etc/xdg/autostart/efilinux-nm-applet.desktop" ]] || \
+    die "duplicate EFI Linux NetworkManager autostart entry remains"
+[[ ! -e "$rootfs/etc/xdg/autostart/xscreensaver.desktop" ]] || \
+    die "autostart entry for the absent xscreensaver daemon remains"
 [[ -x "$rootfs/usr/lib/xfce-polkit/xfce-polkit" ]] || \
     die "XFCE PolicyKit authentication agent is missing"
 screensaver_pam="$rootfs/etc/pam.d/xfce4-screensaver"

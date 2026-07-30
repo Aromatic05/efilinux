@@ -12,7 +12,10 @@ source "$ROOT/lib/target-build.sh"
 pkgname=gtk3
 pkgver=3.24.52
 
-depends=(at-spi2-core cairo fontconfig gdk-pixbuf glib glibc libepoxy pango xorg)
+depends=(
+    at-spi2-core cairo desktop-file-utils fontconfig gdk-pixbuf glib glibc
+    hicolor-icon-theme libepoxy pango shared-mime-info xorg
+)
 builddepends=()
 makedepends=(gcc meson ninja pkg-config python3)
 
@@ -60,6 +63,7 @@ package() {
     local -a keep=(
         /usr/bin/gtk3-demo
         /usr/bin/gtk3-widget-factory
+        /usr/bin/gtk-update-icon-cache
         /usr/share/gtk-3.0/
         /usr/share/icons/
         /usr/share/themes/

@@ -71,6 +71,8 @@ require_file /etc/X11/Xwrapper.config
 require_directory /usr/share/fonts/truetype/dejavu
 require_directory /usr/share/fonts/opentype/noto
 require_directory /usr/share/icons/Qogir
+require_directory /usr/share/icons/hicolor
+require_directory /usr/share/mime
 require_directory /usr/share/X11/xkb
 require_directory /usr/lib/xorg/modules/drivers
 require_directory /usr/lib/xorg/modules/input
@@ -96,6 +98,9 @@ require_program gdk-pixbuf-query-loaders gdk-pixbuf
 require_program gdk-pixbuf-csource gdk-pixbuf
 require_program fc-cache fontconfig
 require_program fc-match fontconfig
+require_program gtk-update-icon-cache gtk3
+require_program update-mime-database shared-mime-info
+require_program update-desktop-database desktop-file-utils
 
 require_library 'libLLVM.so*' llvm
 require_library 'libdrm.so.2*' libdrm
@@ -132,6 +137,20 @@ for font in DejaVuSans.ttf DejaVuSansMono.ttf; do
 done
 require_file /usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf
 require_file /usr/share/icons/Qogir/index.theme
+require_file /usr/share/icons/Qogir/icon-theme.cache
+require_file /usr/share/icons/hicolor/index.theme
+require_file /usr/share/icons/hicolor/icon-theme.cache
+require_file /usr/share/mime/packages/freedesktop.org.xml
+require_file /usr/share/mime/mime.cache
+require_file /usr/share/applications/mimeinfo.cache
+[[ $(rootfs_owner /usr/share/icons/Qogir/icon-theme.cache) == @composer ]] || \
+    die "Qogir icon cache is not owned by the composer"
+[[ $(rootfs_owner /usr/share/icons/hicolor/icon-theme.cache) == @composer ]] || \
+    die "hicolor icon cache is not owned by the composer"
+[[ $(rootfs_owner /usr/share/mime/mime.cache) == @composer ]] || \
+    die "MIME cache is not owned by the composer"
+[[ $(rootfs_owner /usr/share/applications/mimeinfo.cache) == @composer ]] || \
+    die "desktop MIME cache is not owned by the composer"
 require_file /usr/share/xml/iso-codes/iso_639-2.xml
 require_file /usr/share/xml/iso-codes/iso_3166-1.xml
 [[ -L "$rootfs/usr/share/xml/iso-codes/iso_639.xml" ]] || \
@@ -230,6 +249,25 @@ GDK_PIXBUF_MODULE_FILE="$host_loader_cache" \
     > "$decoded_icon"
 grep -Fq 'qogir_terminal_icon' "$decoded_icon" || \
     die "GdkPixbuf could not decode a real Qogir SVG icon"
+mime_test_dir="$EFILINUX_TEST/mime"
+reset_directory "$mime_test_dir"
+printf '\211PNG\r\n\032\n' > "$mime_test_dir/image.png"
+printf '%%PDF-1.7\n' > "$mime_test_dir/document.pdf"
+for mime_case in 'image.png:image/png' 'document.pdf:application/pdf'; do
+    mime_file=${mime_case%%:*}
+    expected_type=${mime_case#*:}
+    actual_type=$(
+        XDG_DATA_DIRS="$rootfs/usr/share" \
+        GIO_MODULE_DIR="$rootfs/usr/lib/gio/modules" \
+        "$loader" --library-path "$library_path" \
+            "$rootfs/usr/bin/gio" info -a standard::content-type \
+            "$mime_test_dir/$mime_file" | \
+            sed -n 's/^[[:space:]]*standard::content-type:[[:space:]]*//p'
+    )
+    [[ $actual_type == "$expected_type" ]] || \
+        die "$mime_file resolved as $actual_type, expected $expected_type"
+done
+
 FONTCONFIG_SYSROOT="$rootfs" \
     "$loader" --library-path "$library_path" \
     "$rootfs/usr/bin/fc-match" -f '%{family}\n' ':lang=zh-cn' | \

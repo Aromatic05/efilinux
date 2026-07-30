@@ -79,6 +79,8 @@ for path in \
     /usr/share/dbus-1/system.d/org.freedesktop.NetworkManager.conf \
     /usr/share/dbus-1/system-services/org.freedesktop.nm_dispatcher.service \
     /usr/share/dbus-1/services/org.gtk.vfs.Daemon.service \
+    /usr/share/polkit-1/actions/org.gtk.vfs.file-operations.policy \
+    /usr/share/polkit-1/rules.d/org.gtk.vfs.file-operations.rules \
     /usr/share/pipewire/pipewire.conf \
     /usr/share/wireplumber/wireplumber.conf; do
     require_file "$path"
@@ -140,6 +142,13 @@ fi
 grep -Fq '/usr/lib/nm-dispatcher' \
     "$rootfs/usr/share/dbus-1/system-services/org.freedesktop.nm_dispatcher.service" || \
     die "NetworkManager dispatcher activation uses an invalid executable path"
+grep -Fq 'org.gtk.vfs.file-operations' \
+    "$rootfs/usr/share/polkit-1/actions/org.gtk.vfs.file-operations.policy" || \
+    die "GVfs admin backend has no matching polkit action"
+grep -Fq 'org.gtk.vfs.file-operations' \
+    "$rootfs/usr/share/polkit-1/rules.d/org.gtk.vfs.file-operations.rules" || \
+    die "GVfs admin backend has no matching polkit rule"
+
 grep -Fq '/usr/lib/gvfsd' \
     "$rootfs/usr/share/dbus-1/services/org.gtk.vfs.Daemon.service" || \
     die "GVfs D-Bus activation uses an invalid executable path"

@@ -61,8 +61,8 @@ for file in \
     /etc/inittab /etc/rc.d/rcS /etc/rc.d/rc /etc/rc.d/rc.shutdown \
     /etc/sysconfig/hostname /etc/sysconfig/network /etc/sysconfig/clock \
     /etc/syslog.conf /etc/crontab /etc/dbus-1/system.conf \
-    /etc/dhcpcd.conf /etc/ssh/sshd_config \
-    /etc/pam.d/system-auth /etc/pam.d/login /etc/pam.d/sshd \
+    /etc/dhcpcd.conf /etc/ssh/sshd_config /etc/doas.conf \
+    /etc/pam.d/system-auth /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/doas \
     /etc/passwd /etc/group /etc/shadow /etc/gshadow \
     /etc/filemeta/ownership.tsv /etc/filemeta/caps/iputils; do
     require_file "$file"
@@ -102,6 +102,7 @@ require_program dhcpcd dhcpcd
 require_program ssh openssh
 require_program sshd openssh
 require_program ssh-keygen openssh
+require_program doas doas
 
 for helper in ata_id cdrom_id dmi_memory_id fido_id iocost mtd_probe scsi_id v4l_id; do
     [[ -x "$rootfs/usr/lib/udev/$helper" ]] || die "Udev helper is missing: $helper"
@@ -118,7 +119,7 @@ for public_config in \
 done
 [[ $(rootfs_stat '%a' /root/.ssh) == 700 ]] || die "/root/.ssh permissions are not 0700"
 for privileged_file in \
-    /usr/bin/passwd /usr/bin/su /usr/bin/newgrp /usr/bin/crontab \
+    /usr/bin/passwd /usr/bin/su /usr/bin/newgrp /usr/bin/crontab /usr/bin/doas \
     /usr/bin/pkexec /usr/lib/polkit-1/polkit-agent-helper-1 \
     /usr/libexec/dbus-daemon-launch-helper; do
     [[ $(rootfs_stat '%a' "$privileged_file") == 4755 ]] || \
@@ -149,6 +150,15 @@ grep -Eq '^netdev:x:[0-9]+:([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/group" || \
     die "netdev group is missing or does not include user"
 grep -Eq '^wheel:x:10:([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/group" || \
     die "user is not a member of wheel"
+grep -Fxq 'permit persist :wheel' "$rootfs/etc/doas.conf" || \
+    die "doas does not permit authenticated wheel elevation"
+for pam_line in \
+    'auth include system-auth' \
+    'account include system-auth' \
+    'session include system-auth'; do
+    grep -Fxq "$pam_line" "$rootfs/etc/pam.d/doas" || \
+        die "doas PAM service is missing: $pam_line"
+done
 grep -Eq '^wheel:\*::([^:]*,)?user(,[^:]*)?$' "$rootfs/etc/gshadow" || \
     die "user wheel membership is missing from gshadow"
 [[ $(rootfs_stat '%u:%g:%a' /home/user) == '1000:1000:750' ]] || \
@@ -185,6 +195,12 @@ grep -Fq 'start_daemon sshd /usr/bin/sshd ' "$rootfs/etc/rc.d/init.d/sshd" || \
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/ip" -Version >/dev/null
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/ping" -V >/dev/null
 "$loader" --library-path "$library_path" "$rootfs/usr/bin/ssh" -V >/dev/null 2>&1
+doas_decision=$(
+    "$loader" --library-path "$library_path" \
+        "$rootfs/usr/bin/doas" -C "$rootfs/etc/doas.conf" user /usr/bin/id
+)
+[[ $doas_decision == permit ]] || \
+    die "doas does not permit wheel user elevation: $doas_decision"
 
 for formal_network_tool in ip ss ping arping tracepath; do
     [[ ! -L "$rootfs/usr/bin/$formal_network_tool" ]] || \

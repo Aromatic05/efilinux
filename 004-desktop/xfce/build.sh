@@ -187,6 +187,7 @@ package() {
         "$pkgdir/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml" \
         "$pkgdir/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" \
         "$pkgdir/etc/xdg/xfce4/xinitrc" \
+        "$pkgdir/etc/xdg/autostart/xscreensaver.desktop" \
         "$pkgdir/usr/bin/xfce4-screensaver-configure.py" \
         "$pkgdir/usr/lib/xfce4/xfce4-compose-mail"
     if [[ -d "$pkgdir/usr/share/xfce4/helpers" ]]; then

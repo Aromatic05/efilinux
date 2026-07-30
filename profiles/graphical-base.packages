@@ -24,6 +24,9 @@ fribidi
 pixman
 dejavu-fonts
 libxml2
+shared-mime-info
+desktop-file-utils
+hicolor-icon-theme
 at-spi2-core
 gdk-pixbuf
 cairo

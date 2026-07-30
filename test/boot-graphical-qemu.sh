@@ -72,6 +72,7 @@ pidof wireplumber >/dev/null || { echo FAIL:wireplumber; ok=0; }
 test -S /run/user/1000/pipewire-0 || { echo FAIL:pipewire-socket; ok=0; }
 test -S /run/user/1000/pulse/native || { echo FAIL:pulse-socket; ok=0; }
 su -s /usr/bin/sh user -c 'XDG_RUNTIME_DIR=/run/user/1000 pactl info >/dev/null 2>&1' || { echo FAIL:pactl; ok=0; }
+su -s /usr/bin/sh user -c 'XDG_RUNTIME_DIR=/run/user/1000 elogind-inhibit --what=sleep --mode=delay --who=efilinux-test --why=screen-lock-test /usr/bin/true' || { echo FAIL:elogind-sleep-inhibit; ok=0; }
 ! grep -Fq 'Failed to start message bus: Failed to open "/usr/share/defaults/at-spi2/accessibility.conf"' /var/log/graphical.log || { echo FAIL:atspi-bus-log; ok=0; }
 ! grep -Fq 'dbus-update-activation-environment' /var/log/graphical.log || { echo FAIL:dbus-env-log; ok=0; }
 ! grep -Fq 'pa_context_connect() failed: Access denied' /var/log/graphical.log || { echo FAIL:pulse-access; ok=0; }

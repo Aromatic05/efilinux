@@ -37,6 +37,8 @@ build() {
             --enable-widec \
             --enable-pc-files \
             --with-pkg-config-libdir=/usr/lib/pkgconfig \
+            --with-default-terminfo-dir=/usr/share/terminfo \
+            --with-terminfo-dirs=/usr/share/terminfo \
             --without-ada \
             --without-cxx-binding \
             --without-tests
@@ -55,8 +57,24 @@ devel() {
 }
 
 package() {
-    local -a keep=()
+    local name path
+    local -a keep=(
+        /usr/bin/captoinfo
+        /usr/bin/infocmp
+        /usr/bin/infotocap
+        /usr/bin/reset
+        /usr/bin/tabs
+        /usr/bin/tic
+        /usr/bin/toe
+        /usr/bin/tput
+        /usr/bin/tset
+    )
     package_add_library_family keep 'libncursesw.so.6*'
+    for name in linux xterm xterm-256color screen screen-256color tmux tmux-256color; do
+        path=$(find "$pkgdir/usr/share/terminfo" -type f -name "$name" -print -quit)
+        [[ -n $path ]] || die "required terminfo entry was not installed: $name"
+        keep+=("/${path#"$pkgdir/"}")
+    done
     package_keep "${keep[@]}"
 }
 

@@ -190,14 +190,60 @@ compose_write_ownership() {
     printf '/etc/filemeta/ownership.tsv\tfile\t@composer\n' >> "$owners"
 }
 
+compose_record_generated_path() {
+    local rootfs=$1
+    local owners=$2
+    local install_path=$3
+    local target="$rootfs$install_path"
+    local type
+
+    compose_validate_path "$install_path"
+    [[ -e "$target" || -L "$target" ]] || \
+        die "composer-generated path is missing: $install_path"
+    if awk -F '\t' -v path="$install_path" \
+        'NR > 1 && $1 == path { found = 1; exit } END { exit !found }' \
+        "$owners"; then
+        die "composer-generated path was already owned by a package: $install_path"
+    fi
+    type=$(compose_path_type "$target")
+    printf '%s\t%s\t@composer\n' "$install_path" "$type" >> "$owners"
+}
+
+compose_record_unowned_tree() {
+    local rootfs=$1
+    local owners=$2
+    local install_root=$3
+    local target_root="$rootfs$install_root"
+    local records="$owners.generated.$$"
+    local entry install_path type
+
+    compose_validate_path "$install_root"
+    [[ -d "$target_root" ]] || die "composer-generated tree is missing: $install_root"
+    : > "$records"
+    while IFS= read -r -d '' entry; do
+        install_path=/${entry#"$rootfs/"}
+        type=$(compose_path_type "$entry")
+        printf '%s\t%s\n' "$install_path" "$type" >> "$records"
+    done < <(find "$target_root" -mindepth 1 -print0 | LC_ALL=C sort -z)
+
+    awk -F '\t' \
+        'NR == FNR { if (NR > 1) owned[$1] = 1; next }
+         !($1 in owned) { print $1 "\t" $2 "\t@composer" }' \
+        "$owners" "$records" >> "$owners"
+    rm -f -- "$records"
+}
+
 compose_finalize_rootfs() {
     local rootfs=$1
     local owners=$2
     local schemas="$rootfs/usr/share/glib-2.0/schemas"
     local modules="$rootfs/usr/lib/gio/modules"
     local pixbuf_root="$rootfs/usr/lib/gdk-pixbuf-2.0"
-    local loader cache cache_relative
-    local -a loaders=()
+    local mime_root="$rootfs/usr/share/mime"
+    local applications="$rootfs/usr/share/applications"
+    local icons_root="$rootfs/usr/share/icons"
+    local loader cache cache_relative theme icon_cache
+    local -a loaders=() icon_themes=()
 
     if [[ -d "$schemas" ]]; then
         [[ -x "$rootfs/usr/bin/glib-compile-schemas" ]] || \
@@ -238,6 +284,53 @@ compose_finalize_rootfs() {
             chmod 0644 "$cache"
             cache_relative=${cache#"$rootfs"}
             printf '%s\tfile\t@composer\n' "$cache_relative" >> "$owners"
+        fi
+    fi
+
+    if [[ -d "$mime_root/packages" ]]; then
+        [[ -x "$rootfs/usr/bin/update-mime-database" ]] || \
+            die "MIME packages are installed without update-mime-database"
+        [[ ! -e "$mime_root/mime.cache" ]] || \
+            die "a package shipped the generated MIME cache"
+        compose_run_target "$rootfs" \
+            "$rootfs/usr/bin/update-mime-database" "$mime_root"
+        [[ -s "$mime_root/mime.cache" ]] || die "MIME cache was not generated"
+        compose_record_unowned_tree "$rootfs" "$owners" /usr/share/mime
+    fi
+
+    if [[ -d "$applications" ]] && \
+       find "$applications" -maxdepth 1 -type f -name '*.desktop' -print -quit | grep -q .; then
+        [[ -x "$rootfs/usr/bin/update-desktop-database" ]] || \
+            die "desktop entries are installed without update-desktop-database"
+        [[ ! -e "$applications/mimeinfo.cache" ]] || \
+            die "a package shipped the generated desktop MIME cache"
+        compose_run_target "$rootfs" \
+            "$rootfs/usr/bin/update-desktop-database" "$applications"
+        [[ -f "$applications/mimeinfo.cache" ]] || \
+            die "desktop MIME cache was not generated"
+        compose_record_generated_path \
+            "$rootfs" "$owners" /usr/share/applications/mimeinfo.cache
+    fi
+
+    if [[ -d "$icons_root" ]]; then
+        mapfile -t icon_themes < <(
+            find "$icons_root" -mindepth 2 -maxdepth 2 \
+                -type f -name index.theme -printf '%h\n' | LC_ALL=C sort
+        )
+        if ((${#icon_themes[@]} > 0)); then
+            [[ -x "$rootfs/usr/bin/gtk-update-icon-cache" ]] || \
+                die "icon themes are installed without gtk-update-icon-cache"
+            for theme in "${icon_themes[@]}"; do
+                icon_cache="$theme/icon-theme.cache"
+                [[ ! -e "$icon_cache" ]] || \
+                    die "a package shipped a generated icon cache: ${theme#"$rootfs"}"
+                compose_run_target "$rootfs" \
+                    "$rootfs/usr/bin/gtk-update-icon-cache" --force "$theme"
+                [[ -s "$icon_cache" ]] || \
+                    die "icon cache was not generated: ${theme#"$rootfs"}"
+                compose_record_generated_path \
+                    "$rootfs" "$owners" "${icon_cache#"$rootfs"}"
+            done
         fi
     fi
 

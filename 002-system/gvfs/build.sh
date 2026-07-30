@@ -25,6 +25,12 @@ prepare() {
 }
 
 build() {
+    sed -i \
+        -e "/^dbus_session_bus_services_dir = dependency/,/^)/c\dbus_session_bus_services_dir = gvfs_datadir / 'dbus-1' / 'services'" \
+        -e "/^gio_giomoduledir = gio_dep.get_variable/,/^)/c\gio_giomoduledir = gvfs_libdir / 'gio' / 'modules'" \
+        -e "/^gio_schemasdir = gio_dep.get_variable/,/^)/c\gio_schemasdir = gvfs_datadir / 'glib-2.0' / 'schemas'" \
+        "$srcdir/gvfs/meson.build"
+
     CC="$CC" \
     CFLAGS="$CFLAGS" \
     LDFLAGS="$LDFLAGS" \
@@ -76,14 +82,6 @@ build() {
 }
 
 devel() {
-    local leaked_root="$develdir$EFILINUX_SYSROOT"
-    if [[ -d "$leaked_root" ]]; then
-        cp -a "$leaked_root/." "$develdir/"
-        rm -rf "$leaked_root"
-    fi
-    if find "$develdir" -path "*$EFILINUX_SYSROOT*" -print -quit | grep -q .; then
-        die "package contains an installation path prefixed by the target sysroot"
-    fi
     strip_all "$develdir/usr/lib"
 }
 
@@ -95,6 +93,8 @@ package() {
         /usr/share/dbus-1/
         /usr/share/glib-2.0/schemas/
         /usr/share/gvfs/
+        /usr/share/polkit-1/actions/org.gtk.vfs.file-operations.policy
+        /usr/share/polkit-1/rules.d/org.gtk.vfs.file-operations.rules
     )
 
     shopt -s nullglob

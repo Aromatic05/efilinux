@@ -60,7 +60,7 @@ build() {
             -Dtranslations=false \
             -Dselinux=disabled \
             -Dsmack=false \
-            -Dpolkit=disabled \
+            -Dpolkit=enabled \
             -Dacl=enabled \
             -Daudit=disabled \
             -Dpam=enabled \

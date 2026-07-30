@@ -8,6 +8,7 @@ source "$ROOT/lib/common.sh"
 
 run_component "$ROOT/002-system/openssl"
 run_component "$ROOT/002-system/linux-pam"
+run_component "$ROOT/002-system/doas"
 run_component "$ROOT/002-system/shadow"
 run_component "$ROOT/002-system/sysvinit"
 run_component "$ROOT/002-system/sysklogd"

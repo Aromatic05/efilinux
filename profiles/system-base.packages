@@ -62,6 +62,7 @@ busybox
 
 openssl
 linux-pam
+doas
 shadow
 sysvinit
 sysklogd
