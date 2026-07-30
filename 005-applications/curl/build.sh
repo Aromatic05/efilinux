@@ -22,7 +22,10 @@ prepare() {
 
 build() {
     cd "$builddir"
-    target_env "$srcdir/curl/configure" --prefix=/usr --libdir=/usr/lib \
+    target_env "$srcdir/curl/configure" \
+        --build="$EFILINUX_TARGET_TRIPLET" \
+        --host="$EFILINUX_ARCH-unknown-linux-gnu" \
+        --prefix=/usr --libdir=/usr/lib \
         --disable-static --with-openssl --with-zlib --without-libpsl --without-nghttp2 \
         --without-brotli --without-zstd --without-libssh2 --without-libssh \
         --without-libidn2 --without-gnutls --without-gssapi \
