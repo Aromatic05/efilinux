@@ -1,0 +1,13 @@
+# EFI Linux console/rescue image with the initial maintenance tool tranche.
+@include system-base.packages
+
+file
+less
+curl
+rsync
+sevenzip
+strace
+lsof
+dmidecode
+pciutils
+ddrescue
