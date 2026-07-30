@@ -1,6 +1,6 @@
 # zxmod local modules
 
-`zxmod` adds local application payloads to the immutable EFI Linux base only
+`zxmod` adds local utility or application payloads to the immutable EFI Linux base only
 after boot. A `.zxm` is a Zstd-compressed SquashFS image with this layout:
 
 ```
@@ -70,7 +70,9 @@ because mount ordering is deployment-specific.
 
 ## Test scope
 
-`test/zxmod.sh` creates real `.zxm` images, inspects real SquashFS metadata, and
-attempts load, conflict rejection, and unload in a user+mount namespace. Hosts
-with disabled unprivileged namespaces or no usable SquashFS/OverlayFS support
-skip the runtime section after artifact checks.
+`test/zxmod.sh` creates real `.zxm` images and inspects real SquashFS metadata.
+Its runtime section explicitly skips only when unprivileged SquashFS mounting
+is unavailable. `test/boot-zxmod-qemu.sh` is the independent full integration
+test: after the main repository rebuilds packages and the EFI image, it boots
+that image with a separate read-only FAT module disk and checks load, conflict
+rejection, a read-only `/usr` view, unload, and retained open descriptors.

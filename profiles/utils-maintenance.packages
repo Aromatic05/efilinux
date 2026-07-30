@@ -1,4 +1,4 @@
-# EFI Linux console/rescue image with the initial maintenance tool tranche.
+# EFI Linux console/rescue image with the maintenance utility set.
 @include system-base.packages
 
 file

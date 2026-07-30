@@ -57,6 +57,13 @@ The current build covers:
 ├── libnma
 ├── network-manager-applet
 └── efilinux-xfce-config
+
+005-utils
+├── zxmod and squashfs-tools
+└── selectable command-line maintenance utilities
+
+005-applications
+└── graphical desktop applications
 ```
 
 BusyBox `ash` provides `/bin/sh` and rescue implementations of basic commands.
@@ -200,6 +207,11 @@ The suite verifies:
 - live Udev, Sysklogd, D-Bus, Cronie, dhcpcd, and OpenSSH processes;
 - DHCP configuration and an OpenSSH listener inside the guest;
 - target Kmod loading a Zstd-compressed module from the embedded rootfs.
+
+The utility profiles are deliberately separate: `utils-zxmod.packages` may
+extend an already composed rootfs with local-module support, while
+`utils-maintenance.packages` selects the broader maintenance command set.
+`applications-desktop.packages` remains the ordinary GUI profile.
 
 The removable-media EFI path is:
 
