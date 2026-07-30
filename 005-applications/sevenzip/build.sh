@@ -17,13 +17,18 @@ prepare() {
     local archive="$downloaddir/7z${pkgver//./}-src.tar.xz"
     download "https://www.7-zip.org/a/7z${pkgver//./}-src.tar.xz" "$archive"
     checksum sha256 ed087f83ee789c1ea5f39c464c55a5c9d4008deb0efe900814f2df262b82c36e "$archive"
-    extract "$archive" "$srcdir/sevenzip"
+    extract_contents "$archive" "$srcdir/sevenzip"
 }
 
 build() {
-    CC="$CC" CXX="$CXX" CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-        make -C "$srcdir/sevenzip/CPP/7zip/Bundles/Alone2" -f makefile -j"$EFILINUX_JOBS"
-    install -Dm0755 "$srcdir/sevenzip/CPP/7zip/Bundles/Alone2/b/7zz" \
+    make -C "$srcdir/sevenzip/CPP/7zip/Bundles/Alone2" \
+        -f makefile.gcc -j"$EFILINUX_JOBS" \
+        CC="$CC" CXX="$CXX" \
+        MY_ARCH="$CFLAGS" \
+        LDFLAGS="$LDFLAGS" \
+        CFLAGS_WARN_WALL="-Wall -Wextra" \
+        LFLAGS_STRIP=
+    install -Dm0755 "$srcdir/sevenzip/CPP/7zip/Bundles/Alone2/_o/7zz" \
         "$develdir/usr/bin/7zz"
 }
 
