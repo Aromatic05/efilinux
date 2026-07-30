@@ -57,7 +57,10 @@ unload() {
     grep -v "^$1$(printf '\t')" "$ZXMOD_RUN_ROOT/active" > "$ZXMOD_RUN_ROOT/active.next"
     mv "$ZXMOD_RUN_ROOT/active.next" "$ZXMOD_RUN_ROOT/active"
     zxmod_switch_generation
-    umount "$ZXMOD_RUN_ROOT/modules/$1" || zxmod_die "module is busy: $1"
+    zxmod_generation=$(cat "$ZXMOD_RUN_ROOT/current-generation")
+    mkdir -p "$ZXMOD_RUN_ROOT/retired/$1-$zxmod_generation"
+    mount --move "$ZXMOD_RUN_ROOT/modules/$1" \
+        "$ZXMOD_RUN_ROOT/retired/$1-$zxmod_generation"
     rmdir "$ZXMOD_RUN_ROOT/modules/$1"
 }
 

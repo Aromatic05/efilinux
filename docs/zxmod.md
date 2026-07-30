@@ -36,6 +36,8 @@ base directories as lower layers, then switches the `/usr` and `/opt` views.
 OverlayFS cannot gain lower layers in place. Processes holding old files may
 therefore continue using their old generation. Module mounts are
 `ro,nodev,nosuid`; `noexec` is intentionally absent so applications can run.
+An unloaded module's read-only mount is retained under `/run/zxmod/retired`
+until reboot so older OverlayFS generations remain valid.
 
 Only `root/usr` and `root/opt` are accepted. A load rejects every non-directory
 payload path already present in the base image or another active module, and
