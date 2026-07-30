@@ -26,11 +26,12 @@ prepare() {
 }
 
 build_mesa_clc_tools() {
+    local wrapper_directory=$1
     local tools_build="$recipework/mesa-clc-build"
     local tools_directory="$recipework/host-tools"
     local mesa_clc vtn_bindgen2
 
-    target_meson_setup "$srcdir/source" "$tools_build" \
+    PATH="$wrapper_directory:$PATH" target_meson_setup "$srcdir/source" "$tools_build" \
         -Dplatforms=x11 \
         -Dgallium-drivers=iris,crocus \
         -Dvulkan-drivers= \
@@ -46,11 +47,13 @@ build_mesa_clc_tools() {
         -Dbuild-tests=false \
         -Denable-glcpp-tests=false \
         -Dtools=
-    meson compile -C "$tools_build" -j "$EFILINUX_JOBS" mesa_clc vtn_bindgen2
+    PATH="$wrapper_directory:$PATH" \
+        meson compile -C "$tools_build" -j "$EFILINUX_JOBS" mesa_clc vtn_bindgen2
 
-    mesa_clc=$(find "$tools_build" -type f -name mesa_clc -print -quit)
-    vtn_bindgen2=$(find "$tools_build" -type f -name vtn_bindgen2 -print -quit)
-    [[ -n $mesa_clc && -n $vtn_bindgen2 ]] || die "Mesa CLC build tools are missing"
+    mesa_clc="$tools_build/src/compiler/clc/mesa_clc"
+    vtn_bindgen2="$tools_build/src/compiler/spirv/vtn_bindgen2"
+    [[ -x $mesa_clc ]] || die "Mesa CLC tool is missing: $mesa_clc"
+    [[ -x $vtn_bindgen2 ]] || die "Mesa SPIR-V tool is missing: $vtn_bindgen2"
 
     mkdir -p "$tools_directory"
     for tool in mesa_clc vtn_bindgen2; do
@@ -78,7 +81,7 @@ unset LD_LIBRARY_PATH
 exec "$system_zstd" "\$@"
 WRAPPER
     chmod 0755 "$wrapper_directory/zstd"
-    build_mesa_clc_tools
+    build_mesa_clc_tools "$wrapper_directory"
     mesa_clc_tools=$MESA_CLC_TOOLS
 
     PATH="$mesa_clc_tools:$wrapper_directory:$PATH" target_meson_setup "$srcdir/source" "$builddir" \
