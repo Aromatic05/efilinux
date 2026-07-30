@@ -12,7 +12,7 @@ pkgname=mousepad
 pkgver=0.6.5
 depends=(glib glibc gtk3 gtksourceview4 xfce)
 builddepends=()
-makedepends=(gcc make pkg-config)
+makedepends=(gcc meson ninja pkg-config python3)
 
 prepare() {
     local archive="$downloaddir/mousepad-$pkgver.tar.xz"
@@ -23,14 +23,19 @@ prepare() {
 }
 
 build() {
-    target_release_configure "$srcdir/source" "$builddir" --disable-debug
-    target_make_install "$builddir" "$develdir"
+    target_meson_setup "$srcdir/source" "$builddir" \
+        -Dgtksourceview4=enabled \
+        -Dpolkit=disabled \
+        -Dgspell-plugin=disabled \
+        -Dshortcuts-plugin=enabled \
+        -Dtest-plugin=disabled
+    target_meson_install "$builddir" "$develdir"
 }
 
-devel() { strip_all "$develdir/usr/bin"; }
+devel() { strip_all "$develdir/usr/bin" "$develdir/usr/lib"; }
 
 package() {
-    local -a keep=(/usr/bin/mousepad /usr/share/applications/ /usr/share/glib-2.0/schemas/ /usr/share/icons/hicolor/)
+    local -a keep=(/usr/bin/mousepad /usr/lib/mousepad/plugins/ /usr/share/applications/ /usr/share/glib-2.0/schemas/ /usr/share/icons/hicolor/)
     package_keep "${keep[@]}"
 }
 

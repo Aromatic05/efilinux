@@ -12,7 +12,7 @@ pkgname=ristretto
 pkgver=0.13.4
 depends=(gdk-pixbuf glib glibc gtk3 libexif xfce)
 builddepends=()
-makedepends=(gcc make pkg-config)
+makedepends=(gcc meson ninja pkg-config python3)
 
 prepare() {
     local archive="$downloaddir/ristretto-$pkgver.tar.xz"
@@ -23,8 +23,8 @@ prepare() {
 }
 
 build() {
-    target_release_configure "$srcdir/source" "$builddir" --disable-debug
-    target_make_install "$builddir" "$develdir"
+    target_meson_setup "$srcdir/source" "$builddir" -Dlibx11=enabled
+    target_meson_install "$builddir" "$develdir"
 }
 
 devel() { strip_all "$develdir/usr/bin"; }
