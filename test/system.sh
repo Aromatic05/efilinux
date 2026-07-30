@@ -61,7 +61,7 @@ for file in \
     /etc/inittab /etc/rc.d/rcS /etc/rc.d/rc /etc/rc.d/rc.shutdown \
     /etc/sysconfig/hostname /etc/sysconfig/network /etc/sysconfig/clock \
     /etc/syslog.conf /etc/crontab /etc/dbus-1/system.conf \
-    /etc/dhcpcd.conf /etc/ssh/sshd_config /etc/doas.conf \
+    /etc/dhcpcd.conf /etc/ssh/sshd_config /etc/doas.conf /etc/ssl/openssl.cnf \
     /etc/pam.d/system-auth /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/doas \
     /etc/passwd /etc/group /etc/shadow /etc/gshadow \
     /etc/filemeta/ownership.tsv /etc/filemeta/caps/iputils; do
@@ -103,11 +103,20 @@ require_program ssh openssh
 require_program sshd openssh
 require_program ssh-keygen openssh
 require_program doas doas
+require_program openssl openssl
 
 for helper in ata_id cdrom_id dmi_memory_id fido_id iocost mtd_probe scsi_id v4l_id; do
     [[ -x "$rootfs/usr/lib/udev/$helper" ]] || die "Udev helper is missing: $helper"
 done
 [[ -x "$rootfs/usr/lib/ssh/sftp-server" ]] || die "OpenSSH SFTP server is missing"
+OPENSSL_CONF="$rootfs/etc/ssl/openssl.cnf" \
+    "$loader" --library-path "$library_path" \
+    "$rootfs/usr/bin/openssl" list -providers > "$EFILINUX_TEST/openssl-providers.txt"
+grep -Fq 'default' "$EFILINUX_TEST/openssl-providers.txt" || \
+    die "OpenSSL default provider did not load with the packaged configuration"
+if grep -Fq 'legacy' "$EFILINUX_TEST/openssl-providers.txt"; then
+    die "OpenSSL legacy provider is enabled globally"
+fi
 
 [[ $(rootfs_stat '%a' /etc/shadow) == 600 ]] || die "/etc/shadow permissions are not 0600"
 [[ $(rootfs_stat '%a' /etc/gshadow) == 600 ]] || die "/etc/gshadow permissions are not 0600"

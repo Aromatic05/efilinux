@@ -45,7 +45,7 @@ devel() {
 }
 
 package() {
-    local -a keep=(/usr/bin/openssl)
+    local -a keep=(/etc/ssl/openssl.cnf /usr/bin/openssl)
     package_add_library_family keep 'libcrypto.so.3*'
     package_add_library_family keep 'libssl.so.3*'
     package_keep "${keep[@]}"
