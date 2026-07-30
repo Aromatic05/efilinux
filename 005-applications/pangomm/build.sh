@@ -31,7 +31,7 @@ devel() { strip_all "$develdir/usr/lib"; }
 
 package() {
     local -a keep=()
-    package_add_library_family keep 'libpangomm-2.46.so.1*'
+    package_add_library_family keep 'libpangomm-1.4.so.1*'
     package_keep "${keep[@]}"
 }
 
