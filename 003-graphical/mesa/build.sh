@@ -14,7 +14,7 @@ pkgname=mesa
 pkgver=26.1.5
 
 depends=(elfutils gcc-libs glibc libdrm xorg zlib zstd)
-builddepends=(libclc llvm spirv-tools)
+builddepends=(clang-headers libclc llvm spirv-tools)
 makedepends=(bison flex gcc meson ninja pkg-config python3 zstd)
 
 prepare() {
@@ -27,7 +27,7 @@ prepare() {
 
 build_mesa_clc_tools() {
     local tools_build="$recipework/mesa-clc-build"
-    local tools_directory="$recipework/mesa-clc-tools"
+    local tools_directory="$recipework/host-tools"
     local mesa_clc vtn_bindgen2
 
     target_meson_setup "$srcdir/source" "$tools_build" \
