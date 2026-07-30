@@ -77,7 +77,7 @@ build() {
     system_zstd=$(command -v zstd)
     cat > "$wrapper_directory/zstd" <<WRAPPER
 #!/usr/bin/env bash
-unset LD_LIBRARY_PATH
+unset LD_PRELOAD LD_LIBRARY_PATH
 exec "$system_zstd" "\$@"
 WRAPPER
     chmod 0755 "$wrapper_directory/zstd"
