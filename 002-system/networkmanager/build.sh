@@ -11,7 +11,7 @@ source "$ROOT/lib/recipe.sh"
 pkgname=networkmanager
 pkgver=1.58.0
 
-depends=(dbus elogind glib glibc iwd libndp polkit readline udev)
+depends=(dbus elogind ethtool glib glibc iwd libndp polkit readline udev)
 builddepends=(linux-headers)
 makedepends=(gcc meson ninja pkg-config)
 

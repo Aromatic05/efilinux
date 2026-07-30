@@ -6,38 +6,40 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl sha256sum tar
-ensure_directories
+pkgname=wireless-regdb
+pkgver=2026.05.30
+sysroot=false
 
-package="wireless-regdb-$WIRELESS_REGDB_VERSION"
-producer=${BASH_SOURCE[0]}
-archive="$EFILINUX_DOWNLOADS/$package.tar.xz"
+depends=()
+builddepends=()
+makedepends=(install)
 
-[[ -d "$EFILINUX_ROOTFS" ]] || die "target rootfs has not been built"
-set_package_paths "$package"
+prepare() {
+    local archive="$downloaddir/wireless-regdb-$pkgver.tar.xz"
 
-if binary_package_extract "$package" "$PACKAGE_STAGING" "$producer"; then
-    log "Using binary package $(basename -- "$PACKAGE_ARCHIVE")"
-else
     download \
-        "https://www.kernel.org/pub/software/network/wireless-regdb/$package.tar.xz" \
+        "https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-$pkgver.tar.xz" \
         "$archive"
-    verify_sha256 "$WIRELESS_REGDB_SHA256" "$archive"
-    prepare_package "$package"
-    extract_source "$archive" "$PACKAGE_SOURCE"
+    checksum \
+        sha256 \
+        8a27bfc081bafed8c24dd70fab0d96f098e5a0bfcd08d3da672595f225ab8993 \
+        "$archive"
+    extract "$archive" "$srcdir/wireless-regdb"
+}
 
-    mkdir -p "$PACKAGE_STAGING/usr/lib/firmware"
-    install -m 0644 \
-        "$PACKAGE_SOURCE/regulatory.db" \
-        "$PACKAGE_STAGING/usr/lib/firmware/regulatory.db"
-    install -m 0644 \
-        "$PACKAGE_SOURCE/regulatory.db.p7s" \
-        "$PACKAGE_STAGING/usr/lib/firmware/regulatory.db.p7s"
+build() {
+    install -Dm0644 \
+        "$srcdir/wireless-regdb/regulatory.db" \
+        "$develdir/usr/lib/firmware/regulatory.db"
+    install -Dm0644 \
+        "$srcdir/wireless-regdb/regulatory.db.p7s" \
+        "$develdir/usr/lib/firmware/regulatory.db.p7s"
+}
 
-    binary_package_create "$package" "$PACKAGE_STAGING" "$producer"
-fi
+package() {
+    :
+}
 
-install_rootfs_tree \
-    "$package" "$PACKAGE_STAGING/usr/lib/firmware" /usr/lib/firmware
-rm -rf -- "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+recipe_main "$@"

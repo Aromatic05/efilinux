@@ -4,12 +4,18 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/004-desktop/config.sh"
-source "$ROOT/004-desktop/extras/config.sh"
 source "$ROOT/lib/common.sh"
 
 ensure_directories
 rootfs="$EFILINUX_ROOTFS"
+
+[[ -f "$EFILINUX_ROOTFS_FAKEROOT_STATE" ]] || \
+    die "rootfs fakeroot metadata is missing"
+
+rootfs_stat() {
+    fakeroot -i "$EFILINUX_ROOTFS_FAKEROOT_STATE" -- \
+        stat -c "$1" "$rootfs$2"
+}
 
 top_level_build="$ROOT/build.sh"
 graphical_stage_line=$(grep -nF 'run_component "$ROOT/003-graphical"' \
@@ -105,32 +111,17 @@ for failsafe_program in xfwm4 xfsettingsd xfce4-panel Thunar xfdesktop; do
         die "XFCE failsafe session is missing $failsafe_program"
 done
 
-skel_xfconf="$rootfs/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml"
-user_xfconf="$rootfs/home/user/.config/xfce4/xfconf/xfce-perchannel-xml"
+system_xfconf="$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml"
 for channel in \
     xsettings xfwm4 xfce4-panel xfce4-session keyboards thunar \
     xfce4-notifyd xfce4-power-manager xfce4-screensaver \
     xfce4-terminal xfce4-keyboard-shortcuts; do
-    [[ -f "$skel_xfconf/$channel.xml" ]] || \
-        die "skel XFCE profile is missing channel defaults: $channel"
-    [[ -f "$user_xfconf/$channel.xml" ]] || \
-        die "user XFCE profile is missing channel defaults: $channel"
-    cmp -s "$skel_xfconf/$channel.xml" "$user_xfconf/$channel.xml" || \
-        die "user XFCE channel differs from skel default: $channel"
+    [[ -f "$system_xfconf/$channel.xml" ]] || \
+        die "system XFCE profile is missing channel defaults: $channel"
 done
-cmp -s \
-    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" \
-    "$user_xfconf/xsettings.xml" || \
-    die "user XFCE profile does not preserve the system Qogir xsettings"
-cmp -s \
-    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" \
-    "$user_xfconf/xfwm4.xml" || \
-    die "user XFCE profile does not preserve the system Qogir XFWM settings"
-cmp -s "$session_config" "$user_xfconf/xfce4-session.xml" || \
-    die "user XFCE profile does not preserve the system session defaults"
 [[ ! -d "$rootfs/root/.config/xfce4" ]] || \
     die "root desktop profile must not be seeded"
-[[ $(stat -c '%u:%g' "$rootfs/home/user") == 1000:1000 ]] || \
+[[ $(rootfs_stat '%u:%g' /home/user) == 1000:1000 ]] || \
     die "desktop user home ownership is incorrect"
 
 for autostart in \

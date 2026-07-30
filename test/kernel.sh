@@ -6,12 +6,19 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command find grep modinfo readlink stat wc
+require_command cmp find grep modinfo readlink stat wc
 ensure_directories
 
 rootfs="$EFILINUX_ROOTFS"
-kernel_config="$EFILINUX_KERNEL_BUILD/.config"
-module_root="$rootfs/usr/lib/modules/$LINUX_VERSION"
+linux_metadata=$("$ROOT/000-kernel/linux/build.sh" --print-metadata)
+read -r linux_version linux_recipe_key < <(
+    python3 -c \
+        'import json,sys; data=json.load(sys.stdin); print(data["pkgver"], data["recipe_key"])' \
+        <<<"$linux_metadata"
+)
+kernel_state="$EFILINUX_BUILD/kernel-state/$linux_recipe_key"
+kernel_config="$kernel_state/build/.config"
+module_root="$rootfs/usr/lib/modules/$linux_version"
 initramfs_manifest="$EFILINUX_INITRAMFS_MANIFEST"
 firmware_root="$rootfs/usr/lib/firmware"
 efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
@@ -44,11 +51,10 @@ assert_no_find_match \
     "$rootfs" -name '*[[:space:]]*'
 
 [[ -s "$initramfs_manifest" ]] || die "generated initramfs manifest is missing"
-initramfs_source=$(grep '^CONFIG_INITRAMFS_SOURCE=' "$kernel_config")
-[[ "$initramfs_source" == *"$initramfs_manifest"* ]] || \
-    die "generated manifest is not the kernel initramfs source"
-[[ "$initramfs_source" != *"$rootfs"* ]] || \
-    die "host-owned rootfs directory is still embedded directly"
+grep -Fxq 'CONFIG_INITRAMFS_SOURCE="initramfs.files"' "$kernel_config" || \
+    die "kernel link state does not use the stable initramfs manifest path"
+cmp -s "$initramfs_manifest" "$kernel_state/build/initramfs.files" || \
+    die "generated manifest was not staged into the kernel link state"
 grep -qx 'CONFIG_INITRAMFS_ROOT_UID=0' "$kernel_config" || \
     die "initramfs UID remapping is still enabled"
 grep -qx 'CONFIG_INITRAMFS_ROOT_GID=0' "$kernel_config" || \
@@ -178,7 +184,7 @@ required_modules=(
     virtio_gpu vmwgfx hv_netvsc
 )
 for module in "${required_modules[@]}"; do
-    modinfo -b "$rootfs" -k "$LINUX_VERSION" "$module" >/dev/null || \
+    modinfo -b "$rootfs" -k "$linux_version" "$module" >/dev/null || \
         die "expected common-PC kernel module is unavailable: $module"
 done
 

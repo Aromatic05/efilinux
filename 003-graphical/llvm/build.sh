@@ -4,25 +4,30 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/003-graphical/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
-source "$ROOT/003-graphical/lib/build.sh"
+source "$ROOT/lib/recipe.sh"
+source "$ROOT/lib/target-build.sh"
 
-require_command cmake curl g++ gcc ninja sha256sum tar
-ensure_directories
 
-package="llvm-$LLVM_VERSION"
-if ! graphical_binary_package_restore "$package"; then
-    graphical_prepare_archive \
-        "$package" \
-        "llvm-project-$LLVM_VERSION.src.tar.xz" \
-        "$LLVM_SHA256" \
-        "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_VERSION/llvm-project-$LLVM_VERSION.src.tar.xz"
+pkgname=llvm
+pkgver=22.1.8
 
-    log "Configuring LLVM X86 and AMDGPU backends"
-    graphical_cmake_setup "$PACKAGE_SOURCE/llvm" "$PACKAGE_BUILD" \
-        -DLLVM_TARGETS_TO_BUILD="X86;AMDGPU" \
+depends=(gcc-libs glibc libffi zlib zstd)
+builddepends=()
+makedepends=(cmake gcc g++ ninja python3)
+
+prepare() {
+    local archive="$downloaddir/llvm-project-$pkgver.src.tar.xz"
+    download "https://github.com/llvm/llvm-project/releases/download/llvmorg-$pkgver/llvm-project-$pkgver.src.tar.xz" "$archive"
+    checksum sha256 922f1817a0df7b1489272d18134ee0087a8b068828f87ac63b9861b1a9965888 "$archive"
+    extract "$archive" "$srcdir/source"
+    input_shared_file "$ROOT/lib/target-build.sh" "$srcdir/target-build.sh"
+}
+
+build() {
+    target_cmake_setup "$srcdir/source/llvm" "$builddir" \
+        -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU' \
         -DLLVM_BUILD_LLVM_DYLIB=ON \
         -DLLVM_LINK_LLVM_DYLIB=ON \
         -DLLVM_DYLIB_COMPONENTS=all \
@@ -46,14 +51,17 @@ if ! graphical_binary_package_restore "$package"; then
         -DLLVM_BUILD_TOOLS=ON \
         -DLLVM_BUILD_UTILS=OFF \
         -DLLVM_INSTALL_UTILS=ON
+    target_cmake_install "$builddir" "$develdir"
+}
 
-    log "Building LLVM"
-    graphical_cmake_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+devel() {
+    strip_all "$develdir/usr/bin" "$develdir/usr/lib"
+}
 
-    [[ -e "$PACKAGE_STAGING/usr/lib/libLLVM.so" ]] || \
-        die "LLVM shared library was not installed"
-    [[ -x "$PACKAGE_STAGING/usr/bin/llvm-config" ]] || \
-        die "llvm-config was not installed"
+package() {
+    local -a keep=()
+    package_add_library_family keep 'libLLVM.so*'
+    package_keep "${keep[@]}"
+}
 
-    graphical_binary_package_publish "$package"
-fi
+recipe_main "$@"

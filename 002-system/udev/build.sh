@@ -152,6 +152,7 @@ package() {
     )
     package_add_library_family keep 'libudev.so.1*'
     package_keep "${keep[@]}"
+    rm -f "$pkgdir/usr/lib/udev/init-net-rules.sh"
 }
 
 recipe_main "$@"

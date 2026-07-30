@@ -14,7 +14,7 @@ sourcever=3530400
 
 depends=(glibc zlib)
 builddepends=()
-makedepends=(gcc make tclsh unzip)
+makedepends=(gcc make unzip)
 
 prepare() {
     local archive="$downloaddir/sqlite-src-$sourcever.zip"
@@ -24,17 +24,13 @@ prepare() {
 }
 
 build() {
-    local tclsh_path
-
-    tclsh_path=$(command -v tclsh)
     cd "$builddir"
-    autosetup_tclsh="$tclsh_path" \
     CC="$CC" CFLAGS="$CFLAGS" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS" \
         "$srcdir/sqlite/configure" \
             --prefix=/usr \
             --libdir=/usr/lib \
             --sysconfdir=/etc \
-            --with-tclsh="$tclsh_path" \
+            --disable-tcl \
             --disable-static \
             --disable-readline \
             --soname=legacy

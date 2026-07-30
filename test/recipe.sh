@@ -47,7 +47,9 @@ prepare() {
 }
 
 build() {
+    printf 'build\n' >> "$work/mock-builds"
     install -Dm0644 "\$srcdir/payload.txt" "\$develdir/usr/share/mock/payload.txt"
+    install -Dm0644 "\$srcdir/payload.txt" "\$develdir/usr/share/mock/optional.txt"
     install -Dm0644 "\$srcdir/payload.txt" "\$develdir/usr/include/mock.h"
     install -Dm0755 "\$srcdir/payload.txt" "\$develdir/usr/bin/mock-cap"
 }
@@ -105,6 +107,7 @@ archive=$(awk -F '\t' 'NR == 2 { print $5 }' "$EFILINUX_PACKAGE_INDEX")
 archive="$EFILINUX_PACKAGES/$archive"
 [[ -f "$archive" ]]
 grep -Fxq '/usr/share/mock/payload.txt' < <(tar -xOf "$archive" .INSTALL)
+grep -Fxq '/usr/share/mock/optional.txt' < <(tar -xOf "$archive" .INSTALL)
 if grep -Fq '/usr/include/mock.h' < <(tar -xOf "$archive" .INSTALL); then
     printf 'package subset retained a deleted development file\n' >&2
     exit 1
@@ -135,6 +138,37 @@ archive_count_after=$(find "$EFILINUX_PACKAGES" -maxdepth 1 -name '*.pkg.tar.zst
     printf 'cache reuse created another archive\n' >&2
     exit 1
 }
+
+python3 - "$recipe_directory/build.sh" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old = '''package() {
+    rm -rf "$pkgdir/usr/include"
+}'''
+new = '''package() {
+    rm -rf "$pkgdir/usr/include"
+    rm -f "$pkgdir/usr/share/mock/optional.txt"
+}'''
+if text.count(old) != 1:
+    raise SystemExit('mock package() fixture changed unexpectedly')
+path.write_text(text.replace(old, new))
+PY
+
+"$recipe_directory/build.sh" --repackage
+[[ $(wc -l < "$work/mock-builds") == 1 ]] || {
+    printf 'repackage reran build()\n' >&2
+    exit 1
+}
+archive=$(awk -F '\t' 'NR == 2 { print $5 }' "$EFILINUX_PACKAGE_INDEX")
+archive="$EFILINUX_PACKAGES/$archive"
+if grep -Fxq '/usr/share/mock/optional.txt' < <(tar -xOf "$archive" .INSTALL); then
+    printf 'repackage did not apply the new package subset\n' >&2
+    exit 1
+fi
+grep -Fxq '/usr/share/mock/optional.txt' < <(tar -xOf "$archive" .FILELIST)
 
 dependency_root="$work/dependency-root"
 dependency_directory="$dependency_root/stage/dependency"
@@ -195,6 +229,102 @@ EFILINUX_ROOT="$dependency_root" "$consumer_directory/build.sh"
     exit 1
 }
 
+diamond_root="$work/diamond-root"
+shared_directory="$diamond_root/stage/shared"
+left_directory="$diamond_root/stage/left"
+right_directory="$diamond_root/stage/right"
+top_directory="$diamond_root/stage/top"
+mkdir -p \
+    "$shared_directory" \
+    "$left_directory" \
+    "$right_directory" \
+    "$top_directory" \
+    "$diamond_root/profiles"
+cp "$ROOT/profiles/makepkg.conf" "$diamond_root/profiles/makepkg.conf"
+
+cat > "$shared_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+pkgname=shared
+pkgver=1
+depends=()
+builddepends=()
+makedepends=(install)
+prepare() { :; }
+recipe_cache_ready() {
+    printf 'visit\n' >> "$work/shared-visits"
+    return 0
+}
+build() { install -Dm0644 /dev/null "\$develdir/usr/include/shared.h"; }
+package() { package_keep; }
+recipe_main "\$@"
+EOF
+chmod 0755 "$shared_directory/build.sh"
+
+for branch in left right; do
+    branch_directory="$diamond_root/stage/$branch"
+    cat > "$branch_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+pkgname=$branch
+pkgver=1
+depends=(shared)
+builddepends=()
+makedepends=(install)
+prepare() { :; }
+build() {
+    [[ -f "\$EFILINUX_SYSROOT/usr/include/shared.h" ]] || \
+        die "shared dependency is absent from sysroot"
+    install -Dm0644 /dev/null "\$develdir/usr/include/$branch.h"
+}
+package() { package_keep; }
+recipe_main "\$@"
+EOF
+    chmod 0755 "$branch_directory/build.sh"
+done
+
+cat > "$top_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+pkgname=top
+pkgver=1
+depends=(left right)
+builddepends=()
+makedepends=(install)
+prepare() { :; }
+build() {
+    [[ -f "\$EFILINUX_SYSROOT/usr/include/left.h" ]] || die "left dependency is absent"
+    [[ -f "\$EFILINUX_SYSROOT/usr/include/right.h" ]] || die "right dependency is absent"
+    install -Dm0644 /dev/null "\$develdir/usr/share/top"
+}
+package() { :; }
+recipe_main "\$@"
+EOF
+chmod 0755 "$top_directory/build.sh"
+
+rm -f "$work/shared-visits"
+EFILINUX_ROOT="$diamond_root" "$top_directory/build.sh"
+shared_visits=$(wc -l < "$work/shared-visits")
+[[ "$shared_visits" == 1 ]] || {
+    printf 'diamond dependency was processed %s times instead of once\n' "$shared_visits" >&2
+    exit 1
+}
+
 bad_directory="$work/bad"
 mkdir -p "$bad_directory"
 cat > "$bad_directory/build.sh" <<EOF
@@ -225,6 +355,75 @@ if "$bad_directory/build.sh" --no-deps >"$work/bad.stdout" 2>"$work/bad.stderr";
     exit 1
 fi
 grep -Fq 'package() added or modified usr/share/bad' "$work/bad.stderr"
+
+host_leak_directory="$work/host-leak"
+mkdir -p "$host_leak_directory"
+cat > "$host_leak_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+
+pkgname=host-leak
+pkgver=1
+depends=()
+builddepends=()
+makedepends=(install)
+
+prepare() { :; }
+build() {
+    install -Dm0644 /dev/null "\$develdir\$EFILINUX_BUILD/leaked-file"
+}
+package() { :; }
+recipe_main "\$@"
+EOF
+chmod 0755 "$host_leak_directory/build.sh"
+
+if "$host_leak_directory/build.sh" --no-deps \
+        >"$work/host-leak.stdout" 2>"$work/host-leak.stderr"; then
+    printf 'build-host path leak was accepted\n' >&2
+    exit 1
+fi
+grep -Fq 'package tree contains build-host path:' "$work/host-leak.stderr"
+
+library_directory="$work/library-family"
+mkdir -p "$library_directory"
+cat > "$library_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+
+pkgname=library-family
+pkgver=1
+depends=()
+builddepends=()
+makedepends=(install ln)
+
+prepare() { :; }
+build() {
+    install -Dm0644 /dev/null "\$develdir/usr/lib/libexample-1.so"
+    ln -s libexample-1.so "\$develdir/usr/lib/libexample.so.1"
+}
+package() {
+    local -a keep=()
+    package_add_library_family keep 'libexample.so.1*'
+    package_keep "\${keep[@]}"
+}
+recipe_main "\$@"
+EOF
+chmod 0755 "$library_directory/build.sh"
+"$library_directory/build.sh" --no-deps
+library_archive=$(awk -F '\t' '$1 == "library-family" { print $5 }' "$EFILINUX_PACKAGE_INDEX")
+library_archive="$EFILINUX_PACKAGES/$library_archive"
+grep -Fxq '/usr/lib/libexample.so.1' < <(tar -xOf "$library_archive" .INSTALL)
+grep -Fxq '/usr/lib/libexample-1.so' < <(tar -xOf "$library_archive" .INSTALL)
 
 "$ROOT/test/packages.sh"
 

@@ -6,7 +6,7 @@ installed into the target system and no toolchain bootstrap is performed.
 
 ## Current milestone
 
-The runtime and multi-user system layers use directly executable Bash recipes.
+All package layers use directly executable Bash recipes.
 Each package provides a complete devel tree plus a generated, declarative
 installation subset. Profiles compose packages into the target rootfs without
 running package scripts or allowing undeclared file replacement.
@@ -39,6 +39,24 @@ The current build covers:
 ├── device-mapper, cryptsetup, mdadm, libblockdev
 ├── udisks, gvfs
 └── efilinux-system-config
+
+003-graphical
+├── xorg                 X11 protocols, client libraries, and utilities
+├── xorg-server          Xorg server and input/video drivers
+├── llvm, mesa           shared LLVM runtime and Gallium graphics stack
+├── libinput, libxkbcommon, xkeyboard-config
+├── freetype, harfbuzz, fontconfig, cairo, pango
+├── gdk-pixbuf, librsvg, gtk3, vte
+├── independent GNOME/X11 support libraries
+├── noto-sans-cjk-sc
+├── qogir-icon-theme
+└── qogir-desktop-theme
+
+004-desktop
+├── xfce                 integrated XFCE software stack
+├── libnma
+├── network-manager-applet
+└── efilinux-xfce-config
 ```
 
 BusyBox `ash` provides `/bin/sh` and rescue implementations of basic commands.
@@ -130,15 +148,19 @@ early-microcode delivery mechanism is added.
 ./build.sh
 ```
 
-The numbered directories describe package groups, not direct build order. The
-base rootfs is assembled first, modules and firmware are installed into that
-same rootfs, and the final EFI kernel is produced last.
+The numbered directories are organizational layers. Package recipes resolve
+their target dependencies by package name, while profile files under
+`profiles/` select the exact runtime closure for console, graphical, and XFCE
+images. The selected rootfs is composed first; kernel modules and firmware are
+then transactionally added, and the EFI-stub kernel is relinked with that
+complete rootfs.
 
 Generated files are restricted to:
 
 ```text
 downloads/
 build/
+packages/
 target/
 ```
 

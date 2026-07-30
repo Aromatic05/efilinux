@@ -177,10 +177,16 @@ package_create_archive() {
     local recipe_file=$6
     local source_records=$7
     local source_epoch=${SOURCE_DATE_EPOCH:-0}
-    local work archive_root temporary digest content_hash archive
+    local work archive_root temporary digest content_hash archive previous_archive_name=
 
     [[ -d "$devel_directory" ]] || die "devel tree is missing: $devel_directory"
     [[ -d "$package_directory" ]] || die "package tree is missing: $package_directory"
+
+    if [[ -f "$EFILINUX_PACKAGE_INDEX" ]]; then
+        package_assert_current_index
+        previous_archive_name=$(awk -F '\t' -v name="$name" \
+            'NR > 1 && $1 == name { print $5; exit }' "$EFILINUX_PACKAGE_INDEX")
+    fi
 
     ensure_directories
     work="$EFILINUX_PACKAGE_WORK/create-$name-$$"
@@ -223,6 +229,11 @@ EOF
     mv -- "$temporary" "$archive"
     printf '%s  %s\n' "$digest" "$(basename -- "$archive")" > "$archive.sha256"
     package_update_index "$name" "$version" "$recipe_key" "$content_hash" "$archive" "$digest"
+    if [[ -n "$previous_archive_name" && "$previous_archive_name" != "$(basename -- "$archive")" ]]; then
+        rm -f -- \
+            "$EFILINUX_PACKAGES/$previous_archive_name" \
+            "$EFILINUX_PACKAGES/$previous_archive_name.sha256"
+    fi
     rm -rf -- "$work"
 
     PACKAGE_ARCHIVE=$archive

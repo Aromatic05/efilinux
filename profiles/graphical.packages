@@ -1,0 +1,3 @@
+# EFI Linux GTK/Xorg validation image.
+@include graphical-base.packages
+efilinux-graphical-config

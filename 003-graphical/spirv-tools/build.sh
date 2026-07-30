@@ -4,74 +4,51 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/003-graphical/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
-source "$ROOT/003-graphical/lib/build.sh"
+source "$ROOT/lib/recipe.sh"
+source "$ROOT/lib/target-build.sh"
 
-require_command cmake curl ninja python3 sha256sum tar
-ensure_directories
 
-package="spirv-tools-$SPIRV_TOOLS_VERSION"
-if graphical_binary_package_restore "$package"; then
-    exit 0
-fi
+pkgname=spirv-tools
+pkgver=1.4.357.0
 
-prepare_package "$package"
-headers_source="$PACKAGE_SOURCE/spirv-headers"
-reset_directory "$headers_source"
+depends=()
+builddepends=()
+makedepends=(cmake gcc g++ ninja python3)
 
-archive="SPIRV-Tools-vulkan-sdk-$SPIRV_TOOLS_VERSION.tar.gz"
-download \
-    "https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/vulkan-sdk-$SPIRV_TOOLS_VERSION.tar.gz" \
-    "$EFILINUX_DOWNLOADS/$archive"
-verify_sha256 "$SPIRV_TOOLS_SHA256" "$EFILINUX_DOWNLOADS/$archive"
-extract_source "$EFILINUX_DOWNLOADS/$archive" "$PACKAGE_SOURCE"
+prepare() {
+    local tools="$downloaddir/SPIRV-Tools-vulkan-sdk-$pkgver.tar.gz"
+    local headers="$downloaddir/SPIRV-Headers-29981f65241605e08b0ede4cfeb999fe3b723c6a.tar.gz"
+    download "https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/vulkan-sdk-$pkgver.tar.gz" "$tools"
+    checksum sha256 d31e7109b6ef3559067e53e520870eafed7c9534d00db9728814b6df03fa4a5e "$tools"
+    download "https://github.com/KhronosGroup/SPIRV-Headers/archive/29981f65241605e08b0ede4cfeb999fe3b723c6a.tar.gz" "$headers"
+    checksum sha256 232899f1ad4104fb5bc377b94596c7621575eee62ad9a9e8f929b63a7dd8a7ad "$headers"
+    extract "$tools" "$srcdir/source"
+    extract "$headers" "$srcdir/spirv-headers"
+    input_shared_file "$ROOT/lib/target-build.sh" "$srcdir/target-build.sh"
+}
 
-headers_archive="SPIRV-Headers-$SPIRV_TOOLS_HEADERS_COMMIT.tar.gz"
-download \
-    "https://github.com/KhronosGroup/SPIRV-Headers/archive/$SPIRV_TOOLS_HEADERS_COMMIT.tar.gz" \
-    "$EFILINUX_DOWNLOADS/$headers_archive"
-verify_sha256 "$SPIRV_TOOLS_HEADERS_SHA256" "$EFILINUX_DOWNLOADS/$headers_archive"
-extract_source "$EFILINUX_DOWNLOADS/$headers_archive" "$headers_source"
+build() {
+    target_cmake_setup "$srcdir/source" "$builddir" \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DSPIRV-Headers_SOURCE_DIR="$srcdir/spirv-headers" \
+        -DSPIRV_TOOLS_BUILD_STATIC=ON \
+        -DSPIRV_SKIP_EXECUTABLES=ON \
+        -DSPIRV_SKIP_TESTS=ON \
+        -DSPIRV_WERROR=OFF
+    target_cmake_install "$builddir" "$develdir"
+    rm -f \
+        "$develdir/usr/lib/libSPIRV-Tools-shared.so" \
+        "$develdir/usr/lib/pkgconfig/SPIRV-Tools-shared.pc" \
+        "$develdir/usr/lib/libSPIRV-Tools-diff.a" \
+        "$develdir/usr/lib/libSPIRV-Tools-lint.a" \
+        "$develdir/usr/lib/libSPIRV-Tools-reduce.a"
+    rm -rf "$develdir/usr/lib/cmake"
+}
 
-log "Configuring target SPIRV-Tools libraries"
-graphical_cmake_setup "$PACKAGE_SOURCE" "$PACKAGE_BUILD" \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DSPIRV-Headers_SOURCE_DIR="$headers_source" \
-    -DSPIRV_TOOLS_BUILD_STATIC=ON \
-    -DSPIRV_SKIP_EXECUTABLES=ON \
-    -DSPIRV_SKIP_TESTS=ON \
-    -DSPIRV_WERROR=OFF
+package() {
+    package_keep
+}
 
-log "Building target SPIRV-Tools libraries"
-graphical_cmake_install "$PACKAGE_BUILD" "$PACKAGE_STAGING"
-
-rm -f \
-    "$PACKAGE_STAGING/usr/lib/libSPIRV-Tools-shared.so" \
-    "$PACKAGE_STAGING/usr/lib/pkgconfig/SPIRV-Tools-shared.pc" \
-    "$PACKAGE_STAGING/usr/lib/libSPIRV-Tools-diff.a" \
-    "$PACKAGE_STAGING/usr/lib/libSPIRV-Tools-lint.a" \
-    "$PACKAGE_STAGING/usr/lib/libSPIRV-Tools-reduce.a"
-rm -rf "$PACKAGE_STAGING/usr/lib/cmake"
-
-for artifact in \
-    usr/lib/libSPIRV-Tools.a \
-    usr/lib/libSPIRV-Tools-opt.a \
-    usr/lib/libSPIRV-Tools-link.a \
-    usr/lib/pkgconfig/SPIRV-Tools.pc \
-    usr/include/spirv-tools/libspirv.h \
-    usr/include/spirv-tools/libspirv.hpp \
-    usr/include/spirv-tools/optimizer.hpp \
-    usr/include/spirv-tools/linker.hpp; do
-    [[ -s "$PACKAGE_STAGING/$artifact" ]] || \
-        die "target SPIRV-Tools artifact is missing: /$artifact"
-done
-if find "$PACKAGE_STAGING/usr/lib" -maxdepth 1 -type f \
-    ! -name 'libSPIRV-Tools.a' \
-    ! -name 'libSPIRV-Tools-opt.a' \
-    ! -name 'libSPIRV-Tools-link.a' -print -quit | grep -q .; then
-    die "unexpected SPIRV-Tools library leaked into target staging"
-fi
-
-graphical_binary_package_publish "$package"
+recipe_main "$@"

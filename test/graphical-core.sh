@@ -3,11 +3,7 @@
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
-# shellcheck source=../config.sh
 source "$ROOT/config.sh"
-# shellcheck source=../003-graphical/config.sh
-source "$ROOT/003-graphical/config.sh"
-# shellcheck source=../lib/common.sh
 source "$ROOT/lib/common.sh"
 
 sysroot="$EFILINUX_SYSROOT"
@@ -16,6 +12,25 @@ library_path="$sysroot/usr/lib"
 
 export PKG_CONFIG_SYSROOT_DIR="$sysroot"
 export PKG_CONFIG_LIBDIR="$sysroot/usr/lib/pkgconfig:$sysroot/usr/share/pkgconfig"
+
+recipe_version() {
+    local recipe=$1
+    "$recipe" --print-metadata | \
+        python3 -c 'import json,sys; print(json.load(sys.stdin)["pkgver"])'
+}
+
+libevdev_version=$(recipe_version "$ROOT/003-graphical/libevdev/build.sh")
+libinput_version=$(recipe_version "$ROOT/003-graphical/libinput/build.sh")
+xkeyboard_config_version=$(recipe_version "$ROOT/003-graphical/xkeyboard-config/build.sh")
+libxkbcommon_version=$(recipe_version "$ROOT/003-graphical/libxkbcommon/build.sh")
+libpng_version=$(recipe_version "$ROOT/003-graphical/libpng/build.sh")
+libjpeg_turbo_version=$(recipe_version "$ROOT/003-graphical/libjpeg-turbo/build.sh")
+fontconfig_version=$(recipe_version "$ROOT/003-graphical/fontconfig/build.sh")
+harfbuzz_version=$(recipe_version "$ROOT/003-graphical/harfbuzz/build.sh")
+fribidi_version=$(recipe_version "$ROOT/003-graphical/fribidi/build.sh")
+pixman_version=$(recipe_version "$ROOT/003-graphical/pixman/build.sh")
+mesa_version=$(recipe_version "$ROOT/003-graphical/mesa/build.sh")
+llvm_version_expected=$(recipe_version "$ROOT/003-graphical/llvm/build.sh")
 
 require_file() {
     local path=$1
@@ -41,24 +56,22 @@ require_needed() {
         die "$path does not depend on $library"
 }
 
-require_pkg_version libevdev "$LIBEVDEV_VERSION"
-require_pkg_version libinput "$LIBINPUT_VERSION"
-require_pkg_version xkeyboard-config "$XKEYBOARD_CONFIG_VERSION"
-require_pkg_version xkbcommon "$LIBXKBCOMMON_VERSION"
-require_pkg_version xkbcommon-x11 "$LIBXKBCOMMON_VERSION"
-require_pkg_version libpng "$LIBPNG_VERSION"
-require_pkg_version libjpeg "$LIBJPEG_TURBO_VERSION"
-require_pkg_version fontconfig "$FONTCONFIG_VERSION"
-require_pkg_version harfbuzz "$HARFBUZZ_VERSION"
-require_pkg_version fribidi "$FRIBIDI_VERSION"
-require_pkg_version pixman-1 "$PIXMAN_VERSION"
-require_pkg_version dri "$MESA_VERSION"
-require_pkg_version egl "$MESA_VERSION"
-require_pkg_version gbm "$MESA_VERSION"
+require_pkg_version libevdev "$libevdev_version"
+require_pkg_version libinput "$libinput_version"
+require_pkg_version xkeyboard-config "$xkeyboard_config_version"
+require_pkg_version xkbcommon "$libxkbcommon_version"
+require_pkg_version xkbcommon-x11 "$libxkbcommon_version"
+require_pkg_version libpng "$libpng_version"
+require_pkg_version libjpeg "$libjpeg_turbo_version"
+require_pkg_version fontconfig "$fontconfig_version"
+require_pkg_version harfbuzz "$harfbuzz_version"
+require_pkg_version fribidi "$fribidi_version"
+require_pkg_version pixman-1 "$pixman_version"
+require_pkg_version dri "$mesa_version"
+require_pkg_version egl "$mesa_version"
+require_pkg_version gbm "$mesa_version"
 
 for path in \
-    /usr/lib/libLLVM.so.22.1 \
-    /usr/lib/libgallium-26.1.5.so \
     /usr/lib/libGL.so.1 \
     /usr/lib/libEGL.so.1 \
     /usr/lib/libgbm.so.1 \
@@ -80,20 +93,26 @@ for path in \
     require_file "$path"
 done
 
+llvm_library=$(find "$sysroot/usr/lib" -maxdepth 1 -type f -name 'libLLVM.so.*' -print -quit)
+gallium_library=$(find "$sysroot/usr/lib" -maxdepth 1 -type f -name 'libgallium-*.so' -print -quit)
+[[ -n "$llvm_library" ]] || die "target LLVM shared library is missing"
+[[ -n "$gallium_library" ]] || die "Mesa Gallium shared library is missing"
+
+dri_entry="$sysroot/usr/lib/dri/libdril_dri.so"
+[[ -f $dri_entry ]] || die "Mesa DRI entry library is missing"
 for driver in \
     iris_dri.so crocus_dri.so radeonsi_dri.so nouveau_dri.so \
     virtio_gpu_dri.so swrast_dri.so kms_swrast_dri.so; do
     path="$sysroot/usr/lib/dri/$driver"
-    [[ -L $path && $(readlink -- "$path") == libdril_dri.so ]] || \
-        die "Mesa DRI driver link is invalid: $driver"
+    [[ -L $path ]] || die "Mesa DRI driver is not a symbolic link: $driver"
+    [[ $(readlink -f -- "$path") == "$dri_entry" ]] || \
+        die "Mesa DRI driver does not resolve to libdril: $driver"
 done
 
-# shellcheck disable=SC2153
-expected_llvm_version=$LLVM_VERSION
 llvm_version=$("$loader" --library-path "$library_path" \
     "$sysroot/usr/bin/llvm-config" --version)
-[[ $llvm_version == "$expected_llvm_version" ]] || \
-    die "target LLVM version is $llvm_version, expected $expected_llvm_version"
+[[ $llvm_version == "$llvm_version_expected" ]] || \
+    die "target LLVM version is $llvm_version, expected $llvm_version_expected"
 llvm_targets=$("$loader" --library-path "$library_path" \
     "$sysroot/usr/bin/llvm-config" --targets-built)
 [[ $llvm_targets == 'X86 AMDGPU' ]] || \
@@ -102,15 +121,15 @@ llvm_targets=$("$loader" --library-path "$library_path" \
 require_needed /usr/lib/libinput.so.10 libudev.so.1
 require_needed /usr/lib/libinput.so.10 libevdev.so.2
 require_needed /usr/lib/libxkbcommon-x11.so.0 libxcb-xkb.so.1
-require_needed /usr/lib/libfreetype.so.6 libharfbuzz.so.0
+require_needed /usr/lib/libharfbuzz.so.0 libfreetype.so.6
 require_needed /usr/lib/libfontconfig.so.1 libexpat.so.1
-require_needed /usr/lib/libgallium-26.1.5.so libLLVM.so.22.1
+require_needed "${gallium_library#$sysroot}" "$(basename -- "$llvm_library")"
 
-if LC_ALL=C readelf -d "$sysroot/usr/lib/libgallium-26.1.5.so" | \
+if LC_ALL=C readelf -d "$gallium_library" | \
     grep -Ei 'clang|SPIRV-Tools|libclc|wayland'; then
     die "build-time compiler dependency leaked into Mesa runtime"
 fi
-if strings "$sysroot/usr/lib/libgallium-26.1.5.so" | grep -Fq '/usr/share/clc'; then
+if strings "$gallium_library" | grep -Fq '/usr/share/clc'; then
     die "dynamic libclc path leaked into Mesa runtime"
 fi
 if find "$sysroot/usr/lib" -maxdepth 1 \( -type f -o -type l \) \

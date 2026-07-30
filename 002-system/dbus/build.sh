@@ -77,6 +77,7 @@ package() {
         /usr/bin/dbus-monitor
         /usr/bin/dbus-run-session
         /usr/bin/dbus-send
+        /usr/bin/dbus-update-activation-environment
         /usr/bin/dbus-uuidgen
         /usr/libexec/dbus-daemon-launch-helper
         /etc/dbus-1/

@@ -93,6 +93,7 @@ devel() {
 
 package() {
     package_keep \
+        /usr/bin/deallocvt \
         /usr/bin/dumpkeys \
         /usr/bin/kbd_mode \
         /usr/bin/loadkeys \

@@ -6,52 +6,48 @@ ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
+source "$ROOT/lib/recipe.sh"
 
-require_command curl find sha256sum tar
-ensure_directories
+pkgname=sof-firmware
+pkgver=2025.12.2
+sysroot=false
 
-package="sof-firmware-$SOF_FIRMWARE_VERSION"
-producer=${BASH_SOURCE[0]}
-archive="$EFILINUX_DOWNLOADS/sof-bin-$SOF_FIRMWARE_VERSION.tar.gz"
+depends=()
+builddepends=()
+makedepends=(find install)
 
-[[ -d "$EFILINUX_ROOTFS/usr/lib/modules/$LINUX_VERSION" ]] || \
-    die "kernel modules must be built before SOF firmware"
-set_package_paths "$package"
+prepare() {
+    local archive="$downloaddir/sof-bin-$pkgver.tar.gz"
 
-if binary_package_extract "$package" "$PACKAGE_STAGING" "$producer"; then
-    log "Using binary package $(basename -- "$PACKAGE_ARCHIVE")"
-else
     download \
-        "https://github.com/thesofproject/sof-bin/releases/download/v$SOF_FIRMWARE_VERSION/sof-bin-$SOF_FIRMWARE_VERSION.tar.gz" \
+        "https://github.com/thesofproject/sof-bin/releases/download/v$pkgver/sof-bin-$pkgver.tar.gz" \
         "$archive"
-    verify_sha256 "$SOF_FIRMWARE_SHA256" "$archive"
-    prepare_package "$package"
-    extract_source "$archive" "$PACKAGE_SOURCE"
+    checksum \
+        sha256 \
+        533f63e3a6d94c09ce05a782657b675fa683ff20787c0979226cf563ec79f517 \
+        "$archive"
+    extract "$archive" "$srcdir/sof-bin"
+}
 
-    firmware_staging="$PACKAGE_STAGING/usr/lib/firmware/intel"
+build() {
+    local firmware_staging="$develdir/usr/lib/firmware/intel"
+    local directory
+
     mkdir -p "$firmware_staging"
-    log "Installing signed SOF firmware and topology data"
-    for directory in \
-        sof \
-        sof-ipc4 \
-        sof-ipc4-lib \
-        sof-ipc4-tplg \
-        sof-tplg; do
-        [[ -d "$PACKAGE_SOURCE/$directory" ]] || \
+    for directory in sof sof-ipc4 sof-ipc4-lib sof-ipc4-tplg sof-tplg; do
+        [[ -d "$srcdir/sof-bin/$directory" ]] || \
             die "SOF archive is missing directory: $directory"
-        cp -a "$PACKAGE_SOURCE/$directory" "$firmware_staging/$directory"
+        cp -a "$srcdir/sof-bin/$directory" "$firmware_staging/$directory"
     done
 
-    # Signed images are the runtime path; community and LDC data are for
-    # development and firmware-log decoding.
     find "$firmware_staging" -type d -name community -prune -exec rm -rf -- {} +
     find "$firmware_staging" -type f -name '*.ldc' -delete
     find -L "$firmware_staging" -type l -delete
     ln -s sof-ipc4-tplg "$firmware_staging/sof-ace-tplg"
+}
 
-    binary_package_create "$package" "$PACKAGE_STAGING" "$producer"
-fi
+package() {
+    :
+}
 
-install_rootfs_tree \
-    "$package" "$PACKAGE_STAGING/usr/lib/firmware/intel" /usr/lib/firmware/intel
-rm -rf -- "$PACKAGE_SOURCE" "$PACKAGE_BUILD" "$PACKAGE_STAGING"
+recipe_main "$@"

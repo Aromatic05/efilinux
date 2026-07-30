@@ -6,6 +6,42 @@ export XDG_RUNTIME_DIR
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
-pidof pipewire >/dev/null 2>&1 || /usr/bin/pipewire >>"$XDG_RUNTIME_DIR/pipewire.log" 2>&1 &
-pidof pipewire-pulse >/dev/null 2>&1 || /usr/bin/pipewire-pulse >>"$XDG_RUNTIME_DIR/pipewire-pulse.log" 2>&1 &
-pidof wireplumber >/dev/null 2>&1 || /usr/bin/wireplumber >>"$XDG_RUNTIME_DIR/wireplumber.log" 2>&1 &
+wait_for_path() {
+    path=$1
+    attempts=${2:-20}
+    while [ "$attempts" -gt 0 ]; do
+        [ -S "$path" ] && return 0
+        attempts=$((attempts - 1))
+        sleep 1
+    done
+    return 1
+}
+
+if ! pidof pipewire >/dev/null 2>&1; then
+    /usr/bin/pipewire >>"$XDG_RUNTIME_DIR/pipewire.log" 2>&1 &
+fi
+wait_for_path "$XDG_RUNTIME_DIR/pipewire-0" || {
+    echo "pipewire did not create $XDG_RUNTIME_DIR/pipewire-0" >&2
+    exit 1
+}
+
+if ! pidof wireplumber >/dev/null 2>&1; then
+    /usr/bin/wireplumber >>"$XDG_RUNTIME_DIR/wireplumber.log" 2>&1 &
+fi
+if ! pidof pipewire-pulse >/dev/null 2>&1; then
+    /usr/bin/pipewire-pulse >>"$XDG_RUNTIME_DIR/pipewire-pulse.log" 2>&1 &
+fi
+wait_for_path "$XDG_RUNTIME_DIR/pulse/native" || {
+    echo "pipewire-pulse did not create $XDG_RUNTIME_DIR/pulse/native" >&2
+    exit 1
+}
+
+attempts=20
+while [ "$attempts" -gt 0 ]; do
+    /usr/bin/pactl info >/dev/null 2>&1 && exit 0
+    attempts=$((attempts - 1))
+    sleep 1
+done
+
+echo "Pulse compatibility server did not become ready" >&2
+exit 1

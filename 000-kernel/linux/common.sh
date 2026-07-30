@@ -2,55 +2,54 @@
 
 set -euo pipefail
 
-kernel_archive="$EFILINUX_DOWNLOADS/linux-$LINUX_VERSION.tar.xz"
-kernel_source_directory="$EFILINUX_BUILD/sources/linux-$LINUX_VERSION-kernel"
-kernel_config_fragment="$ROOT/000-kernel/linux/common-pc.config"
-kernel_config_validator="$ROOT/000-kernel/linux/validate_config.py"
-
-ensure_kernel_source() {
-    download \
-        "https://www.kernel.org/pub/linux/kernel/v${LINUX_VERSION%%.*}.x/linux-$LINUX_VERSION.tar.xz" \
-        "$kernel_archive"
-    verify_md5 "$LINUX_MD5" "$kernel_archive"
-    if [[ ! -f "$kernel_source_directory/Makefile" ]]; then
-        extract_source "$kernel_archive" "$kernel_source_directory"
-    fi
+kernel_make() {
+    env \
+        -u CFLAGS \
+        -u CXXFLAGS \
+        -u CPPFLAGS \
+        -u LDFLAGS \
+        MAKEFLAGS= \
+        make "$@"
 }
 
 set_clean_kernel_config() {
     local scripts_config="$kernel_source_directory/scripts/config"
 
-    "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
+    "$scripts_config" --file "$kernel_build_directory/.config" \
         --disable CMDLINE_BOOL \
         --set-str CMDLINE "" \
-        --set-str INITRAMFS_SOURCE "" \
+        --set-str INITRAMFS_SOURCE "initramfs.files" \
+        --set-val INITRAMFS_ROOT_UID 0 \
+        --set-val INITRAMFS_ROOT_GID 0 \
+        --disable INITRAMFS_COMPRESSION_GZIP \
+        --disable INITRAMFS_COMPRESSION_XZ \
+        --enable INITRAMFS_COMPRESSION_ZSTD \
         --disable KERNEL_GZIP \
         --disable KERNEL_XZ \
         --enable KERNEL_ZSTD
-    make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" olddefconfig
-    make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" prepare
+    : > "$kernel_build_directory/initramfs.files"
+    kernel_make -C "$kernel_source_directory" O="$kernel_build_directory" olddefconfig
+    kernel_make -C "$kernel_source_directory" O="$kernel_build_directory" prepare
     python3 "$kernel_config_validator" \
         "$kernel_config_fragment" \
-        "$EFILINUX_KERNEL_BUILD/.config"
+        "$kernel_build_directory/.config"
 }
 
 configure_clean_kernel() {
-    ensure_kernel_source
-    reset_directory "$EFILINUX_KERNEL_BUILD"
+    reset_directory "$kernel_build_directory"
 
     log "Configuring clean curated common-PC kernel"
-    make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" tinyconfig
+    kernel_make -C "$kernel_source_directory" O="$kernel_build_directory" tinyconfig
     "$kernel_source_directory/scripts/kconfig/merge_config.sh" \
         -m \
-        -O "$EFILINUX_KERNEL_BUILD" \
-        "$EFILINUX_KERNEL_BUILD/.config" \
+        -O "$kernel_build_directory" \
+        "$kernel_build_directory/.config" \
         "$kernel_config_fragment"
     set_clean_kernel_config
 }
 
 ensure_clean_kernel_build_tree() {
-    ensure_kernel_source
-    if [[ ! -f "$EFILINUX_KERNEL_BUILD/.config" ]]; then
+    if [[ ! -f "$kernel_build_directory/.config" ]]; then
         configure_clean_kernel
         return
     fi
@@ -80,21 +79,4 @@ remove_embedded_initramfs_outputs() {
     find "$build_root" -maxdepth 1 -type f \
         \( -name '.vmlinux*' -o -name 'vmlinux.*' \) \
         ! -name 'vmlinux.a' -delete
-}
-
-configure_embedded_initramfs() {
-    local initramfs_manifest=$1
-    local scripts_config="$kernel_source_directory/scripts/config"
-
-    "$scripts_config" --file "$EFILINUX_KERNEL_BUILD/.config" \
-        --set-str INITRAMFS_SOURCE "$initramfs_manifest" \
-        --set-val INITRAMFS_ROOT_UID 0 \
-        --set-val INITRAMFS_ROOT_GID 0 \
-        --disable INITRAMFS_COMPRESSION_GZIP \
-        --disable INITRAMFS_COMPRESSION_XZ \
-        --enable INITRAMFS_COMPRESSION_ZSTD
-    make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" olddefconfig
-    python3 "$kernel_config_validator" \
-        "$kernel_config_fragment" \
-        "$EFILINUX_KERNEL_BUILD/.config"
 }

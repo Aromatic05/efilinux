@@ -43,18 +43,44 @@ compose_resolve_package() {
     COMPOSE_ORDER+=("$name")
 }
 
-compose_read_profile() {
+compose_read_profile_file() {
     local profile=$1
-    local line package extra
+    local state line package argument extra include
 
     [[ -f "$profile" ]] || die "package profile is missing: $profile"
+    state=${COMPOSE_PROFILE_STATE[$profile]:-unseen}
+    case $state in
+        done) return ;;
+        visiting) die "package profile include cycle detected at $profile" ;;
+    esac
+    COMPOSE_PROFILE_STATE[$profile]=visiting
+
     while IFS= read -r line || [[ -n "$line" ]]; do
         line=${line%%#*}
-        read -r package extra <<<"$line"
+        read -r package argument extra <<<"$line"
         [[ -n ${package:-} ]] || continue
-        [[ -z ${extra:-} ]] || die "profile line contains multiple fields: $line"
+        if [[ $package == @include ]]; then
+            [[ -n ${argument:-} && -z ${extra:-} ]] || \
+                die "invalid profile include: $line"
+            [[ $argument =~ ^[a-z0-9][a-z0-9._-]*\.packages$ ]] || \
+                die "unsafe profile include name: $argument"
+            include="$COMPOSE_PROFILE_ROOT/$argument"
+            compose_read_profile_file "$include"
+            continue
+        fi
+        [[ -z ${argument:-} && -z ${extra:-} ]] || \
+            die "profile line contains multiple fields: $line"
         compose_resolve_package "$package"
     done < "$profile"
+    COMPOSE_PROFILE_STATE[$profile]=done
+}
+
+compose_read_profile() {
+    local profile=$1
+
+    COMPOSE_PROFILE_ROOT=$(cd -- "$(dirname -- "$profile")" && pwd)
+    declare -gA COMPOSE_PROFILE_STATE=()
+    compose_read_profile_file "$profile"
     ((${#COMPOSE_ORDER[@]} > 0)) || die "package profile is empty: $profile"
 }
 
@@ -147,12 +173,31 @@ compose_run_target() {
         "$loader" --library-path "$rootfs/usr/lib" "$@"
 }
 
+compose_write_ownership() {
+    local rootfs=$1
+    local owners=$2
+    local ownership="$rootfs/etc/filemeta/ownership.tsv"
+
+    [[ ! -e "$ownership" && ! -L "$ownership" ]] || \
+        die "package content conflicts with composer ownership metadata"
+    install -d -m0755 "$rootfs/etc/filemeta"
+    {
+        printf 'path\ttype\towner\n'
+        tail -n +2 "$owners" | LC_ALL=C sort -t $'\t' -k1,1 -k3,3
+    } > "$ownership"
+    chown 0:0 "$ownership"
+    chmod 0644 "$ownership"
+    printf '/etc/filemeta/ownership.tsv\tfile\t@composer\n' >> "$owners"
+}
+
 compose_finalize_rootfs() {
     local rootfs=$1
     local owners=$2
     local schemas="$rootfs/usr/share/glib-2.0/schemas"
     local modules="$rootfs/usr/lib/gio/modules"
-    local ownership="$rootfs/etc/filemeta/ownership.tsv"
+    local pixbuf_root="$rootfs/usr/lib/gdk-pixbuf-2.0"
+    local loader cache cache_relative
+    local -a loaders=()
 
     if [[ -d "$schemas" ]]; then
         [[ -x "$rootfs/usr/bin/glib-compile-schemas" ]] || \
@@ -176,16 +221,27 @@ compose_finalize_rootfs() {
         fi
     fi
 
-    [[ ! -e "$ownership" && ! -L "$ownership" ]] || \
-        die "package content conflicts with composer ownership metadata"
-    install -d -m0755 "$rootfs/etc/filemeta"
-    {
-        printf 'path\ttype\towner\n'
-        tail -n +2 "$owners" | LC_ALL=C sort -t $'\t' -k1,1 -k3,3
-    } > "$ownership"
-    chown 0:0 "$ownership"
-    chmod 0644 "$ownership"
-    printf '/etc/filemeta/ownership.tsv\tfile\t@composer\n' >> "$owners"
+    if [[ -d "$pixbuf_root" ]]; then
+        mapfile -t loaders < <(
+            find "$pixbuf_root" -type f -path '*/loaders/*.so' -print | LC_ALL=C sort
+        )
+        if ((${#loaders[@]} > 0)); then
+            [[ -x "$rootfs/usr/bin/gdk-pixbuf-query-loaders" ]] || \
+                die "GdkPixbuf loaders are installed without gdk-pixbuf-query-loaders"
+            loader=${loaders[0]}
+            cache="$(dirname -- "$(dirname -- "$loader")")/loaders.cache"
+            compose_run_target "$rootfs" \
+                "$rootfs/usr/bin/gdk-pixbuf-query-loaders" \
+                "${loaders[@]}" > "$cache"
+            sed -i "s#$rootfs##g" "$cache"
+            chown 0:0 "$cache"
+            chmod 0644 "$cache"
+            cache_relative=${cache#"$rootfs"}
+            printf '%s\tfile\t@composer\n' "$cache_relative" >> "$owners"
+        fi
+    fi
+
+    compose_write_ownership "$rootfs" "$owners"
 }
 
 compose_profile() {
@@ -228,4 +284,55 @@ compose_profile() {
     mv -- "$owners" "$EFILINUX_ROOTFS_OWNERS"
     rm -rf -- "$work"
     log "Composed $(basename -- "$profile") into $EFILINUX_ROOTFS"
+}
+
+compose_extend_profile() {
+    local profile=$1
+    local work rootfs owners sorted_owners package archive subset list temporary_owners
+
+    [[ -d "$EFILINUX_ROOTFS" ]] || die "rootfs has not been composed"
+    [[ -f "$EFILINUX_ROOTFS_OWNERS" ]] || die "rootfs ownership manifest is missing"
+    [[ $(head -n 1 "$EFILINUX_ROOTFS_OWNERS") == $'path\ttype\towner' ]] || \
+        die "rootfs ownership manifest has an invalid header"
+
+    declare -gA COMPOSE_VISIT_STATE=()
+    declare -gA COMPOSE_ARCHIVES=()
+    declare -ga COMPOSE_ORDER=()
+    compose_read_profile "$profile"
+
+    work="$EFILINUX_BUILD/extend-$(basename -- "$profile")-$$"
+    rootfs="$work/rootfs"
+    owners="$work/owners.tsv"
+    sorted_owners="$work/owners.sorted.tsv"
+    temporary_owners="$work/owners.filtered.tsv"
+    reset_directory "$work"
+    package_clone_tree "$EFILINUX_ROOTFS" "$rootfs"
+    cp "$EFILINUX_ROOTFS_OWNERS" "$owners"
+    awk -F '\t' \
+        'NR == 1 || $1 != "/etc/filemeta/ownership.tsv"' \
+        "$owners" > "$temporary_owners"
+    mv "$temporary_owners" "$owners"
+    rm -f "$rootfs/etc/filemeta/ownership.tsv"
+
+    for package in "${COMPOSE_ORDER[@]}"; do
+        archive=${COMPOSE_ARCHIVES[$package]}
+        subset="$work/packages/$package"
+        list="$work/$package.install"
+        package_materialize "$package" "$subset"
+        tar --extract --to-stdout --file "$archive" .INSTALL > "$list"
+        compose_validate_package_subset \
+            "$package" "$subset" "$rootfs" "$owners" "$list"
+        compose_merge_subset "$subset" "$rootfs"
+    done
+
+    compose_write_ownership "$rootfs" "$owners"
+    {
+        printf 'path\ttype\towner\n'
+        tail -n +2 "$owners" | LC_ALL=C sort -t $'\t' -k1,1 -k3,3
+    } > "$sorted_owners"
+    rm -rf "$EFILINUX_ROOTFS"
+    mv "$rootfs" "$EFILINUX_ROOTFS"
+    mv "$sorted_owners" "$EFILINUX_ROOTFS_OWNERS"
+    rm -rf "$work"
+    log "Extended rootfs with $(basename -- "$profile")"
 }

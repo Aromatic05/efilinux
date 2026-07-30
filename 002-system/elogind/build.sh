@@ -81,6 +81,8 @@ package() {
         /usr/bin/loginctl
         /usr/bin/elogind-inhibit
         /usr/libexec/elogind
+        /usr/libexec/elogind-cgroups-agent
+        /usr/libexec/elogind-uaccess-command
         /usr/lib/security/pam_elogind.so
         /usr/lib/elogind/
         /usr/lib/udev/rules.d/

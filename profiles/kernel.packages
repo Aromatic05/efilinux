@@ -1,0 +1,5 @@
+# Kernel, modules, and firmware added to the final image.
+linux
+linux-firmware
+sof-firmware
+wireless-regdb

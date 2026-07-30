@@ -5,11 +5,25 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
-source "$ROOT/lib/package.sh"
 
 rootfs="$EFILINUX_ROOTFS"
 loader="$rootfs/usr/lib/ld-linux-x86-64.so.2"
 library_path="$rootfs/usr/lib"
+
+[[ -f "$EFILINUX_ROOTFS_OWNERS" ]] || die "rootfs ownership manifest is missing"
+[[ -f "$EFILINUX_ROOTFS_FAKEROOT_STATE" ]] || die "rootfs fakeroot metadata is missing"
+
+rootfs_owner() {
+    local path=$1
+    awk -F '\t' -v path="$path" \
+        'NR > 1 && $1 == path && $2 != "directory" { print $3; exit }' \
+        "$EFILINUX_ROOTFS_OWNERS"
+}
+
+rootfs_stat() {
+    fakeroot -i "$EFILINUX_ROOTFS_FAKEROOT_STATE" -- \
+        stat -c "$1" "$rootfs$2"
+}
 
 require_file() {
     local path=$1
@@ -49,7 +63,8 @@ require_library() {
 
 require_file /etc/X11/xinit/xinitrc
 require_file /etc/X11/xorg.conf.d/40-libinput.conf
-require_file /etc/gtk-3.0/settings.ini
+require_file /home/user/.config/gtk-3.0/settings.ini
+require_file /home/user/.config/gtk-4.0/settings.ini
 require_file /etc/fonts/fonts.conf
 require_file /etc/rc.d/init.d/graphical
 require_file /etc/X11/Xwrapper.config
@@ -64,15 +79,16 @@ require_directory /usr/lib/dri
 require_program Xorg xorg-server
 [[ -x "$rootfs/usr/libexec/Xorg" ]] || die "real Xorg server is missing"
 [[ -x "$rootfs/usr/libexec/Xorg.wrap" ]] || die "Xorg setuid wrapper is missing"
-[[ $(stat -c '%a' "$rootfs/usr/libexec/Xorg.wrap") == 4755 ]] ||     die "Xorg wrapper is not setuid root"
+[[ $(rootfs_stat '%a' /usr/libexec/Xorg.wrap) == 4755 ]] || \
+    die "Xorg wrapper is not setuid root"
 grep -Fxq 'allowed_users=anybody' "$rootfs/etc/X11/Xwrapper.config" ||     die "Xorg wrapper does not permit the live user"
 grep -Fxq 'needs_root_rights=yes' "$rootfs/etc/X11/Xwrapper.config" ||     die "Xorg wrapper does not retain required device privileges"
-require_program xinit xinit
-require_program startx xinit
-require_program xkbcomp xkbcomp
-require_program xwininfo xwininfo
-require_program xauth xauth
-require_program iceauth iceauth
+require_program xinit xorg
+require_program startx xorg
+require_program xkbcomp xorg
+require_program xwininfo xorg
+require_program xauth xorg
+require_program iceauth xorg
 require_program mcookie util-linux
 require_program gtk3-demo gtk3
 require_program gtk3-widget-factory gtk3
@@ -93,10 +109,10 @@ require_library 'libpango-1.0.so.0*' pango
 require_library 'librsvg-2.so.2*' librsvg
 require_library 'libfontconfig.so.1*' fontconfig
 require_library 'libfreetype.so.6*' freetype
-require_library 'libICE.so.6*' libICE
-require_library 'libSM.so.6*' libSM
-require_library 'libXt.so.6*' libXt
-require_library 'libXmu.so.6*' libXmu
+require_library 'libICE.so.6*' xorg
+require_library 'libSM.so.6*' xorg
+require_library 'libXt.so.6*' xorg
+require_library 'libXmu.so.6*' xorg
 
 for driver in \
     iris_dri.so crocus_dri.so radeonsi_dri.so nouveau_dri.so \
@@ -160,7 +176,7 @@ grep -Eq '^id:5:initdefault:$' "$rootfs/etc/inittab" || \
     die "graphical image does not default to runlevel 5"
 grep -Fq 'GDK_BACKEND=x11' "$rootfs/etc/rc.d/init.d/graphical" || \
     die "graphical service does not force the GTK X11 backend"
-grep -Fq '/usr/bin/su -s /usr/bin/sh - user -c'     "$rootfs/etc/rc.d/init.d/graphical" ||     die "graphical service does not launch the normal user"
+grep -Fq '/usr/bin/su -s /usr/bin/sh user -c'     "$rootfs/etc/rc.d/init.d/graphical" ||     die "graphical service does not launch the normal user"
 grep -Fq 'HOME=/home/user' "$rootfs/etc/rc.d/init.d/graphical" ||     die "graphical service does not use the normal user home"
 if grep -Eq '/run/user/0|HOME=/root|USER=root' "$rootfs/etc/rc.d/init.d/graphical"; then
     die "graphical service still starts a root desktop session"
@@ -219,7 +235,7 @@ FONTCONFIG_SYSROOT="$rootfs" \
     "$rootfs/usr/bin/fc-match" -f '%{family}\n' ':lang=zh-cn' | \
     grep -Fq 'Noto Sans CJK SC'
 
-require_library 'libXss.so.1*' libXss
+require_library 'libXss.so.1*' xorg
 require_library 'libxklavier.so.16*' libxklavier
 require_library 'libdbus-glib-1.so.2*' dbus-glib
 require_library 'libvte-2.91.so.0*' vte

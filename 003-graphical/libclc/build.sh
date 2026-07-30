@@ -4,65 +4,49 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
-source "$ROOT/003-graphical/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
-source "$ROOT/003-graphical/lib/build.sh"
+source "$ROOT/lib/recipe.sh"
+source "$ROOT/lib/target-build.sh"
 
-ensure_directories
 
-package="libclc-$LLVM_VERSION"
-if graphical_binary_package_restore "$package"; then
-    exit 0
-fi
+pkgname=libclc
+pkgver=22.1.8
 
-require_command clang cmake curl llvm-config ninja sha256sum tar
+depends=()
+builddepends=(clang-headers llvm llvm-spirv)
+makedepends=(clang cmake llvm-config ninja)
 
-host_llvm_version=$(llvm-config --version)
-[[ $host_llvm_version == "$LLVM_VERSION" ]] || \
-    die "host LLVM $host_llvm_version does not match required LLVM $LLVM_VERSION"
-host_clang_version=$(clang --version | sed -n '1s/^clang version \([^ ]*\).*/\1/p')
-[[ $host_clang_version == "$LLVM_VERSION" ]] || \
-    die "host Clang $host_clang_version does not match required LLVM $LLVM_VERSION"
+prepare() {
+    local archive="$downloaddir/llvm-project-$pkgver.src.tar.xz"
+    download "https://github.com/llvm/llvm-project/releases/download/llvmorg-$pkgver/llvm-project-$pkgver.src.tar.xz" "$archive"
+    checksum sha256 922f1817a0df7b1489272d18134ee0087a8b068828f87ac63b9861b1a9965888 "$archive"
+    extract "$archive" "$srcdir/source"
+}
 
-translator="$EFILINUX_BUILD/host-tools/llvm-spirv-$LLVM_SPIRV_TRANSLATOR_VERSION/bin/llvm-spirv"
-if [[ ! -x $translator ]]; then
-    "$ROOT/003-graphical/llvm-spirv/build.sh" >/dev/null
-fi
-[[ -x $translator ]] || die "host llvm-spirv translator is missing"
+build() {
+    local llvm_spirv
 
-prepare_package "$package"
-archive="llvm-project-$LLVM_VERSION.src.tar.xz"
-download \
-    "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_VERSION/$archive" \
-    "$EFILINUX_DOWNLOADS/$archive"
-verify_sha256 "$LLVM_SHA256" "$EFILINUX_DOWNLOADS/$archive"
-extract_source "$EFILINUX_DOWNLOADS/$archive" "$PACKAGE_SOURCE"
+    [[ $(llvm-config --version) == "$pkgver" ]] || die "host llvm-config version does not match $pkgver"
+    [[ $(clang --version | sed -n '1s/^clang version \([^ ]*\).*/\1/p') == "$pkgver" ]] || die "host clang version does not match $pkgver"
+    llvm_spirv=$(target_program_wrapper llvm-spirv /usr/bin/llvm-spirv)
+    "$llvm_spirv" --version | grep -Fq "LLVM version $pkgver" || \
+        die "target llvm-spirv does not match LLVM $pkgver"
 
-log "Configuring Mesa libclc SPIR-V data"
-cmake -S "$PACKAGE_SOURCE/libclc" -B "$PACKAGE_BUILD" -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr \
-    -DCMAKE_INSTALL_DATADIR=share \
-    -DLLVM_DIR="$(llvm-config --cmakedir)" \
-    -DLIBCLC_USE_SPIRV_BACKEND=OFF \
-    -DLLVM_SPIRV="$translator" \
-    '-DLIBCLC_TARGETS_TO_BUILD=spirv-mesa3d-;spirv64-mesa3d-'
+    cmake -S "$srcdir/source/libclc" -B "$builddir" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_DATADIR=share \
+        -DLLVM_DIR="$(llvm-config --cmakedir)" \
+        -DLIBCLC_USE_SPIRV_BACKEND=OFF \
+        -DLLVM_SPIRV="$llvm_spirv" \
+        '-DLIBCLC_TARGETS_TO_BUILD=spirv-mesa3d-;spirv64-mesa3d-'
+    cmake --build "$builddir" -j "$EFILINUX_JOBS"
+    DESTDIR="$develdir" cmake --install "$builddir"
+}
 
-log "Building Mesa libclc SPIR-V data"
-cmake --build "$PACKAGE_BUILD" -j "$EFILINUX_JOBS"
-DESTDIR="$PACKAGE_STAGING" cmake --install "$PACKAGE_BUILD"
+package() {
+    package_keep
+}
 
-for artifact in \
-    usr/share/clc/spirv-mesa3d-.spv \
-    usr/share/clc/spirv64-mesa3d-.spv \
-    usr/share/pkgconfig/libclc.pc; do
-    [[ -s "$PACKAGE_STAGING/$artifact" ]] || \
-        die "libclc artifact is missing: /$artifact"
-done
-if find "$PACKAGE_STAGING" -type f ! -path '*/usr/share/clc/*.spv' \
-    ! -path '*/usr/share/pkgconfig/libclc.pc' -print -quit | grep -q .; then
-    die "unexpected files were installed by the minimal libclc build"
-fi
-
-graphical_binary_package_publish "$package"
+recipe_main "$@"

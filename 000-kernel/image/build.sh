@@ -5,35 +5,66 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
-source "$ROOT/000-kernel/linux/common.sh"
+source "$ROOT/lib/package.sh"
+source "$ROOT/lib/composer.sh"
 
-require_command bc bison curl fakeroot flex gcc make md5sum openssl perl python3
-ensure_directories
-
-initramfs_tree="$EFILINUX_ROOTFS"
-initramfs_manifest="$EFILINUX_INITRAMFS_MANIFEST"
+kernel_profile="$ROOT/profiles/kernel.packages"
 manifest_generator="$ROOT/000-kernel/image/gen_initramfs_manifest.py"
 efi_image="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
+linux_metadata=$("$ROOT/000-kernel/linux/build.sh" --print-metadata)
+read -r linux_version linux_recipe_key < <(
+    python3 -c 'import json,sys; data=json.load(sys.stdin); print(data["pkgver"], data["recipe_key"])' \
+        <<<"$linux_metadata"
+)
+kernel_state="$EFILINUX_BUILD/kernel-state/$linux_recipe_key"
 
-[[ -d "$initramfs_tree" ]] || die "initramfs tree has not been built"
+if [[ ${1:-} == --internal-extend ]]; then
+    [[ $# == 1 ]] || die "unexpected internal kernel composer arguments"
+    compose_extend_profile "$kernel_profile"
+    exit 0
+fi
+
+[[ $# == 0 ]] || die "usage: $0"
+require_command fakeroot install make python3 zstd
+ensure_directories
+
+[[ -d "$EFILINUX_ROOTFS" ]] || die "rootfs has not been composed"
 [[ -f "$EFILINUX_ROOTFS_FAKEROOT_STATE" ]] || \
     die "rootfs fakeroot metadata has not been built"
+[[ -d "$kernel_state/source" && -d "$kernel_state/build" ]] || \
+    die "linux link state is missing for recipe key $linux_recipe_key"
 
-ensure_clean_kernel_build_tree
+state_temporary="$EFILINUX_ROOTFS_FAKEROOT_STATE.tmp.$$"
+rm -f "$state_temporary"
+fakeroot \
+    -i "$EFILINUX_ROOTFS_FAKEROOT_STATE" \
+    -s "$state_temporary" -- \
+    "$0" --internal-extend
+mv "$state_temporary" "$EFILINUX_ROOTFS_FAKEROOT_STATE"
+
 fakeroot -i "$EFILINUX_ROOTFS_FAKEROOT_STATE" -- \
     python3 "$manifest_generator" \
-        --rootfs "$initramfs_tree" \
-        --output "$initramfs_manifest"
-configure_embedded_initramfs "$initramfs_manifest"
-remove_embedded_initramfs_outputs "$EFILINUX_KERNEL_BUILD"
+        --rootfs "$EFILINUX_ROOTFS" \
+        --output "$EFILINUX_INITRAMFS_MANIFEST"
 
-log "Building final EFILinux EFI executable"
+kernel_source_directory="$kernel_state/source"
+kernel_build_directory="$kernel_state/build"
+kernel_config_fragment="$kernel_state/common-pc.config"
+kernel_config_validator="$kernel_state/validate_config.py"
+source "$kernel_state/kernel-common.sh"
+source "$ROOT/000-kernel/image/common.sh"
+
+configure_embedded_initramfs "$EFILINUX_INITRAMFS_MANIFEST"
+remove_embedded_initramfs_outputs "$kernel_build_directory"
+
+log "Linking final EFILinux EFI executable with the composed rootfs"
 ZSTD_NBTHREADS="${EFILINUX_COMPRESSION_JOBS:-16}" \
 ZSTD="zstd -T${EFILINUX_COMPRESSION_JOBS:-16}" \
-make -C "$kernel_source_directory" O="$EFILINUX_KERNEL_BUILD" \
-    -j"$EFILINUX_JOBS" bzImage
+    kernel_make -C "$kernel_source_directory" O="$kernel_build_directory" \
+        -j"$EFILINUX_JOBS" bzImage
 
 mkdir -p "$(dirname -- "$efi_image")"
-install -m 0644 \
-    "$EFILINUX_KERNEL_BUILD/arch/x86/boot/bzImage" \
+install -m0644 \
+    "$kernel_build_directory/arch/x86/boot/bzImage" \
     "$efi_image"
+log "Created $efi_image with Linux $linux_version"

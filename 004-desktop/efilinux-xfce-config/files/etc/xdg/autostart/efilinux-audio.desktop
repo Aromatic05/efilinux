@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=EFILinux Audio Session
-Exec=/usr/bin/efilinux-audio-session
-OnlyShowIn=XFCE;
-X-GNOME-Autostart-enabled=true
-NoDisplay=true

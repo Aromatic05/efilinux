@@ -95,6 +95,7 @@ devel() {
 package() {
     local soname target
     local -a keep=(
+        /usr/bin/agetty
         /usr/bin/blockdev
         /usr/bin/blkid
         /usr/bin/fdisk
@@ -103,6 +104,7 @@ package() {
         /usr/bin/hwclock
         /usr/bin/losetup
         /usr/bin/lsblk
+        /usr/bin/mcookie
         /usr/bin/mkfs
         /usr/bin/mkswap
         /usr/bin/mount

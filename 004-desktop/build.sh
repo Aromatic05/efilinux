@@ -6,8 +6,8 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-ensure_directories
-run_component "$ROOT/004-desktop/core"
-run_component "$ROOT/004-desktop/session-overrides"
-run_component "$ROOT/004-desktop/extras"
-run_component "$ROOT/004-desktop/desktop-rootfs"
+run_component "$ROOT/004-desktop/xfce"
+run_component "$ROOT/004-desktop/libnma"
+run_component "$ROOT/004-desktop/network-manager-applet"
+run_component "$ROOT/004-desktop/efilinux-xfce-config"
+run_component "$ROOT/004-desktop/image"

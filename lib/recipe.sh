@@ -5,6 +5,7 @@ set -euo pipefail
 readonly EFILINUX_RECIPE_API=1
 readonly EFILINUX_MAKEPKG_CONF="$EFILINUX_ROOT/profiles/makepkg.conf"
 readonly EFILINUX_RECIPE_FILE=$(readlink -f -- "${BASH_SOURCE[1]}")
+readonly EFILINUX_RECIPE_LIB=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 RECIPE_INPUT_MODE=execute
 RECIPE_PHASE=metadata
@@ -157,6 +158,22 @@ input_file() {
     cp -a -- "$source" "$destination"
 }
 
+input_shared_file() {
+    local source=$1
+    local destination=$2
+    local digest relative_source relative_destination
+
+    [[ -f "$source" ]] || die "shared recipe input file is missing: $source"
+    relative_source=$(recipe_relative_path "$EFILINUX_ROOT" "$source" "shared recipe input file")
+    relative_destination=$(recipe_relative_path "$srcdir" "$destination" "recipe input destination")
+    digest=$(sha256sum "$source" | awk '{print $1}')
+    RECIPE_INPUT_RECORDS+=("input-shared-file=$relative_source|$digest|$relative_destination")
+    [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
+
+    mkdir -p "$(dirname -- "$destination")"
+    cp -a -- "$source" "$destination"
+}
+
 input_tree() {
     local source=$1
     local destination=$2
@@ -173,6 +190,28 @@ input_tree() {
 
     mkdir -p "$destination"
     cp -a -- "$source/." "$destination/"
+}
+
+cargo_vendor() {
+    local manifest=$1
+    local vendor_directory=$2
+    local manifest_relative vendor_relative cargo_home
+
+    manifest_relative=$(recipe_relative_path "$srcdir" "$manifest" "Cargo manifest")
+    vendor_relative=$(recipe_relative_path "$srcdir" "$vendor_directory" "Cargo vendor directory")
+    RECIPE_INPUT_RECORDS+=("cargo-vendor=$manifest_relative|$vendor_relative")
+    [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
+
+    [[ -f "$manifest" ]] || die "Cargo manifest is missing: $manifest"
+    [[ -f "$(dirname -- "$manifest")/Cargo.lock" ]] || \
+        die "Cargo.lock is missing beside $manifest"
+    cargo_home="$recipework/cargo-home"
+    reset_directory "$cargo_home"
+    reset_directory "$vendor_directory"
+    CARGO_HOME="$cargo_home" cargo vendor \
+        --locked \
+        --manifest-path "$manifest" \
+        "$vendor_directory" > "$cargo_home/config.toml"
 }
 
 target_pkg_config() {
@@ -273,8 +312,9 @@ package_keep() {
 package_add_library_family() {
     local output_name=$1
     local pattern=$2
-    local library relative
-    local -a matches=()
+    local library relative link_target target
+    local -a matches=() pending=()
+    local -A seen=()
     local -n output=$output_name
 
     [[ "$RECIPE_PHASE" == package ]] || \
@@ -289,9 +329,29 @@ package_add_library_family() {
             -print0 | LC_ALL=C sort -z
     )
     ((${#matches[@]} > 0)) || die "runtime library family is missing: $pattern"
-    for library in "${matches[@]}"; do
+    pending=("${matches[@]}")
+    while ((${#pending[@]})); do
+        library=${pending[0]}
+        pending=("${pending[@]:1}")
+        [[ -z ${seen[$library]+x} ]] || continue
+        seen[$library]=1
         relative=/${library#"$pkgdir/"}
         output+=("$relative")
+        [[ -L "$library" ]] || continue
+
+        link_target=$(readlink -- "$library")
+        if [[ $link_target == /* ]]; then
+            target=$(realpath -m -s -- "$pkgdir$link_target")
+        else
+            target=$(realpath -m -s -- "$(dirname -- "$library")/$link_target")
+        fi
+        case $target in
+            "$pkgdir"/*) ;;
+            *) die "runtime library link escapes devel tree: $relative -> $link_target" ;;
+        esac
+        [[ -e "$target" || -L "$target" ]] || \
+            die "runtime library link target is missing: $relative -> $link_target"
+        pending+=("$target")
     done
 }
 
@@ -575,6 +635,34 @@ recipe_find_dependency() {
     printf '%s' "$found"
 }
 
+recipe_session_cleanup() {
+    [[ ${RECIPE_SESSION_OWNER:-false} == true ]] || return
+    rm -rf -- "$EFILINUX_RECIPE_SESSION_DIR"
+}
+
+recipe_session_initialize() {
+    RECIPE_SESSION_OWNER=false
+    if [[ -n ${EFILINUX_RECIPE_SESSION_DIR:-} ]]; then
+        return
+    fi
+
+    mkdir -p "$EFILINUX_BUILD/recipe-sessions"
+    EFILINUX_RECIPE_SESSION_DIR="$EFILINUX_BUILD/recipe-sessions/$$-$RANDOM"
+    (umask 077; mkdir "$EFILINUX_RECIPE_SESSION_DIR")
+    export EFILINUX_RECIPE_SESSION_DIR
+    RECIPE_SESSION_OWNER=true
+    trap recipe_session_cleanup EXIT
+}
+
+recipe_session_is_done() {
+    [[ -f "$EFILINUX_RECIPE_SESSION_DIR/done/$pkgname" ]]
+}
+
+recipe_session_mark_done() {
+    mkdir -p "$EFILINUX_RECIPE_SESSION_DIR/done"
+    : > "$EFILINUX_RECIPE_SESSION_DIR/done/$pkgname"
+}
+
 recipe_build_dependencies() {
     local dependency producer stack=${EFILINUX_RECIPE_STACK:-:}
 
@@ -588,7 +676,7 @@ recipe_build_dependencies() {
 }
 
 recipe_require_host_tools() {
-    require_command awk cmp cp fakeroot find getcap getfacl grep install paste readlink realpath sed sha256sum sort stat tail tar xargs zstd
+    require_command awk cmp cp fakeroot find getcap getfacl grep install paste python3 readlink realpath sed sha256sum sort stat tail tar xargs zstd
     ((${#makedepends[@]} == 0)) || require_command "${makedepends[@]}"
 }
 
@@ -606,27 +694,39 @@ recipe_sanitize_environment() {
 recipe_tree_manifest() {
     local directory=$1
     local output=$2
-    local entry relative stat_data payload
 
-    : > "$output"
-    while IFS= read -r -d '' entry; do
-        relative=${entry#"$directory"/}
-        [[ $relative != *[$'\t\r\n']* ]] || die "package path contains a control character: $relative"
-        stat_data=$(LC_ALL=C stat -c '%F|%a|%u|%g|%t|%T' -- "$entry")
-        case $stat_data in
-            'regular file|'*) payload=$(sha256sum "$entry" | awk '{print $1}') ;;
-            'symbolic link|'*) payload=$(readlink -- "$entry") ;;
-            directory\|*) payload=- ;;
-            *) payload=$(LC_ALL=C stat -c '%s|%Y' -- "$entry") ;;
-        esac
-        printf '%s\t%s\t%s\n' "$relative" "$stat_data" "$payload" >> "$output"
-    done < <(find "$directory" -mindepth 1 -print0 | LC_ALL=C sort -z)
+    python3 "$EFILINUX_RECIPE_LIB/tree-manifest.py" "$directory" "$output"
+    recipe_validate_manifest_paths "$output"
+}
+
+recipe_validate_manifest_paths() {
+    local manifest=$1
+    local host_path target_prefix leaked_path
+    local -a forbidden_paths=(
+        "${EFILINUX_BUILD:-}"
+        "${EFILINUX_DOWNLOADS:-}"
+        "${EFILINUX_PACKAGES:-}"
+        "${EFILINUX_ROOT:-}"
+        "${EFILINUX_SYSROOT:-}"
+        "${EFILINUX_TARGET:-}"
+    )
+
+    for host_path in "${forbidden_paths[@]}"; do
+        [[ $host_path == /* && $host_path != / ]] || continue
+        target_prefix=${host_path#/}
+        leaked_path=$(awk -F '\t' -v prefix="$target_prefix" \
+            '$1 == prefix || index($1, prefix "/") == 1 { print "/" $1; exit }' \
+            "$manifest")
+        [[ -z $leaked_path ]] || \
+            die "package tree contains build-host path: $leaked_path"
+    done
 }
 
 recipe_verify_package_subset() {
     local before_manifest=$1
     local devel_after="$recipework/devel.after"
     local package_manifest="$recipework/package.manifest"
+    local subset_missing="$recipework/package.subset-missing"
     local record relative expected
 
     recipe_tree_manifest "$develdir" "$devel_after"
@@ -634,13 +734,13 @@ recipe_verify_package_subset() {
         die "package() modified the devel tree"
     recipe_tree_manifest "$pkgdir" "$package_manifest"
 
-    while IFS= read -r record; do
-        if ! grep -Fqx -- "$record" "$before_manifest"; then
-            relative=${record%%$'\t'*}
-            expected=$(awk -F '\t' -v path="$relative" '$1 == path { print; exit }' "$before_manifest")
-            die "package() added or modified $relative (expected: ${expected:-missing}; actual: $record)"
-        fi
-    done < "$package_manifest"
+    LC_ALL=C comm -23 "$package_manifest" "$before_manifest" > "$subset_missing"
+    if [[ -s "$subset_missing" ]]; then
+        IFS= read -r record < "$subset_missing"
+        relative=${record%%$'\t'*}
+        expected=$(awk -F '\t' -v path="$relative" '$1 == path { print; exit }' "$before_manifest")
+        die "package() added or modified $relative (expected: ${expected:-missing}; actual: $record)"
+    fi
 }
 
 recipe_run_internal_build() {
@@ -687,11 +787,60 @@ recipe_run_internal_build() {
     rm -rf -- "$srcdir" "$builddir" "$develdir" "$pkgdir"
 }
 
+recipe_run_internal_repackage() {
+    local recipe_key=$1
+    local source_archive=$2
+    local devel_before="$recipework/devel.before"
+
+    recipe_require_host_tools
+    recipe_sanitize_environment
+    source "$EFILINUX_MAKEPKG_CONF"
+    reset_directory "$develdir"
+    reset_directory "$pkgdir"
+    package_extract_devel "$source_archive" "$develdir"
+
+    recipe_tree_manifest "$develdir" "$devel_before"
+    package_clone_tree "$develdir" "$pkgdir"
+    RECIPE_PHASE=package
+    log "Repackaging install subset for $pkgname $pkgver"
+    package
+    recipe_verify_package_subset "$devel_before"
+    recipe_validate_filemeta_subset
+
+    package_create_archive \
+        "$pkgname" "$pkgver" "$recipe_key" \
+        "$develdir" "$pkgdir" "$recipefile" "$recipe_source_records"
+    if [[ "$sysroot" == true ]]; then
+        package_merge_devel_into_sysroot "$develdir"
+    fi
+    rm -rf -- "$develdir" "$pkgdir"
+}
+
+recipe_repackage() {
+    local recipe_key archive archive_version
+
+    recipe_require_host_tools
+    recipe_collect_inputs
+    recipe_key=$(recipe_compute_key)
+    archive=$(package_current_archive "$pkgname")
+    archive_version=$(tar --extract --to-stdout --file "$archive" .PKGINFO | \
+        sed -n 's/^version=//p')
+    [[ "$archive_version" == "$pkgver" ]] || \
+        die "cannot repackage $pkgname $pkgver from indexed version $archive_version"
+    recipe_write_source_records
+
+    fakeroot -- "$recipefile" --internal-repackage "$recipe_key" "$archive"
+}
+
 recipe_run() {
     local force=$1
     local skip_check=$2
     local no_dependencies=$3
     local recipe_key
+
+    if [[ "$force" != true ]] && recipe_session_is_done; then
+        return
+    fi
 
     recipe_require_host_tools
     recipe_collect_inputs
@@ -701,9 +850,15 @@ recipe_run() {
         recipe_build_dependencies
     fi
 
-    if [[ "$force" != true ]] && \
-       package_restore_recipe_cache "$pkgname" "$pkgver" "$recipe_key" "$sysroot"; then
-        return
+    if [[ "$force" != true ]]; then
+        if declare -F recipe_cache_ready >/dev/null && \
+           ! recipe_cache_ready "$recipe_key"; then
+            log "Package cache for $pkgname requires missing local build state"
+        elif package_restore_recipe_cache \
+                "$pkgname" "$pkgver" "$recipe_key" "$sysroot"; then
+            recipe_session_mark_done
+            return
+        fi
     fi
 
     reset_directory "$srcdir"
@@ -717,10 +872,11 @@ recipe_run() {
     recipe_verify_source_records
 
     fakeroot -- "$recipefile" --internal-build "$recipe_key" "$skip_check"
+    recipe_session_mark_done
 }
 
 recipe_main() {
-    local force=false skip_check=false no_dependencies=false
+    local force=false skip_check=false no_dependencies=false repackage=false
 
     recipe_initialize_paths
     recipe_validate_metadata
@@ -739,6 +895,11 @@ recipe_main() {
             recipe_run_internal_build "$2" "$3"
             return
             ;;
+        --internal-repackage)
+            [[ $# -eq 3 ]] || die "invalid internal repackage invocation"
+            recipe_run_internal_repackage "$2" "$3"
+            return
+            ;;
     esac
 
     while (($#)); do
@@ -746,10 +907,19 @@ recipe_main() {
             --force) force=true ;;
             --skip-check) skip_check=true ;;
             --no-deps) no_dependencies=true ;;
+            --repackage) repackage=true ;;
             *) die "unknown recipe option: $1" ;;
         esac
         shift
     done
 
+    if [[ "$repackage" == true ]]; then
+        [[ "$force" == false && "$skip_check" == false && "$no_dependencies" == false ]] || \
+            die "--repackage cannot be combined with build options"
+        recipe_repackage
+        return
+    fi
+
+    recipe_session_initialize
     recipe_run "$force" "$skip_check" "$no_dependencies"
 }
