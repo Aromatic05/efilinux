@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 
 "$ROOT/test/recipe.sh"
+"$ROOT/test/layer-ownership.sh"
 "$ROOT/test/runtime.sh"
 "$ROOT/test/runtime-tools.sh"
 "$ROOT/test/system.sh"
@@ -19,4 +20,5 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 "$ROOT/test/command-closure.sh"
 "$ROOT/test/kernel.sh"
 "$ROOT/test/boot-qemu.sh"
+"$ROOT/test/boot-zxmod-qemu.sh"
 "$ROOT/test/boot-graphical-qemu.sh"

@@ -3,9 +3,9 @@
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
-builder="$ROOT/005-zxmod/zxmod/files/usr/bin/zxmod-build"
-command="$ROOT/005-zxmod/zxmod/files/usr/bin/zxmod"
-library="$ROOT/005-zxmod/zxmod/files/usr/lib/zxmod/common.sh"
+builder="$ROOT/005-utils/zxmod/files/usr/bin/zxmod-build"
+command="$ROOT/005-utils/zxmod/files/usr/bin/zxmod"
+library="$ROOT/005-utils/zxmod/files/usr/lib/zxmod/common.sh"
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 
@@ -42,12 +42,20 @@ if ! unshare --user --map-root-user --mount --fork true 2>/dev/null; then
     exit 0
 fi
 
-unshare --user --map-root-user --mount --fork bash -ceu '
+set +e
+runtime_output=$(unshare --user --map-root-user --mount --fork bash -ceu '
     root=$1
     command=$2
     library=$3
     mkdir -p "$root/base/usr" "$root/base/opt" "$root/run"
     printf "base file\n" > "$root/base/usr/base-file"
+    mkdir "$root/squashfs-probe"
+    if ! mount -t squashfs -o ro "$root/sample.zxm" "$root/squashfs-probe"; then
+        printf "ZXMOD_RUNTIME_SKIP: unprivileged SquashFS mounting is unavailable\n" >&2
+        exit 77
+    fi
+    umount "$root/squashfs-probe"
+    rmdir "$root/squashfs-probe"
     ZXMOD_LIBRARY="$library" ZXMOD_RUN_ROOT="$root/run" ZXMOD_USR_TARGET="$root/base/usr" ZXMOD_OPT_TARGET="$root/base/opt" \
         "$command" load "$root/sample.zxm"
     test "$(cat "$root/base/usr/bin/module-command")" = "module command"
@@ -59,4 +67,16 @@ unshare --user --map-root-user --mount --fork bash -ceu '
     ZXMOD_LIBRARY="$library" ZXMOD_RUN_ROOT="$root/run" ZXMOD_USR_TARGET="$root/base/usr" ZXMOD_OPT_TARGET="$root/base/opt" \
         "$command" unload sample
     test ! -e "$root/base/usr/bin/module-command"
-' bash "$work" "$command" "$library"
+' bash "$work" "$command" "$library" 2>&1)
+runtime_status=$?
+set -e
+
+if [[ $runtime_status -eq 77 ]]; then
+    printf '%s\n' "$runtime_output" >&2
+    printf 'zxmod runtime test skipped: unprivileged SquashFS mounting is unavailable\n' >&2
+    exit 0
+fi
+if [[ $runtime_status -ne 0 ]]; then
+    printf '%s\n' "$runtime_output" >&2
+    exit "$runtime_status"
+fi
