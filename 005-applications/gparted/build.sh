@@ -23,7 +23,7 @@ prepare() {
 }
 
 build() {
-    target_release_configure "$srcdir/source" "$builddir"
+    target_release_configure "$srcdir/source" "$builddir" --disable-doc
     target_make_install "$builddir" "$develdir"
 }
 
