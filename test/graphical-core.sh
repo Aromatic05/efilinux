@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
+source "$ROOT/lib/package.sh"
 
 sysroot="$EFILINUX_SYSROOT"
 loader="$sysroot/usr/lib/ld-linux-x86-64.so.2"
@@ -30,7 +31,6 @@ harfbuzz_version=$(recipe_version "$ROOT/003-graphical/harfbuzz/build.sh")
 fribidi_version=$(recipe_version "$ROOT/003-graphical/fribidi/build.sh")
 pixman_version=$(recipe_version "$ROOT/003-graphical/pixman/build.sh")
 mesa_version=$(recipe_version "$ROOT/003-graphical/mesa/build.sh")
-llvm_version_expected=$(recipe_version "$ROOT/003-graphical/llvm/build.sh")
 
 require_file() {
     local path=$1
@@ -54,6 +54,25 @@ require_needed() {
 
     LC_ALL=C readelf -d "$sysroot$path" | grep -Fq "Shared library: [$library]" || \
         die "$path does not depend on $library"
+}
+
+reject_llvm_runtime() {
+    local root=$1
+    local path
+
+    if find "$root" \
+        \( -name 'libLLVM*.so*' -o -name 'llvm-*' -o -name 'llvm-config' \
+           -o -name 'llvm-config-*' -o -name 'libclang*.so*' \
+           -o -name 'libLLVMSPIRVLib.*' -o -path '*/usr/share/clc/*' \) \
+        -print -quit | grep -q .; then
+        die "LLVM runtime leaked into Mesa package"
+    fi
+
+    while IFS= read -r -d '' path; do
+        if LC_ALL=C readelf -d "$path" 2>/dev/null | grep -Fq 'Shared library: [libLLVM'; then
+            die "Mesa runtime has an LLVM DT_NEEDED entry: ${path#$root}"
+        fi
+    done < <(find "$root" -type f -print0)
 }
 
 require_pkg_version libevdev "$libevdev_version"
@@ -93,9 +112,7 @@ for path in \
     require_file "$path"
 done
 
-llvm_library=$(find "$sysroot/usr/lib" -maxdepth 1 -type f -name 'libLLVM.so.*' -print -quit)
 gallium_library=$(find "$sysroot/usr/lib" -maxdepth 1 -type f -name 'libgallium-*.so' -print -quit)
-[[ -n "$llvm_library" ]] || die "target LLVM shared library is missing"
 [[ -n "$gallium_library" ]] || die "Mesa Gallium shared library is missing"
 
 dri_entry="$sysroot/usr/lib/dri/libdril_dri.so"
@@ -109,33 +126,23 @@ for driver in \
         die "Mesa DRI driver does not resolve to libdril: $driver"
 done
 
-llvm_version=$("$loader" --library-path "$library_path" \
-    "$sysroot/usr/bin/llvm-config" --version)
-[[ $llvm_version == "$llvm_version_expected" ]] || \
-    die "target LLVM version is $llvm_version, expected $llvm_version_expected"
-llvm_targets=$("$loader" --library-path "$library_path" \
-    "$sysroot/usr/bin/llvm-config" --targets-built)
-[[ $llvm_targets == 'X86 AMDGPU' ]] || \
-    die "target LLVM set is '$llvm_targets', expected 'X86 AMDGPU'"
+mesa_runtime=$(mktemp -d)
+trap 'rm -rf -- "$mesa_runtime"' EXIT
+package_materialize mesa "$mesa_runtime"
+reject_llvm_runtime "$mesa_runtime"
+mesa_archive=$(package_current_archive mesa)
+if tar --extract --to-stdout --file "$mesa_archive" .PKGINFO | grep -Fxq 'depends=llvm'; then
+    die "Mesa package still declares an LLVM runtime dependency"
+fi
 
 require_needed /usr/lib/libinput.so.10 libudev.so.1
 require_needed /usr/lib/libinput.so.10 libevdev.so.2
 require_needed /usr/lib/libxkbcommon-x11.so.0 libxcb-xkb.so.1
 require_needed /usr/lib/libharfbuzz.so.0 libfreetype.so.6
 require_needed /usr/lib/libfontconfig.so.1 libexpat.so.1
-require_needed "${gallium_library#$sysroot}" "$(basename -- "$llvm_library")"
-
 if LC_ALL=C readelf -d "$gallium_library" | \
-    grep -Ei 'clang|SPIRV-Tools|libclc|wayland'; then
+    grep -Ei 'LLVM|clang|SPIRV-Tools|libclc|wayland'; then
     die "build-time compiler dependency leaked into Mesa runtime"
-fi
-if strings "$gallium_library" | grep -Fq '/usr/share/clc'; then
-    die "dynamic libclc path leaked into Mesa runtime"
-fi
-if find "$sysroot/usr/lib" -maxdepth 1 \( -type f -o -type l \) \
-    \( -name 'libclang*.a' -o -name 'libclang-cpp.so*' \) \
-    -print -quit | grep -q .; then
-    die "Clang library leaked into the target sysroot"
 fi
 if find "$sysroot" \
     \( -name 'libwayland-*.so*' \
@@ -147,18 +154,8 @@ if find "$sysroot" \
     die "Wayland artifact leaked into graphical core"
 fi
 
-for path in \
-    /usr/share/clc/spirv-mesa3d-.spv \
-    /usr/share/clc/spirv64-mesa3d-.spv \
-    /usr/lib/libLLVMSPIRVLib.a \
-    /usr/lib/libSPIRV-Tools.a \
-    /usr/include/clang/Config/config.h \
-    /usr/lib/clang/22/include/opencl-c.h; do
-    require_file "$path"
-done
-
 font_count=$(find "$sysroot/usr/share/fonts/truetype/dejavu" \
     -maxdepth 1 -type f -name '*.ttf' | wc -l)
 ((font_count >= 20)) || die "DejaVu font set is incomplete: $font_count files"
 
-log "003-graphical core LLVM, Mesa, input, text, fonts, and no-Wayland contract passed"
+log "003-graphical core no-LLVM Mesa, input, text, fonts, and no-Wayland contract passed"

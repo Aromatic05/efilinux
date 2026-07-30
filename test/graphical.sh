@@ -61,6 +61,16 @@ require_library() {
     die "graphical library family is missing: $pattern"
 }
 
+reject_llvm_runtime() {
+    if find "$rootfs" \
+        \( -name 'libLLVM*.so*' -o -name 'llvm-*' -o -name 'llvm-config' \
+           -o -name 'llvm-config-*' -o -name 'libclang*.so*' \
+           -o -name 'libLLVMSPIRVLib.*' -o -path '*/usr/share/clc/*' \) \
+        -print -quit | grep -q .; then
+        die "LLVM runtime leaked into graphical profile"
+    fi
+}
+
 require_file /etc/X11/xinit/xinitrc
 require_file /etc/X11/xorg.conf.d/40-libinput.conf
 require_file /home/user/.config/gtk-3.0/settings.ini
@@ -102,7 +112,6 @@ require_program gtk-update-icon-cache gtk3
 require_program update-mime-database shared-mime-info
 require_program update-desktop-database desktop-file-utils
 
-require_library 'libLLVM.so*' llvm
 require_library 'libdrm.so.2*' libdrm
 require_library 'libgbm.so.1*' mesa
 require_library 'libEGL.so.1*' mesa
@@ -124,6 +133,8 @@ for driver in \
     virtio_gpu_dri.so swrast_dri.so; do
     require_file "/usr/lib/dri/$driver"
 done
+
+reject_llvm_runtime
 
 for module in \
     /usr/lib/xorg/modules/drivers/modesetting_drv.so \
