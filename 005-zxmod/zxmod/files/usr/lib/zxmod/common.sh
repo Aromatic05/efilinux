@@ -4,6 +4,10 @@ ZXMOD_RUN_ROOT=${ZXMOD_RUN_ROOT:-/run/zxmod}
 ZXMOD_USR_TARGET=${ZXMOD_USR_TARGET:-/usr}
 ZXMOD_OPT_TARGET=${ZXMOD_OPT_TARGET:-/opt}
 ZXMOD_CONFIG=${ZXMOD_CONFIG:-/etc/zxmod.conf}
+ZXMOD_TAB=$(printf '\t')
+ZXMOD_NEWLINE='
+'
+ZXMOD_LOCK_HELD=
 
 zxmod_die() {
     printf 'zxmod: %s\n' "$*" >&2
@@ -18,104 +22,249 @@ zxmod_path_exists() {
     [ -e "$1" ] || [ -L "$1" ]
 }
 
+zxmod_validate_id() {
+    case ${1:-} in
+        ''|[!a-z0-9]*|*[!a-z0-9._-]*) zxmod_die "invalid module id: ${1:-}" ;;
+    esac
+    [ ${#1} -le 64 ] || zxmod_die "module id is too long: $1"
+}
+
+zxmod_validate_arch() {
+    case ${1:-} in
+        ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) zxmod_die "invalid architecture: ${1:-}" ;;
+    esac
+}
+
 zxmod_source_identity() {
     stat -c '%d:%i:%s:%Y' -- "$1"
 }
 
-zxmod_validate_id() {
-    case $1 in
-        [a-z0-9][a-z0-9._-]* )
-            [ ${#1} -le 64 ] || zxmod_die "module id is too long: $1"
-            ;;
-        *) zxmod_die "invalid module id: $1" ;;
-    esac
+zxmod_manifest_count() {
+    awk -F= -v key="$1" '$1 == key { count++ } END { print count + 0 }' "$2"
 }
 
 zxmod_manifest_value() {
-    sed -n "s/^$1=//p" "$2"
+    awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$2"
+}
+
+zxmod_require_module_file() {
+    case $1 in
+        *.zxm) ;;
+        *) zxmod_die "module filename must end in .zxm: $1" ;;
+    esac
+    [ -f "$1" ] && [ ! -L "$1" ] || zxmod_die "module file is not a regular file: $1"
+    readlink -f -- "$1"
 }
 
 zxmod_read_manifest() {
     zxmod_source=$1
     zxmod_manifest=$2
 
-    unsquashfs -cat "$zxmod_source" metadata/manifest > "$zxmod_manifest" 2>/dev/null ||
+    LC_ALL=C unsquashfs -cat "$zxmod_source" metadata/manifest > "$zxmod_manifest" 2>/dev/null ||
         zxmod_die 'module does not contain metadata/manifest'
-    grep -q '^format=1$' "$zxmod_manifest" ||
+    if ! awk -F= '
+        NF < 2 { exit 1 }
+        $1 !~ /^(format|id|arch|version|description)$/ { exit 1 }
+        { next }
+    ' "$zxmod_manifest"; then
+        zxmod_die 'manifest contains malformed or unknown fields'
+    fi
+    for zxmod_key in format id arch version; do
+        [ "$(zxmod_manifest_count "$zxmod_key" "$zxmod_manifest")" -eq 1 ] ||
+            zxmod_die "manifest has duplicate or missing $zxmod_key"
+    done
+    [ "$(zxmod_manifest_count description "$zxmod_manifest")" -le 1 ] ||
+        zxmod_die 'manifest has duplicate description'
+
+    [ "$(zxmod_manifest_value format "$zxmod_manifest")" = 1 ] ||
         zxmod_die 'unsupported module format'
     zxmod_id=$(zxmod_manifest_value id "$zxmod_manifest")
     zxmod_arch=$(zxmod_manifest_value arch "$zxmod_manifest")
     zxmod_version=$(zxmod_manifest_value version "$zxmod_manifest")
-    [ "$(grep -c '^id=' "$zxmod_manifest")" -eq 1 ] || zxmod_die 'manifest has duplicate or missing id'
-    [ "$(grep -c '^arch=' "$zxmod_manifest")" -eq 1 ] || zxmod_die 'manifest has duplicate or missing arch'
-    [ "$(grep -c '^version=' "$zxmod_manifest")" -eq 1 ] || zxmod_die 'manifest has duplicate or missing version'
     zxmod_validate_id "$zxmod_id"
+    zxmod_validate_arch "$zxmod_arch"
     [ "$zxmod_arch" = "$(uname -m)" ] ||
         zxmod_die "module architecture $zxmod_arch does not match $(uname -m)"
     case $zxmod_version in
         ''|*[!A-Za-z0-9._+:-]*) zxmod_die 'invalid module version' ;;
     esac
-    unsquashfs -s "$zxmod_source" 2>/dev/null | grep -Eq '^Compression[[:space:]]+zstd$' ||
+    LC_ALL=C unsquashfs -s "$zxmod_source" 2>/dev/null |
+        grep -Eq '^Compression[[:space:]]+zstd$' ||
         zxmod_die 'module payload is not Zstd-compressed SquashFS'
 }
 
-zxmod_prepare_runtime() {
-    mkdir -p "$ZXMOD_RUN_ROOT/modules" "$ZXMOD_RUN_ROOT/generations" "$ZXMOD_RUN_ROOT/base"
-    [ -e "$ZXMOD_RUN_ROOT/active" ] || : > "$ZXMOD_RUN_ROOT/active"
-    if ! mountpoint -q "$ZXMOD_RUN_ROOT/base/usr"; then
-        mkdir -p "$ZXMOD_RUN_ROOT/base/usr" "$ZXMOD_RUN_ROOT/base/opt"
-        mount --bind "$ZXMOD_USR_TARGET" "$ZXMOD_RUN_ROOT/base/usr"
-        mount --bind "$ZXMOD_OPT_TARGET" "$ZXMOD_RUN_ROOT/base/opt"
+zxmod_acquire_lock() {
+    mkdir -p "$ZXMOD_RUN_ROOT"
+    zxmod_lock="$ZXMOD_RUN_ROOT/lock"
+    if ! mkdir "$zxmod_lock" 2>/dev/null; then
+        zxmod_lock_pid=
+        [ -f "$zxmod_lock/pid" ] && IFS= read -r zxmod_lock_pid < "$zxmod_lock/pid"
+        case $zxmod_lock_pid in
+            ''|*[!0-9]*) zxmod_lock_pid= ;;
+        esac
+        if [ -n "$zxmod_lock_pid" ] && kill -0 "$zxmod_lock_pid" 2>/dev/null; then
+            zxmod_die "another module operation is active (pid $zxmod_lock_pid)"
+        fi
+        rm -rf -- "$zxmod_lock"
+        mkdir "$zxmod_lock" 2>/dev/null || zxmod_die 'cannot acquire module operation lock'
     fi
+    printf '%s\n' "$$" > "$zxmod_lock/pid"
+    ZXMOD_LOCK_HELD=1
+}
+
+zxmod_release_lock() {
+    if [ -n "$ZXMOD_LOCK_HELD" ]; then
+        rm -rf -- "$ZXMOD_RUN_ROOT/lock"
+        ZXMOD_LOCK_HELD=
+    fi
+}
+
+zxmod_bind_base() {
+    zxmod_target=$1
+    zxmod_anchor=$2
+    mkdir -p "$zxmod_anchor"
+    if ! mountpoint -q "$zxmod_anchor"; then
+        mount --bind "$zxmod_target" "$zxmod_anchor" ||
+            zxmod_die "cannot retain base view: $zxmod_target"
+        mount -o remount,bind,ro,nodev,nosuid "$zxmod_anchor" || {
+            umount "$zxmod_anchor" 2>/dev/null || :
+            zxmod_die "cannot protect retained base view: $zxmod_target"
+        }
+    fi
+}
+
+zxmod_prepare_runtime() {
+    mkdir -p "$ZXMOD_RUN_ROOT/modules" "$ZXMOD_RUN_ROOT/generations" \
+        "$ZXMOD_RUN_ROOT/retired" "$ZXMOD_RUN_ROOT/base"
+    [ -e "$ZXMOD_RUN_ROOT/active" ] || : > "$ZXMOD_RUN_ROOT/active"
+    if [ ! -e /dev/loop-control ]; then
+        command -v modprobe >/dev/null 2>&1 && modprobe loop >/dev/null 2>&1 || :
+    fi
+    [ -e /dev/loop-control ] || zxmod_die 'loop devices are unavailable'
+    zxmod_bind_base "$ZXMOD_USR_TARGET" "$ZXMOD_RUN_ROOT/base/usr"
+    zxmod_bind_base "$ZXMOD_OPT_TARGET" "$ZXMOD_RUN_ROOT/base/opt"
+}
+
+zxmod_normalize_link() {
+    zxmod_relative=$1
+    zxmod_link=$2
+    awk -v relative="$zxmod_relative" -v link="$zxmod_link" 'BEGIN {
+        if (substr(link, 1, 1) == "/") {
+            candidate = substr(link, 2)
+        } else {
+            base = relative
+            sub(/\/[^/]*$/, "", base)
+            candidate = base "/" link
+        }
+        count = split(candidate, part, "/")
+        depth = 0
+        for (index = 1; index <= count; index++) {
+            if (part[index] == "" || part[index] == ".")
+                continue
+            if (part[index] == "..") {
+                if (depth == 0)
+                    exit 1
+                depth--
+                continue
+            }
+            stack[++depth] = part[index]
+        }
+        if (depth == 0)
+            exit 1
+        output = stack[1]
+        for (index = 2; index <= depth; index++)
+            output = output "/" stack[index]
+        print output
+    }'
+}
+
+zxmod_active_has_id() {
+    awk -F '\t' -v id="$2" '$1 == id { found=1 } END { exit !found }' "$1"
 }
 
 zxmod_validate_payload_tree() {
     zxmod_root=$1
     for zxmod_top in "$zxmod_root"/*; do
-        [ -e "$zxmod_top" ] || [ -L "$zxmod_top" ] || continue
+        zxmod_path_exists "$zxmod_top" || continue
         case $(basename -- "$zxmod_top") in
             metadata|root) ;;
             *) zxmod_die "unexpected top-level module path: $(basename -- "$zxmod_top")" ;;
         esac
     done
-    [ -d "$zxmod_root/root" ] || zxmod_die 'module payload root is missing'
+    [ -d "$zxmod_root/root" ] && [ ! -L "$zxmod_root/root" ] ||
+        zxmod_die 'module payload root is missing or invalid'
     for zxmod_top in "$zxmod_root/root"/*; do
-        [ -e "$zxmod_top" ] || [ -L "$zxmod_top" ] || continue
+        zxmod_path_exists "$zxmod_top" || continue
         case $(basename -- "$zxmod_top") in
-            usr|opt) [ -d "$zxmod_top" ] && [ ! -L "$zxmod_top" ] || zxmod_die 'payload /usr or /opt is not a directory' ;;
+            usr|opt)
+                [ -d "$zxmod_top" ] && [ ! -L "$zxmod_top" ] ||
+                    zxmod_die 'payload /usr or /opt is not a directory'
+                ;;
             *) zxmod_die "payload is outside /usr and /opt: $(basename -- "$zxmod_top")" ;;
         esac
     done
 }
 
+zxmod_validate_one_path() {
+    zxmod_path=$1
+    zxmod_root=$2
+    zxmod_active_file=$3
+    zxmod_relative=${zxmod_path#"$zxmod_root/root/"}
+
+    case $zxmod_relative in
+        usr|opt) return ;;
+        usr/*|opt/*) ;;
+        *) zxmod_die "unsafe payload path: $zxmod_relative" ;;
+    esac
+    case $zxmod_relative in
+        *'//'|*'/./'*|*'/../'*|*'/..'|*'/'|*"$ZXMOD_NEWLINE"*)
+            zxmod_die "unsafe payload path: $zxmod_relative"
+            ;;
+    esac
+    if [ ! -d "$zxmod_path" ] && [ ! -f "$zxmod_path" ] && [ ! -L "$zxmod_path" ]; then
+        zxmod_die "unsupported payload file type: /$zxmod_relative"
+    fi
+    if [ -L "$zxmod_path" ]; then
+        zxmod_link=$(readlink -- "$zxmod_path")
+        zxmod_normalized=$(zxmod_normalize_link "$zxmod_relative" "$zxmod_link") ||
+            zxmod_die "module link escapes its payload: /$zxmod_relative -> $zxmod_link"
+        case $zxmod_normalized in
+            usr|usr/*|opt|opt/*) ;;
+            *) zxmod_die "module link escapes /usr and /opt: /$zxmod_relative -> $zxmod_link" ;;
+        esac
+    fi
+
+    zxmod_base="$ZXMOD_RUN_ROOT/base/$zxmod_relative"
+    if [ -d "$zxmod_path" ] && [ ! -L "$zxmod_path" ]; then
+        if zxmod_path_exists "$zxmod_base" && { [ ! -d "$zxmod_base" ] || [ -L "$zxmod_base" ]; }; then
+            zxmod_die "module directory conflicts with base system: /$zxmod_relative"
+        fi
+        while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
+            [ -n "$zxmod_active_id" ] || continue
+            zxmod_other="$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_relative"
+            if zxmod_path_exists "$zxmod_other" && { [ ! -d "$zxmod_other" ] || [ -L "$zxmod_other" ]; }; then
+                zxmod_die "module directory conflicts with active module $zxmod_active_id: /$zxmod_relative"
+            fi
+        done < "$zxmod_active_file"
+        return
+    fi
+
+    zxmod_path_exists "$zxmod_base" &&
+        zxmod_die "module path conflicts with base system: /$zxmod_relative"
+    while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
+        [ -n "$zxmod_active_id" ] || continue
+        zxmod_path_exists "$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_relative" &&
+            zxmod_die "module path conflicts with active module $zxmod_active_id: /$zxmod_relative"
+    done < "$zxmod_active_file"
+}
+
 zxmod_validate_paths() {
     zxmod_root=$1
-    zxmod_id=$2
-    find "$zxmod_root/root" -mindepth 1 -print | while IFS= read -r zxmod_path; do
-        zxmod_relative=${zxmod_path#"$zxmod_root/root/"}
-        case $zxmod_relative in
-            usr|opt) continue ;;
-            usr/*|opt/*) ;;
-            *) zxmod_die "unsafe payload path: $zxmod_relative" ;;
-        esac
-        case $zxmod_relative in
-            *'//'|*'/./'*|*'/../'*|*'/..'|*'/'|*"$(printf '\n')"*)
-                zxmod_die "unsafe payload path: $zxmod_relative" ;;
-        esac
-        zxmod_base="$ZXMOD_RUN_ROOT/base/$zxmod_relative"
-        if [ -d "$zxmod_path" ] && [ ! -L "$zxmod_path" ]; then
-            if zxmod_path_exists "$zxmod_base" && { [ ! -d "$zxmod_base" ] || [ -L "$zxmod_base" ]; }; then
-                zxmod_die "module directory conflicts with base system: /$zxmod_relative"
-            fi
-            continue
-        fi
-        zxmod_path_exists "$zxmod_base" && zxmod_die "module path conflicts with base system: /$zxmod_relative"
-        while IFS='\t' read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
-            [ -n "$zxmod_active_id" ] || continue
-            zxmod_path_exists "$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_relative" &&
-                zxmod_die "module path conflicts with active module $zxmod_active_id: /$zxmod_relative"
-        done < "$ZXMOD_RUN_ROOT/active"
-    done
+    zxmod_active_file=$2
+    find "$zxmod_root/root" -mindepth 1 -print0 |
+        while IFS= read -r -d '' zxmod_path; do
+            zxmod_validate_one_path "$zxmod_path" "$zxmod_root" "$zxmod_active_file"
+        done
 }
 
 zxmod_next_generation() {
@@ -123,42 +272,92 @@ zxmod_next_generation() {
     for zxmod_path in "$ZXMOD_RUN_ROOT/generations"/*; do
         [ -d "$zxmod_path" ] || continue
         zxmod_number=${zxmod_path##*/}
-        [ "$zxmod_number" -gt "$zxmod_generation" ] 2>/dev/null && zxmod_generation=$zxmod_number
+        case $zxmod_number in *[!0-9]*|'') continue ;; esac
+        [ "$zxmod_number" -gt "$zxmod_generation" ] && zxmod_generation=$zxmod_number
     done
     zxmod_generation=$((zxmod_generation + 1))
 }
 
-zxmod_switch_generation() {
-    zxmod_next_generation
-    zxmod_generation_root="$ZXMOD_RUN_ROOT/generations/$zxmod_generation"
-    mkdir -p "$zxmod_generation_root/usr/upper" "$zxmod_generation_root/usr/work" \
-        "$zxmod_generation_root/opt/upper" "$zxmod_generation_root/opt/work"
-    zxmod_usr_lower="$ZXMOD_RUN_ROOT/base/usr"
-    zxmod_opt_lower="$ZXMOD_RUN_ROOT/base/opt"
-    while IFS='\t' read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
+zxmod_generation_lowerdir() {
+    zxmod_active_file=$1
+    zxmod_subtree=$2
+    zxmod_lower="$ZXMOD_RUN_ROOT/base/$zxmod_subtree"
+    while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
         [ -n "$zxmod_active_id" ] || continue
         [ "$(zxmod_source_identity "$zxmod_active_source")" = "$zxmod_active_identity" ] ||
             zxmod_die "active module source changed: $zxmod_active_id"
-        [ -d "$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/usr" ] &&
-            zxmod_usr_lower="$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/usr:$zxmod_usr_lower"
-        [ -d "$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/opt" ] &&
-            zxmod_opt_lower="$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/opt:$zxmod_opt_lower"
-    done < "$ZXMOD_RUN_ROOT/active"
-    mount -t overlay overlay -o "lowerdir=$zxmod_usr_lower,upperdir=$zxmod_generation_root/usr/upper,workdir=$zxmod_generation_root/usr/work" "$zxmod_generation_root/usr"
-    mount -t overlay overlay -o "lowerdir=$zxmod_opt_lower,upperdir=$zxmod_generation_root/opt/upper,workdir=$zxmod_generation_root/opt/work" "$zxmod_generation_root/opt"
-    mount --bind "$zxmod_generation_root/usr" "$ZXMOD_USR_TARGET"
-    mount --bind "$zxmod_generation_root/opt" "$ZXMOD_OPT_TARGET"
-    printf '%s\n' "$zxmod_generation" > "$ZXMOD_RUN_ROOT/current-generation"
+        zxmod_module_tree="$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_subtree"
+        [ -d "$zxmod_module_tree" ] && zxmod_lower="$zxmod_module_tree:$zxmod_lower"
+    done < "$zxmod_active_file"
+}
+
+zxmod_remove_failed_generation() {
+    zxmod_failed_root=$1
+    umount "$zxmod_failed_root/opt" 2>/dev/null || :
+    umount "$zxmod_failed_root/usr" 2>/dev/null || :
+    rm -rf -- "$zxmod_failed_root"
+}
+
+zxmod_switch_generation() {
+    zxmod_candidate=$1
+    zxmod_next_generation
+    zxmod_generation_root="$ZXMOD_RUN_ROOT/generations/$zxmod_generation"
+    mkdir -p "$zxmod_generation_root/usr" "$zxmod_generation_root/opt"
+
+    zxmod_generation_lowerdir "$zxmod_candidate" usr
+    zxmod_usr_lower=$zxmod_lower
+    zxmod_generation_lowerdir "$zxmod_candidate" opt
+    zxmod_opt_lower=$zxmod_lower
+
+    mount -t overlay overlay -o "ro,lowerdir=$zxmod_usr_lower" "$zxmod_generation_root/usr" || {
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        zxmod_die 'cannot construct /usr module generation'
+    }
+    mount -t overlay overlay -o "ro,lowerdir=$zxmod_opt_lower" "$zxmod_generation_root/opt" || {
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        zxmod_die 'cannot construct /opt module generation'
+    }
+
+    mount --bind "$zxmod_generation_root/usr" "$ZXMOD_USR_TARGET" || {
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        zxmod_die 'cannot switch /usr module generation'
+    }
+    if ! mount --bind "$zxmod_generation_root/opt" "$ZXMOD_OPT_TARGET"; then
+        umount "$ZXMOD_USR_TARGET" 2>/dev/null || :
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        zxmod_die 'cannot switch /opt module generation'
+    fi
+
+    printf '%s\n' "$zxmod_generation" > "$ZXMOD_RUN_ROOT/current-generation.next" || {
+        umount "$ZXMOD_OPT_TARGET" 2>/dev/null || :
+        umount "$ZXMOD_USR_TARGET" 2>/dev/null || :
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        zxmod_die 'cannot record module generation'
+    }
+    if ! mv -- "$zxmod_candidate" "$ZXMOD_RUN_ROOT/active"; then
+        rm -f -- "$ZXMOD_RUN_ROOT/current-generation.next"
+        umount "$ZXMOD_OPT_TARGET" 2>/dev/null || :
+        umount "$ZXMOD_USR_TARGET" 2>/dev/null || :
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        zxmod_die 'cannot commit active module state'
+    fi
+    mv -- "$ZXMOD_RUN_ROOT/current-generation.next" "$ZXMOD_RUN_ROOT/current-generation"
 }
 
 zxmod_persist_root() {
-    [ -f "$ZXMOD_CONFIG" ] || zxmod_die "persistent store is not configured; set persist_root in $ZXMOD_CONFIG"
-    zxmod_persist_root=$(sed -n 's/^persist_root=//p' "$ZXMOD_CONFIG")
-    [ "$(grep -c '^persist_root=' "$ZXMOD_CONFIG")" -eq 1 ] || zxmod_die 'persistent store configuration is invalid'
-    [ -n "$zxmod_persist_root" ] && [ -d "$zxmod_persist_root" ] && [ -w "$zxmod_persist_root" ] ||
+    [ -f "$ZXMOD_CONFIG" ] ||
+        zxmod_die "persistent store is not configured; set persist_root in $ZXMOD_CONFIG"
+    zxmod_persist_count=$(awk -F= '$1 == "persist_root" { count++ } END { print count + 0 }' "$ZXMOD_CONFIG")
+    [ "$zxmod_persist_count" -eq 1 ] || zxmod_die 'persistent store configuration is invalid'
+    zxmod_persist_root=$(awk -F= '$1 == "persist_root" { sub(/^[^=]*=/, ""); print; exit }' "$ZXMOD_CONFIG")
+    case $zxmod_persist_root in /*) ;; *) zxmod_die 'persistent store must be an absolute path' ;; esac
+    [ -d "$zxmod_persist_root" ] && [ -w "$zxmod_persist_root" ] ||
         zxmod_die "persistent store is unavailable: $zxmod_persist_root"
-    mountpoint -q "$zxmod_persist_root" || zxmod_die "persistent store is not a mount point: $zxmod_persist_root"
+    mountpoint -q "$zxmod_persist_root" ||
+        zxmod_die "persistent store is not a mount point: $zxmod_persist_root"
     case $(findmnt -no FSTYPE --target "$zxmod_persist_root") in
-        tmpfs|ramfs|rootfs|'') zxmod_die "persistent store is not external writable media: $zxmod_persist_root" ;;
+        tmpfs|ramfs|rootfs|'')
+            zxmod_die "persistent store is not external writable media: $zxmod_persist_root"
+            ;;
     esac
 }

@@ -32,10 +32,12 @@ build() {
     make -C "$srcdir/squashfs-tools/squashfs-tools" \
         -j"$EFILINUX_JOBS" \
         CONFIG=1 \
-        COMP_DEFAULT=zstd \
+        GZIP_SUPPORT=0 \
         ZSTD_SUPPORT=1 \
+        COMP_DEFAULT=zstd \
+        XATTR_SUPPORT=0 \
         CC="$CC" \
-        CFLAGS="$CFLAGS" \
+        EXTRA_CFLAGS="$CFLAGS" \
         LDFLAGS="$LDFLAGS"
 
     install -Dm0755 \

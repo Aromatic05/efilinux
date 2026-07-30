@@ -6,7 +6,7 @@ usage() {
     cat >&2 <<'USAGE'
 usage: zxmod-build --id ID --version VERSION [--arch ARCH] [--description TEXT] ROOT OUTPUT.zxm
 
-ROOT may contain only usr/ and opt/.  Metadata is written as metadata/manifest.
+ROOT may contain only usr/ and opt/. Metadata is written as metadata/manifest.
 USAGE
     exit 2
 }
@@ -15,13 +15,15 @@ id=
 version=
 arch=$(uname -m)
 description=
+newline='
+'
 
 while [ $# -gt 0 ]; do
     case $1 in
-        --id) id=${2:-}; shift 2 ;;
-        --version) version=${2:-}; shift 2 ;;
-        --arch) arch=${2:-}; shift 2 ;;
-        --description) description=${2:-}; shift 2 ;;
+        --id) [ $# -ge 2 ] || usage; id=$2; shift 2 ;;
+        --version) [ $# -ge 2 ] || usage; version=$2; shift 2 ;;
+        --arch) [ $# -ge 2 ] || usage; arch=$2; shift 2 ;;
+        --description) [ $# -ge 2 ] || usage; description=$2; shift 2 ;;
         --) shift; break ;;
         -*) usage ;;
         *) break ;;
@@ -29,16 +31,26 @@ while [ $# -gt 0 ]; do
 done
 
 [ $# -eq 2 ] && [ -n "$id" ] && [ -n "$version" ] || usage
-case $id in [a-z0-9][a-z0-9._-]*) [ ${#id} -le 64 ] || exit 2 ;; *) exit 2 ;; esac
-case $version in *[!A-Za-z0-9._+:-]*|'') exit 2 ;; esac
-case $arch in *[!A-Za-z0-9._-]*|'') exit 2 ;; esac
-case $description in *"$(printf '\n')"*|*=*) exit 2 ;; esac
+case $id in ''|[!a-z0-9]*|*[!a-z0-9._-]*) usage ;; esac
+[ ${#id} -le 64 ] || usage
+case $version in ''|*[!A-Za-z0-9._+:-]*) usage ;; esac
+case $arch in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) usage ;; esac
+case $description in *"$newline"*) usage ;; esac
 
 root=$1
 output=$2
-[ -d "$root" ] || { printf 'zxmod-build: ROOT is not a directory\n' >&2; exit 1; }
-[ ! -e "$output" ] || { printf 'zxmod-build: refusing to replace %s\n' "$output" >&2; exit 1; }
-case $output in *.zxm) ;; *) printf 'zxmod-build: output must end in .zxm\n' >&2; exit 1 ;; esac
+[ -d "$root" ] && [ ! -L "$root" ] || {
+    printf 'zxmod-build: ROOT is not a directory\n' >&2
+    exit 1
+}
+[ ! -e "$output" ] || {
+    printf 'zxmod-build: refusing to replace %s\n' "$output" >&2
+    exit 1
+}
+case $output in
+    *.zxm) ;;
+    *) printf 'zxmod-build: output must end in .zxm\n' >&2; exit 1 ;;
+esac
 
 for entry in "$root"/*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
@@ -47,9 +59,13 @@ for entry in "$root"/*; do
         *) printf 'zxmod-build: ROOT may only contain usr and opt\n' >&2; exit 1 ;;
     esac
 done
+if find "$root" -mindepth 1 ! -type d ! -type f ! -type l -print -quit | grep -q .; then
+    printf 'zxmod-build: special files are not supported\n' >&2
+    exit 1
+fi
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT HUP INT TERM
+trap 'rm -rf "$work"' 0 1 2 15
 mkdir -p "$work/metadata" "$work/root"
 cp -a "$root/." "$work/root/"
 {

@@ -12,7 +12,7 @@ pkgname=zxmod
 pkgver=1
 sysroot=false
 
-depends=(squashfs-tools util-linux)
+depends=(kmod squashfs-tools util-linux)
 builddepends=()
 makedepends=(install)
 

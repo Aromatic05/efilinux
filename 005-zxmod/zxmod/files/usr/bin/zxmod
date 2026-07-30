@@ -4,48 +4,78 @@ set -eu
 
 . "${ZXMOD_LIBRARY:-/usr/lib/zxmod/common.sh}"
 
+ZXMOD_TEMP_FILES=
+ZXMOD_PENDING_MOUNT=
+
 usage() {
     cat >&2 <<'USAGE'
-usage: zxmod inspect FILE
-       zxmod load FILE
+usage: zxmod inspect FILE.zxm
+       zxmod load FILE.zxm
        zxmod unload ID
        zxmod list
-       zxmod enable FILE | disable ID | startup
+       zxmod enable FILE.zxm | disable ID | startup
 USAGE
     exit 2
 }
 
+zxmod_track_temp() {
+    ZXMOD_TEMP_FILES="$ZXMOD_TEMP_FILES $1"
+}
+
+cleanup() {
+    zxmod_status=$?
+    trap - 0 1 2 15
+    if [ "$zxmod_status" -ne 0 ] && [ -n "$ZXMOD_PENDING_MOUNT" ]; then
+        umount "$ZXMOD_PENDING_MOUNT" 2>/dev/null || :
+        rmdir "$ZXMOD_PENDING_MOUNT" 2>/dev/null || :
+    fi
+    for zxmod_temp in $ZXMOD_TEMP_FILES; do
+        rm -f -- "$zxmod_temp"
+    done
+    zxmod_release_lock
+    exit "$zxmod_status"
+}
+trap cleanup 0 1 2 15
+
 inspect() {
     [ $# -eq 1 ] || usage
-    [ -f "$1" ] && [ ! -L "$1" ] || zxmod_die "module file is not a regular file: $1"
-    zxmod_read_manifest "$1" "${TMPDIR:-/tmp}/zxmod-manifest.$$"
-    trap 'rm -f "${TMPDIR:-/tmp}/zxmod-manifest.$$"' EXIT HUP INT TERM
-    printf 'id=%s\narch=%s\nversion=%s\nsource=%s\n' "$zxmod_id" "$zxmod_arch" "$zxmod_version" "$(readlink -f -- "$1")"
+    zxmod_source=$(zxmod_require_module_file "$1")
+    zxmod_manifest="${TMPDIR:-/tmp}/zxmod-manifest.$$"
+    zxmod_track_temp "$zxmod_manifest"
+    zxmod_read_manifest "$zxmod_source" "$zxmod_manifest"
+    printf 'id=%s\narch=%s\nversion=%s\nsource=%s\n' \
+        "$zxmod_id" "$zxmod_arch" "$zxmod_version" "$zxmod_source"
 }
 
 load() {
     [ $# -eq 1 ] || usage
     zxmod_require_root
-    zxmod_source=$(readlink -f -- "$1")
-    [ -f "$zxmod_source" ] && [ ! -L "$1" ] || zxmod_die "module file is not a regular file: $1"
+    zxmod_source=$(zxmod_require_module_file "$1")
     zxmod_identity=$(zxmod_source_identity "$zxmod_source")
     zxmod_prepare_runtime
-    zxmod_read_manifest "$zxmod_source" "$ZXMOD_RUN_ROOT/manifest.$$"
-    zxmod_validate_id "$zxmod_id"
-    grep -q "^$zxmod_id$(printf '\t')" "$ZXMOD_RUN_ROOT/active" && zxmod_die "module is already active: $zxmod_id"
+    zxmod_manifest="$ZXMOD_RUN_ROOT/manifest.$$"
+    zxmod_track_temp "$zxmod_manifest"
+    zxmod_read_manifest "$zxmod_source" "$zxmod_manifest"
+    zxmod_active_has_id "$ZXMOD_RUN_ROOT/active" "$zxmod_id" &&
+        zxmod_die "module is already active: $zxmod_id"
+
     zxmod_mount="$ZXMOD_RUN_ROOT/modules/$zxmod_id"
     [ ! -e "$zxmod_mount" ] || zxmod_die "module runtime path already exists: $zxmod_id"
     mkdir -p "$zxmod_mount"
-    mount -t squashfs -o ro,nodev,nosuid "$zxmod_source" "$zxmod_mount" || {
-        rmdir "$zxmod_mount"
+    ZXMOD_PENDING_MOUNT=$zxmod_mount
+    mount -t squashfs -o ro,nodev,nosuid "$zxmod_source" "$zxmod_mount" ||
         zxmod_die "cannot mount module: $zxmod_source"
-    }
-    [ "$(zxmod_source_identity "$zxmod_source")" = "$zxmod_identity" ] || zxmod_die 'module source changed while loading'
+    [ "$(zxmod_source_identity "$zxmod_source")" = "$zxmod_identity" ] ||
+        zxmod_die 'module source changed while loading'
     zxmod_validate_payload_tree "$zxmod_mount"
-    zxmod_validate_paths "$zxmod_mount" "$zxmod_id"
-    printf '%s\t%s\t%s\n' "$zxmod_id" "$zxmod_source" "$zxmod_identity" >> "$ZXMOD_RUN_ROOT/active"
-    zxmod_switch_generation
-    rm -f "$ZXMOD_RUN_ROOT/manifest.$$"
+    zxmod_validate_paths "$zxmod_mount" "$ZXMOD_RUN_ROOT/active"
+
+    zxmod_candidate="$ZXMOD_RUN_ROOT/active.next.$$"
+    zxmod_track_temp "$zxmod_candidate"
+    cat "$ZXMOD_RUN_ROOT/active" > "$zxmod_candidate"
+    printf '%s\t%s\t%s\n' "$zxmod_id" "$zxmod_source" "$zxmod_identity" >> "$zxmod_candidate"
+    zxmod_switch_generation "$zxmod_candidate"
+    ZXMOD_PENDING_MOUNT=
 }
 
 unload() {
@@ -53,14 +83,18 @@ unload() {
     zxmod_require_root
     zxmod_validate_id "$1"
     zxmod_prepare_runtime
-    grep -q "^$1$(printf '\t')" "$ZXMOD_RUN_ROOT/active" || zxmod_die "module is not active: $1"
-    grep -v "^$1$(printf '\t')" "$ZXMOD_RUN_ROOT/active" > "$ZXMOD_RUN_ROOT/active.next"
-    mv "$ZXMOD_RUN_ROOT/active.next" "$ZXMOD_RUN_ROOT/active"
-    zxmod_switch_generation
-    zxmod_generation=$(cat "$ZXMOD_RUN_ROOT/current-generation")
-    mkdir -p "$ZXMOD_RUN_ROOT/retired/$1-$zxmod_generation"
-    mount --move "$ZXMOD_RUN_ROOT/modules/$1" \
-        "$ZXMOD_RUN_ROOT/retired/$1-$zxmod_generation"
+    zxmod_active_has_id "$ZXMOD_RUN_ROOT/active" "$1" ||
+        zxmod_die "module is not active: $1"
+
+    zxmod_candidate="$ZXMOD_RUN_ROOT/active.next.$$"
+    zxmod_track_temp "$zxmod_candidate"
+    awk -F '\t' -v id="$1" '$1 != id { print }' "$ZXMOD_RUN_ROOT/active" > "$zxmod_candidate"
+    zxmod_switch_generation "$zxmod_candidate"
+
+    zxmod_retired="$ZXMOD_RUN_ROOT/retired/$1-$(cat "$ZXMOD_RUN_ROOT/current-generation")"
+    mkdir -p "$zxmod_retired"
+    mount --move "$ZXMOD_RUN_ROOT/modules/$1" "$zxmod_retired" ||
+        zxmod_die "module is inactive but its old mount could not be retired: $1"
     rmdir "$ZXMOD_RUN_ROOT/modules/$1"
 }
 
@@ -68,7 +102,7 @@ list() {
     [ $# -eq 0 ] || usage
     [ -f "$ZXMOD_RUN_ROOT/active" ] || exit 0
     printf 'id\tsource\n'
-    while IFS='\t' read -r zxmod_id zxmod_source zxmod_identity; do
+    while IFS="$ZXMOD_TAB" read -r zxmod_id zxmod_source zxmod_identity; do
         [ -n "$zxmod_id" ] && printf '%s\t%s\n' "$zxmod_id" "$zxmod_source"
     done < "$ZXMOD_RUN_ROOT/active"
 }
@@ -77,11 +111,17 @@ enable() {
     [ $# -eq 1 ] || usage
     zxmod_require_root
     zxmod_persist_root
+    zxmod_source=$(zxmod_require_module_file "$1")
     mkdir -p "$ZXMOD_RUN_ROOT"
-    zxmod_source=$(readlink -f -- "$1")
-    zxmod_read_manifest "$zxmod_source" "$ZXMOD_RUN_ROOT/enable-manifest.$$"
+    zxmod_manifest="$ZXMOD_RUN_ROOT/enable-manifest.$$"
+    zxmod_track_temp "$zxmod_manifest"
+    zxmod_read_manifest "$zxmod_source" "$zxmod_manifest"
     mkdir -p "$zxmod_persist_root/zxmod/enabled"
-    printf '%s\t%s\n' "$zxmod_source" "$(zxmod_source_identity "$zxmod_source")" > "$zxmod_persist_root/zxmod/enabled/$zxmod_id"
+    zxmod_record="$zxmod_persist_root/zxmod/enabled/$zxmod_id"
+    zxmod_record_next="$zxmod_record.next.$$"
+    zxmod_track_temp "$zxmod_record_next"
+    printf '%s\t%s\n' "$zxmod_source" "$(zxmod_source_identity "$zxmod_source")" > "$zxmod_record_next"
+    mv -- "$zxmod_record_next" "$zxmod_record"
 }
 
 disable() {
@@ -89,7 +129,7 @@ disable() {
     zxmod_require_root
     zxmod_validate_id "$1"
     zxmod_persist_root
-    rm -f "$zxmod_persist_root/zxmod/enabled/$1"
+    rm -f -- "$zxmod_persist_root/zxmod/enabled/$1"
 }
 
 startup() {
@@ -99,19 +139,26 @@ startup() {
     [ -d "$zxmod_persist_root/zxmod/enabled" ] || exit 0
     for zxmod_entry in "$zxmod_persist_root/zxmod/enabled"/*; do
         [ -f "$zxmod_entry" ] || continue
-        IFS='\t' read -r zxmod_source zxmod_identity < "$zxmod_entry"
+        IFS="$ZXMOD_TAB" read -r zxmod_source zxmod_identity < "$zxmod_entry"
         if [ -f "$zxmod_source" ] && [ "$(zxmod_source_identity "$zxmod_source")" = "$zxmod_identity" ]; then
             load "$zxmod_source"
         else
-            printf 'zxmod: enabled module unavailable or changed: %s\n' "$(basename -- "$zxmod_entry")" >&2
+            printf 'zxmod: enabled module unavailable or changed: %s\n' \
+                "$(basename -- "$zxmod_entry")" >&2
         fi
     done
 }
 
 case ${1:-} in
-    inspect|load|unload|list|enable|disable|startup)
+    inspect|list)
         zxmod_command=$1
         shift
+        "$zxmod_command" "$@"
+        ;;
+    load|unload|enable|disable|startup)
+        zxmod_command=$1
+        shift
+        zxmod_acquire_lock
         "$zxmod_command" "$@"
         ;;
     *) usage ;;
