@@ -13,8 +13,8 @@ source "$ROOT/lib/target-build.sh"
 pkgname=mesa
 pkgver=26.1.5
 
-depends=(elfutils gcc-libs glibc libdrm llvm xorg zlib zstd)
-builddepends=(clang-headers libclc spirv-tools)
+depends=(elfutils gcc-libs glibc libdrm xorg zlib zstd)
+builddepends=(libclc llvm spirv-tools)
 makedepends=(bison flex gcc meson ninja pkg-config python3 zstd)
 
 prepare() {
@@ -25,9 +25,51 @@ prepare() {
     input_shared_file "$ROOT/lib/target-build.sh" "$srcdir/target-build.sh"
 }
 
+build_mesa_clc_tools() {
+    local tools_build="$recipework/mesa-clc-build"
+    local tools_directory="$recipework/mesa-clc-tools"
+    local mesa_clc vtn_bindgen2
+
+    target_meson_setup "$srcdir/source" "$tools_build" \
+        -Dplatforms=x11 \
+        -Dgallium-drivers=iris,crocus \
+        -Dvulkan-drivers= \
+        -Dllvm=enabled \
+        -Dmesa-clc=enabled \
+        -Dspirv-tools=enabled \
+        -Dstatic-libclc=all \
+        -Dglx=disabled \
+        -Degl=disabled \
+        -Dgbm=disabled \
+        -Dopengl=false \
+        -Dgallium-va=disabled \
+        -Dbuild-tests=false \
+        -Denable-glcpp-tests=false \
+        -Dtools=
+    meson compile -C "$tools_build" -j "$EFILINUX_JOBS" mesa_clc vtn_bindgen2
+
+    mesa_clc=$(find "$tools_build" -type f -name mesa_clc -print -quit)
+    vtn_bindgen2=$(find "$tools_build" -type f -name vtn_bindgen2 -print -quit)
+    [[ -n $mesa_clc && -n $vtn_bindgen2 ]] || die "Mesa CLC build tools are missing"
+
+    mkdir -p "$tools_directory"
+    for tool in mesa_clc vtn_bindgen2; do
+        cat > "$tools_directory/$tool" <<WRAPPER
+#!/usr/bin/env bash
+set -euo pipefail
+exec env -u LD_PRELOAD -u LD_LIBRARY_PATH \\
+    "$EFILINUX_SYSROOT/usr/lib/ld-linux-x86-64.so.2" \\
+    --library-path "$EFILINUX_SYSROOT/usr/lib" \\
+    "$([[ $tool == mesa_clc ]] && printf '%s' "$mesa_clc" || printf '%s' "$vtn_bindgen2")" "\$@"
+WRAPPER
+        chmod 0755 "$tools_directory/$tool"
+    done
+    MESA_CLC_TOOLS=$tools_directory
+}
+
 build() {
     local wrapper_directory="$recipework/host-wrappers"
-    local system_zstd
+    local mesa_clc_tools system_zstd
     mkdir -p "$wrapper_directory"
     system_zstd=$(command -v zstd)
     cat > "$wrapper_directory/zstd" <<WRAPPER
@@ -36,21 +78,20 @@ unset LD_LIBRARY_PATH
 exec "$system_zstd" "\$@"
 WRAPPER
     chmod 0755 "$wrapper_directory/zstd"
+    build_mesa_clc_tools
+    mesa_clc_tools=$MESA_CLC_TOOLS
 
-    PATH="$wrapper_directory:$PATH" target_meson_setup "$srcdir/source" "$builddir" \
+    PATH="$mesa_clc_tools:$wrapper_directory:$PATH" target_meson_setup "$srcdir/source" "$builddir" \
         -Dplatforms=x11 \
         -Degl-native-platform=x11 \
-        -Dgallium-drivers=iris,crocus,radeonsi,nouveau,virgl,llvmpipe,softpipe \
+        -Dgallium-drivers=iris,crocus,radeonsi,nouveau,virgl,softpipe \
         -Dvulkan-drivers= \
         -Dvideo-codecs= \
-        -Dllvm=enabled \
-        -Dshared-llvm=enabled \
-        -Ddraw-use-llvm=true \
-        -Damd-use-llvm=true \
-        -Dspirv-tools=enabled \
-        -Dstatic-libclc=all \
-        -Dmesa-clc-bundle-headers=enabled \
-        -Dinstall-mesa-clc=false \
+        -Dllvm=disabled \
+        -Ddraw-use-llvm=false \
+        -Damd-use-llvm=false \
+        -Dmesa-clc=system \
+        -Dspirv-tools=disabled \
         -Dglx=dri \
         -Degl=enabled \
         -Dgbm=enabled \

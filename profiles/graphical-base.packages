@@ -6,7 +6,6 @@ xorg-utils
 libpciaccess
 libdrm
 elfutils
-llvm
 mesa
 libepoxy
 xorg-server

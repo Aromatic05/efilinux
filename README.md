@@ -43,7 +43,7 @@ The current build covers:
 003-graphical
 ├── xorg                 X11 protocols, client libraries, and utilities
 ├── xorg-server          Xorg server and input/video drivers
-├── llvm, mesa           shared LLVM runtime and Gallium graphics stack
+├── mesa                 no-LLVM Gallium graphics stack
 ├── libinput, libxkbcommon, xkeyboard-config
 ├── freetype, harfbuzz, fontconfig, cairo, pango
 ├── gdk-pixbuf, librsvg, gtk3, vte
