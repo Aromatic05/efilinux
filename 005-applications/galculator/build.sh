@@ -27,7 +27,7 @@ prepare() {
 build() {
     patch -d "$srcdir/source" -Np1 < "$srcdir/fix-duplicate-preferences-definition.patch"
     CFLAGS="$CFLAGS -std=gnu17"
-    target_autotools_configure "$srcdir/source" "$builddir" --enable-gtk3
+    target_autotools_configure "$srcdir/source" "$builddir" --enable-gtk3 --disable-quadmath
     target_make_install "$builddir" "$develdir"
 }
 

@@ -27,7 +27,10 @@ build() {
     target_make_install "$builddir" "$develdir"
 }
 
-devel() { strip_all "$develdir/usr/lib"; }
+devel() {
+    strip_all "$develdir/usr/lib"
+    find "$develdir/usr/lib" -type f -name '*.la' -delete
+}
 
 package() {
     local -a keep=(/usr/lib/thunarx-3/ /usr/share/icons/hicolor/)

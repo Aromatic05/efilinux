@@ -9,7 +9,7 @@ source "$ROOT/lib/recipe.sh"
 
 pkgname=file
 pkgver=5.48
-depends=(glibc zlib)
+depends=(glibc xz zlib zstd)
 builddepends=()
 makedepends=(gcc make pkg-config)
 
@@ -23,7 +23,12 @@ prepare() {
 build() {
     cd "$builddir"
     target_env "$srcdir/file/configure" --prefix=/usr --libdir=/usr/lib \
-        --disable-static --disable-libseccomp --disable-python
+        --disable-static \
+        --disable-libseccomp \
+        --disable-python \
+        --disable-bzlib \
+        --disable-lzlib \
+        --disable-lrziplib
     make -j"$EFILINUX_JOBS"
     make DESTDIR="$develdir" install
 }

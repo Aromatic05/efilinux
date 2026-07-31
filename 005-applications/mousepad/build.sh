@@ -39,6 +39,7 @@ devel() { strip_all "$develdir/usr/bin" "$develdir/usr/lib"; }
 
 package() {
     local -a keep=(/usr/bin/mousepad /usr/lib/mousepad/plugins/ /usr/share/applications/ /usr/share/glib-2.0/schemas/ /usr/share/icons/hicolor/)
+    package_add_library_family keep 'libmousepad.so.0*'
     package_keep "${keep[@]}"
 }
 
