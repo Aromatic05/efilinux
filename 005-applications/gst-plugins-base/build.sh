@@ -68,7 +68,7 @@ package() {
     local -a keep=(/usr/lib/gstreamer-1.0/)
     local library
 
-    for library in allocators audio pbutils riff rtp tag video; do
+    for library in allocators app audio pbutils riff rtp tag video; do
         package_add_library_family keep "libgst$library-1.0.so.0*"
     done
     package_keep "${keep[@]}"

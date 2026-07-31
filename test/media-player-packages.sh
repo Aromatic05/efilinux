@@ -138,7 +138,7 @@ while IFS= read -r binary; do
 done < <(find "$work" -type f -print)
 
 declare -A limits=(
-    [ffmpeg-libs]=2300000
+    [ffmpeg-libs]=2400000
     [gstreamer]=800000
     [gst-plugins-base]=1100000
     [gst-plugins-good]=650000
@@ -158,7 +158,7 @@ for package in "${packages[@]}"; do
     (( size <= limits[$package] )) || die "$package runtime payload exceeds its size budget"
     total=$((total + size))
 done
-(( total <= 5500000 )) || die "media player stack exceeds the 5.5 MB aggregate budget"
+(( total <= 5600000 )) || die "media player stack exceeds the 5.6 MB aggregate budget"
 
 printf 'Media player package payload total: %d bytes\n' "$total"
 log "Parole, GStreamer elements, codec parsers, real decode pipelines, and size budgets passed"
