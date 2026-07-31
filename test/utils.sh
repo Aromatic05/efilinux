@@ -5,7 +5,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command readelf
+require_command base64 readelf
 rootfs=$EFILINUX_ROOTFS
 loader="$rootfs/usr/lib/ld-linux-x86-64.so.2"
 [[ -x $loader ]] || die "target loader is missing"
@@ -30,10 +30,15 @@ target "$rootfs/usr/bin/ddrescue" --version >/dev/null
 
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
-printf '\211PNG\r\n\032\n' > "$work/sample.png"
-MAGIC="$rootfs/usr/share/misc/magic.mgc" \
-    target "$rootfs/usr/bin/file" --brief "$work/sample.png" | \
-    grep -Fqx 'PNG image data'
+base64 -d > "$work/sample.png" <<'PNG'
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=
+PNG
+file_description=$(
+    MAGIC="$rootfs/usr/share/misc/magic.mgc" \
+        target "$rootfs/usr/bin/file" --brief "$work/sample.png"
+)
+[[ $file_description == 'PNG image data,'* ]] ||
+    die "libmagic did not identify a valid PNG: $file_description"
 
 printf 'EFI Linux archive round trip\n' > "$work/payload.txt"
 target "$rootfs/usr/bin/7zz" a -tzip "$work/payload.zip" "$work/payload.txt" >/dev/null
@@ -46,7 +51,7 @@ while IFS= read -r binary; do
     while IFS= read -r needed; do
         [[ -e "$rootfs/usr/lib/$needed" ]] || \
             die "utility ELF dependency is outside target rootfs: $binary needs $needed"
-    done < <(readelf -d "$binary" | awk '/NEEDED/ { gsub(/\[|\]/, "", $NF); print $NF }')
+    done < <(LC_ALL=C readelf -d "$binary" | awk '/NEEDED/ { gsub(/\[|\]/, "", $NF); print $NF }')
 done < <(find "$rootfs/usr/bin" -maxdepth 1 -type f -perm -u+x \( \
     -name file -o -name less -o -name curl -o -name rsync -o -name 7zz -o \
     -name strace -o -name lsof -o -name dmidecode -o -name lspci -o -name ddrescue \
