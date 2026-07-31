@@ -84,11 +84,22 @@ chmod 0755 \
     "$module_a/consumer/build.sh"
 
 "$module_a/build.sh"
-artifact_a="$module_a/output/999-module-a.zxm"
-[[ -f "$artifact_a" ]] || die "module artifact was not written inside the module directory"
+artifact_a="$module_a/build/output/999-module-a.zxm"
+[[ -f "$artifact_a" ]] || die "module artifact was not written inside the module build directory"
 [[ -d "$module_a/build/recipes" ]]
-[[ -f "$module_a/packages/index.tsv" ]]
-[[ -d "$module_a/sysroot" ]]
+[[ -f "$module_a/build/packages/index.tsv" ]]
+[[ -d "$module_a/build/sysroot" ]]
+[[ -d "$module_a/build/logs" ]]
+[[ -d "$module_a/build/state" ]]
+[[ -d "$module_a/build/test" ]]
+[[ -d "$module_a/build/work" ]]
+[[ ! -e "$module_a/packages" ]]
+[[ ! -e "$module_a/sysroot" ]]
+[[ ! -e "$module_a/logs" ]]
+[[ ! -e "$module_a/state" ]]
+[[ ! -e "$module_a/test" ]]
+[[ ! -e "$module_a/work" ]]
+[[ ! -e "$module_a/output" ]]
 [[ ! -e "$EFILINUX_BUILD/modules" ]]
 [[ ! -e "$EFILINUX_TARGET/modules/999-module-a.zxm" ]]
 
@@ -146,7 +157,7 @@ fi
 grep -Fq \
     'module component cross-consumer depends on unavailable package consumer; modules cannot depend on other modules' \
     "$work/module-b.stderr"
-[[ ! -e "$module_b/output/998-module-b.zxm" ]]
+[[ ! -e "$module_b/build/output/998-module-b.zxm" ]]
 
 mkdir -p "$work/conflict/usr/bin" "$work/outside/etc"
 printf 'conflict\n' > "$work/conflict/usr/bin/bash"

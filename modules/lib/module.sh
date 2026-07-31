@@ -153,15 +153,16 @@ module_validate_base_path() {
 
 module_initialize_workspace() {
     local module_directory=$1
+    local module_build="$module_directory/build"
 
-    export EFILINUX_BUILD="$module_directory/build"
-    export EFILINUX_PACKAGES="$module_directory/packages"
+    export EFILINUX_BUILD="$module_build"
+    export EFILINUX_PACKAGES="$module_build/packages"
     export EFILINUX_PACKAGE_INDEX="$EFILINUX_PACKAGES/index.tsv"
-    export EFILINUX_SYSROOT="$module_directory/sysroot"
-    export EFILINUX_LOGS="$module_directory/logs"
-    export EFILINUX_STATE="$module_directory/state"
-    export EFILINUX_TEST="$module_directory/test"
-    export EFILINUX_PACKAGE_WORK="$module_directory/work/packages"
+    export EFILINUX_SYSROOT="$module_build/sysroot"
+    export EFILINUX_LOGS="$module_build/logs"
+    export EFILINUX_STATE="$module_build/state"
+    export EFILINUX_TEST="$module_build/test"
+    export EFILINUX_PACKAGE_WORK="$module_build/work/packages"
     export EFILINUX_ROOTFS="$MODULE_BASE_ROOTFS"
     export EFILINUX_ROOTFS_OWNERS="$MODULE_BASE_ROOTFS_OWNERS"
 
@@ -172,7 +173,7 @@ module_initialize_workspace() {
         "$EFILINUX_STATE" \
         "$EFILINUX_TEST" \
         "$EFILINUX_PACKAGE_WORK" \
-        "$module_directory/output"
+        "$module_build/output"
     package_assert_current_index
 
     [[ -d "$MODULE_BASE_SYSROOT" ]] ||
@@ -246,7 +247,7 @@ module_compose() {
     [[ -f "$MODULE_BASE_ROOTFS_OWNERS" ]] || die "base rootfs ownership manifest is missing"
 
     module_resolve_profile "$module_profile"
-    work="$module_directory/work/compose"
+    work="$EFILINUX_BUILD/work/compose"
     stage="$work/root"
     owners="$work/owners.tsv"
     reset_directory "$work"
@@ -280,8 +281,8 @@ module_compose() {
         done
     } > "$stage/opt/efilinux/modules/$module_id/packages.tsv"
 
-    output="$module_directory/output/$module_name.zxm"
-    temporary="$module_directory/output/$module_name.tmp.$$.zxm"
+    output="$EFILINUX_BUILD/output/$module_name.zxm"
+    temporary="$EFILINUX_BUILD/output/$module_name.tmp.$$.zxm"
     rm -f -- "$temporary"
     "$EFILINUX_ROOT/005-utils/zxmod/files/usr/bin/zxmod-build" \
         --id "$module_id" \
