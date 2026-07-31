@@ -4,6 +4,13 @@
 openjpeg
 poppler
 epdfview
+ffmpeg-libs
+gstreamer
+gst-plugins-base
+gst-plugins-good
+gst-plugins-bad
+gst-libav
+parole
 xarchiver
 mousepad
 ristretto
