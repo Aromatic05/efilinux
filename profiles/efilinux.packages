@@ -1,0 +1,3 @@
+# Complete EFI Linux userspace package closure before kernel/firmware are added.
+@include utils-maintenance.packages
+@include applications-desktop.packages
