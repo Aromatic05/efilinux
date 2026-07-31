@@ -6,7 +6,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command qemu-system-x86_64 timeout mksquashfs
+require_command qemu-system-x86_64 timeout mksquashfs mkfs.fat mcopy truncate
 ensure_directories
 
 qemu_cpu=${QEMU_CPU:-Nehalem}
@@ -15,61 +15,62 @@ ovmf_vars_template=${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}
 ovmf_vars="$EFILINUX_TEST/OVMF_VARS.zxmod.fd"
 boot_log="$EFILINUX_LOGS/qemu-zxmod-boot.log"
 efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
-module_disk="$EFILINUX_TEST/zxmod-modules"
+module_stage="$EFILINUX_TEST/zxmod-modules"
+module_disk="$EFILINUX_TEST/zxmod-modules.img"
 builder="$ROOT/005-utils/zxmod/files/usr/bin/zxmod-build"
+guest_checks="$ROOT/test/helpers/zxmod-guest-checks.sh"
 
 [[ -f $efi_binary ]] || die "EFI binary is missing: $efi_binary"
 [[ -f $ovmf_code ]] || die "OVMF code image is missing: $ovmf_code"
 [[ -f $ovmf_vars_template ]] || die "OVMF variables image is missing: $ovmf_vars_template"
 [[ -x $builder ]] || die "zxmod builder is missing: $builder"
+[[ -x $guest_checks ]] || die "zxmod guest checks are missing: $guest_checks"
 
-rm -rf -- "$module_disk"
-mkdir -p "$module_disk/sample/usr/bin" "$module_disk/sample/usr/share/zxmod-test" \
-    "$module_disk/conflict/usr/bin"
-printf '#!/bin/sh\nprintf zxmod-module-command\\n\n' > "$module_disk/sample/usr/bin/zxmod-module-command"
-chmod 0755 "$module_disk/sample/usr/bin/zxmod-module-command"
-printf 'held module payload\n' > "$module_disk/sample/usr/share/zxmod-test/held.txt"
-printf 'conflicting replacement\n' > "$module_disk/conflict/usr/bin/zxmod"
+rm -rf -- "$module_stage"
+rm -f -- "$module_disk"
+mkdir -p "$module_stage/sample/usr/bin" "$module_stage/sample/usr/share/zxmod-test" \
+    "$module_stage/conflict/usr/bin"
+cat > "$module_stage/sample/usr/bin/zxmod-module-command" <<'MODULE_COMMAND'
+#!/bin/sh
+printf '%s\n' zxmod-module-command
+MODULE_COMMAND
+chmod 0755 "$module_stage/sample/usr/bin/zxmod-module-command"
+printf 'held module payload\n' > "$module_stage/sample/usr/share/zxmod-test/held.txt"
+printf 'conflicting replacement\n' > "$module_stage/conflict/usr/bin/zxmod"
 "$builder" --id sample --version 1.0 --arch "$EFILINUX_ARCH" \
-    "$module_disk/sample" "$module_disk/sample.zxm"
+    "$module_stage/sample" "$module_stage/sample.zxm"
 "$builder" --id conflict --version 1.0 --arch "$EFILINUX_ARCH" \
-    "$module_disk/conflict" "$module_disk/conflict.zxm"
-rm -rf -- "$module_disk/sample" "$module_disk/conflict"
+    "$module_stage/conflict" "$module_stage/conflict.zxm"
+rm -rf -- "$module_stage/sample" "$module_stage/conflict"
+truncate -s 64M "$module_disk"
+mkfs.fat -F 32 -n ZXMODTEST "$module_disk" >/dev/null
+mcopy -i "$module_disk" \
+    "$module_stage/sample.zxm" \
+    "$module_stage/conflict.zxm" \
+    "$guest_checks" \
+    ::/
 cp -- "$ovmf_vars_template" "$ovmf_vars"
 
 log "Booting EFI Linux for zxmod integration checks"
 set +e
 {
     sleep 75
-    cat <<'GUEST_CHECKS'
-fail() { printf 'EFILINUX_ZXMOD_FAIL:%s\n' "$1"; }
-test "$(id -u)" = 0 || { fail not-root; poweroff -f; exit; }
-mount -t vfat -o ro /dev/vda /mnt || { fail module-disk-mount; poweroff -f; exit; }
-zxmod load /mnt/sample.zxm || fail module-load
-test -x /usr/bin/zxmod-module-command || fail module-command-missing
-test "$(/usr/bin/zxmod-module-command)" = zxmod-module-command || fail module-command-output
-zxmod list | grep -Eq '^sample[[:space:]]' || fail module-list-after-load
-touch /usr/share/zxmod-test/must-not-write 2>/dev/null && fail usr-view-writable
-exec 3</usr/share/zxmod-test/held.txt || fail held-fd-open
-zxmod load /mnt/conflict.zxm && fail conflicting-module-loaded
-zxmod unload sample || fail module-unload
-test ! -e /usr/bin/zxmod-module-command || fail module-path-remains-after-unload
-IFS= read -r held_payload <&3 || fail held-fd-read
-test "$held_payload" = 'held module payload' || fail held-fd-content
-exec 3<&-
-zxmod list | grep -Eq '^sample[[:space:]]' && fail module-list-remains-after-unload
-printf 'EFILINUX_ZXMOD_OK\n'
-poweroff -f
-GUEST_CHECKS
+    printf '%s\n' 'stty -ixon -ixoff 2>/dev/null || true'
+    sleep 1
+    printf '%s\n' 'modprobe virtio_blk || { echo EFILINUX_ZXMOD_FAIL:virtio-blk-module; poweroff -f; exit; }'
+    printf '%s\n' 'udevadm settle --timeout=10 2>/dev/null || true'
+    printf '%s\n' 'test -b /dev/vda || { echo EFILINUX_ZXMOD_FAIL:module-disk-device; cat /proc/partitions; poweroff -f; exit; }'
+    printf '%s\n' 'mkdir -p /mnt'
+    printf '%s\n' 'mount -t vfat -o rw /dev/vda /mnt || { echo EFILINUX_ZXMOD_FAIL:module-disk-mount; poweroff -f; exit; }'
+    printf '%s\n' 'exec /usr/bin/sh /mnt/zxmod-guest-checks.sh'
 } | timeout --signal=TERM 150s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \
     -m 2G \
     -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
     -drive if=pflash,format=raw,file="$ovmf_vars" \
-    -drive format=raw,readonly=on,file=fat:ro:"$EFILINUX_EFI_DIR" \
-    -drive if=none,id=zxmodtest,format=raw,readonly=on,file=fat:ro:"$module_disk" \
-    -device virtio-blk-pci,drive=zxmodtest \
+    -drive format=raw,file=fat:rw:"$EFILINUX_EFI_DIR" \
+    -drive if=virtio,format=raw,file="$module_disk" \
     -display none \
     -serial stdio \
     -monitor none \
@@ -98,5 +99,5 @@ if ! grep -Fxq 'EFILINUX_ZXMOD_OK' "$normalized_log"; then
     die "zxmod guest checks did not complete"
 fi
 
-log "zxmod load, conflict, read-only view, unload, and retained descriptor checks passed"
+log "zxmod load, conflict, read-only view, persistence, unload, and retained descriptor checks passed"
 printf 'Boot log: %s\n' "$boot_log"

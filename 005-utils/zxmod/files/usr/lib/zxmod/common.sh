@@ -36,7 +36,14 @@ zxmod_validate_arch() {
 }
 
 zxmod_source_identity() {
-    stat -c '%d:%i:%s:%Y' -- "$1"
+    zxmod_digest_output=$(LC_ALL=C openssl dgst -sha256 -r "$1") ||
+        zxmod_die "cannot hash module source: $1"
+    zxmod_digest=${zxmod_digest_output%% *}
+    [ ${#zxmod_digest} -eq 64 ] || zxmod_die "invalid module source digest: $1"
+    case $zxmod_digest in
+        *[!0-9a-f]*) zxmod_die "invalid module source digest: $1" ;;
+    esac
+    printf '%s\n' "$zxmod_digest"
 }
 
 zxmod_manifest_count() {
@@ -53,7 +60,11 @@ zxmod_require_module_file() {
         *) zxmod_die "module filename must end in .zxm: $1" ;;
     esac
     [ -f "$1" ] && [ ! -L "$1" ] || zxmod_die "module file is not a regular file: $1"
-    readlink -f -- "$1"
+    zxmod_module_path=$1
+    case $zxmod_module_path in
+        -*) zxmod_module_path=./$zxmod_module_path ;;
+    esac
+    realpath "$zxmod_module_path" || zxmod_die "cannot resolve module path: $1"
 }
 
 zxmod_read_manifest() {
@@ -133,16 +144,36 @@ zxmod_bind_base() {
     fi
 }
 
+zxmod_ensure_target_mount() {
+    zxmod_target=$1
+    zxmod_anchor=$2
+    mountpoint -q "$zxmod_target" && return
+    mount --bind "$zxmod_anchor" "$zxmod_target" ||
+        zxmod_die "cannot establish module target mount: $zxmod_target"
+    mount -o remount,bind,ro,nodev,nosuid "$zxmod_target" || {
+        umount "$zxmod_target" 2>/dev/null || :
+        zxmod_die "cannot protect module target mount: $zxmod_target"
+    }
+}
+
 zxmod_prepare_runtime() {
-    mkdir -p "$ZXMOD_RUN_ROOT/modules" "$ZXMOD_RUN_ROOT/generations" \
-        "$ZXMOD_RUN_ROOT/retired" "$ZXMOD_RUN_ROOT/base"
+    mkdir -p "$ZXMOD_RUN_ROOT/modules" "$ZXMOD_RUN_ROOT/loops" \
+        "$ZXMOD_RUN_ROOT/generations" "$ZXMOD_RUN_ROOT/base"
     [ -e "$ZXMOD_RUN_ROOT/active" ] || : > "$ZXMOD_RUN_ROOT/active"
     if [ ! -e /dev/loop-control ]; then
-        command -v modprobe >/dev/null 2>&1 && modprobe loop >/dev/null 2>&1 || :
+        [ -x /usr/bin/modprobe ] || zxmod_die 'modprobe is unavailable'
+        /usr/bin/modprobe loop || zxmod_die 'cannot load the loop kernel module'
+        zxmod_loop_wait=0
+        while [ ! -e /dev/loop-control ] && [ "$zxmod_loop_wait" -lt 5 ]; do
+            sleep 1
+            zxmod_loop_wait=$((zxmod_loop_wait + 1))
+        done
     fi
     [ -e /dev/loop-control ] || zxmod_die 'loop devices are unavailable'
     zxmod_bind_base "$ZXMOD_USR_TARGET" "$ZXMOD_RUN_ROOT/base/usr"
     zxmod_bind_base "$ZXMOD_OPT_TARGET" "$ZXMOD_RUN_ROOT/base/opt"
+    zxmod_ensure_target_mount "$ZXMOD_USR_TARGET" "$ZXMOD_RUN_ROOT/base/usr"
+    zxmod_ensure_target_mount "$ZXMOD_OPT_TARGET" "$ZXMOD_RUN_ROOT/base/opt"
 }
 
 zxmod_normalize_link() {
@@ -184,7 +215,10 @@ zxmod_active_has_id() {
 
 zxmod_validate_payload_tree() {
     zxmod_root=$1
-    for zxmod_top in "$zxmod_root"/*; do
+    for zxmod_top in \
+        "$zxmod_root"/* \
+        "$zxmod_root"/.[!.]* \
+        "$zxmod_root"/..?*; do
         zxmod_path_exists "$zxmod_top" || continue
         case $(basename -- "$zxmod_top") in
             metadata|root) ;;
@@ -193,7 +227,10 @@ zxmod_validate_payload_tree() {
     done
     [ -d "$zxmod_root/root" ] && [ ! -L "$zxmod_root/root" ] ||
         zxmod_die 'module payload root is missing or invalid'
-    for zxmod_top in "$zxmod_root/root"/*; do
+    for zxmod_top in \
+        "$zxmod_root/root"/* \
+        "$zxmod_root/root"/.[!.]* \
+        "$zxmod_root/root"/..?*; do
         zxmod_path_exists "$zxmod_top" || continue
         case $(basename -- "$zxmod_top") in
             usr|opt)
@@ -258,13 +295,31 @@ zxmod_validate_one_path() {
     done < "$zxmod_active_file"
 }
 
+zxmod_validate_path_tree() (
+    zxmod_walk_directory=$1
+    zxmod_walk_root=$2
+    zxmod_walk_active_file=$3
+
+    for zxmod_walk_path in \
+        "$zxmod_walk_directory"/* \
+        "$zxmod_walk_directory"/.[!.]* \
+        "$zxmod_walk_directory"/..?*; do
+        zxmod_path_exists "$zxmod_walk_path" || continue
+        zxmod_validate_one_path \
+            "$zxmod_walk_path" \
+            "$zxmod_walk_root" \
+            "$zxmod_walk_active_file"
+        if [ -d "$zxmod_walk_path" ] && [ ! -L "$zxmod_walk_path" ]; then
+            zxmod_validate_path_tree \
+                "$zxmod_walk_path" \
+                "$zxmod_walk_root" \
+                "$zxmod_walk_active_file"
+        fi
+    done
+)
+
 zxmod_validate_paths() {
-    zxmod_root=$1
-    zxmod_active_file=$2
-    find "$zxmod_root/root" -mindepth 1 -print0 |
-        while IFS= read -r -d '' zxmod_path; do
-            zxmod_validate_one_path "$zxmod_path" "$zxmod_root" "$zxmod_active_file"
-        done
+    zxmod_validate_path_tree "$1/root" "$1" "$2"
 }
 
 zxmod_next_generation() {
@@ -287,61 +342,187 @@ zxmod_generation_lowerdir() {
         [ "$(zxmod_source_identity "$zxmod_active_source")" = "$zxmod_active_identity" ] ||
             zxmod_die "active module source changed: $zxmod_active_id"
         zxmod_module_tree="$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_subtree"
-        [ -d "$zxmod_module_tree" ] && zxmod_lower="$zxmod_module_tree:$zxmod_lower"
+        if [ -d "$zxmod_module_tree" ]; then
+            zxmod_lower="$zxmod_module_tree:$zxmod_lower"
+        fi
     done < "$zxmod_active_file"
+    return 0
+}
+
+zxmod_mount_generation_tree() {
+    zxmod_generation_lower=$1
+    zxmod_generation_target=$2
+    case $zxmod_generation_lower in
+        *:*)
+            mount -t overlay overlay -o "ro,lowerdir=$zxmod_generation_lower" \
+                "$zxmod_generation_target"
+            ;;
+        *)
+            mount --bind "$zxmod_generation_lower" "$zxmod_generation_target" || return
+            mount -o remount,bind,ro,nodev,nosuid "$zxmod_generation_target" || {
+                umount "$zxmod_generation_target" 2>/dev/null || :
+                return 1
+            }
+            ;;
+    esac
 }
 
 zxmod_remove_failed_generation() {
     zxmod_failed_root=$1
-    umount "$zxmod_failed_root/opt" 2>/dev/null || :
-    umount "$zxmod_failed_root/usr" 2>/dev/null || :
+    umount -l "$zxmod_failed_root/opt" 2>/dev/null || :
+    umount -l "$zxmod_failed_root/usr" 2>/dev/null || :
     rm -rf -- "$zxmod_failed_root"
+}
+
+zxmod_remove_generation_directory() {
+    zxmod_old_generation=$1
+    case $zxmod_old_generation in ''|0|*[!0-9]*) return 0 ;; esac
+    zxmod_old_root="$ZXMOD_RUN_ROOT/generations/$zxmod_old_generation"
+    [ -d "$zxmod_old_root" ] || return 0
+    rmdir "$zxmod_old_root/opt" "$zxmod_old_root/usr" 2>/dev/null || :
+    rmdir "$zxmod_old_root" 2>/dev/null || :
+}
+
+zxmod_move_generation_target() {
+    zxmod_staged_target=$1
+    zxmod_live_target=$2
+    zxmod_retired_target=$3
+
+    mount --move "$zxmod_live_target" "$zxmod_retired_target" || return 1
+    if mount --move "$zxmod_staged_target" "$zxmod_live_target"; then
+        return 0
+    fi
+
+    mount --move "$zxmod_retired_target" "$zxmod_live_target" ||
+        zxmod_die "cannot restore module target after failed switch: $zxmod_live_target"
+    return 1
+}
+
+zxmod_restore_generation_target() {
+    zxmod_staged_target=$1
+    zxmod_live_target=$2
+    zxmod_retired_target=$3
+
+    mount --move "$zxmod_live_target" "$zxmod_staged_target" ||
+        zxmod_die "cannot return failed module generation to staging: $zxmod_live_target"
+    mount --move "$zxmod_retired_target" "$zxmod_live_target" ||
+        zxmod_die "cannot restore previous module generation: $zxmod_live_target"
+}
+
+zxmod_discard_retired_generation() {
+    zxmod_retired_root=$1
+    umount -l "$zxmod_retired_root/opt" ||
+        zxmod_die 'cannot detach previous /opt module generation'
+    umount -l "$zxmod_retired_root/usr" ||
+        zxmod_die 'cannot detach previous /usr module generation'
+    rmdir "$zxmod_retired_root/opt" "$zxmod_retired_root/usr"
+    rmdir "$zxmod_retired_root"
 }
 
 zxmod_switch_generation() {
     zxmod_candidate=$1
+    zxmod_old_generation=0
+    if [ -f "$ZXMOD_RUN_ROOT/current-generation" ]; then
+        IFS= read -r zxmod_old_generation < "$ZXMOD_RUN_ROOT/current-generation"
+        case $zxmod_old_generation in ''|*[!0-9]*)
+            zxmod_die 'current module generation is invalid'
+            ;;
+        esac
+    fi
+
     zxmod_next_generation
     zxmod_generation_root="$ZXMOD_RUN_ROOT/generations/$zxmod_generation"
-    mkdir -p "$zxmod_generation_root/usr" "$zxmod_generation_root/opt"
+    zxmod_retired_root="$ZXMOD_RUN_ROOT/retired/$zxmod_generation"
+    mkdir -p \
+        "$zxmod_generation_root/usr" \
+        "$zxmod_generation_root/opt" \
+        "$zxmod_retired_root/usr" \
+        "$zxmod_retired_root/opt"
 
     zxmod_generation_lowerdir "$zxmod_candidate" usr
     zxmod_usr_lower=$zxmod_lower
     zxmod_generation_lowerdir "$zxmod_candidate" opt
     zxmod_opt_lower=$zxmod_lower
 
-    mount -t overlay overlay -o "ro,lowerdir=$zxmod_usr_lower" "$zxmod_generation_root/usr" || {
+    zxmod_mount_generation_tree "$zxmod_usr_lower" "$zxmod_generation_root/usr" || {
         zxmod_remove_failed_generation "$zxmod_generation_root"
+        rm -rf -- "$zxmod_retired_root"
         zxmod_die 'cannot construct /usr module generation'
     }
-    mount -t overlay overlay -o "ro,lowerdir=$zxmod_opt_lower" "$zxmod_generation_root/opt" || {
+    zxmod_mount_generation_tree "$zxmod_opt_lower" "$zxmod_generation_root/opt" || {
         zxmod_remove_failed_generation "$zxmod_generation_root"
+        rm -rf -- "$zxmod_retired_root"
         zxmod_die 'cannot construct /opt module generation'
     }
 
-    mount --bind "$zxmod_generation_root/usr" "$ZXMOD_USR_TARGET" || {
+    zxmod_generation_next="$ZXMOD_RUN_ROOT/current-generation.next.$$"
+    zxmod_active_backup="$ZXMOD_RUN_ROOT/active.rollback.$$"
+    zxmod_track_temp "$zxmod_generation_next"
+    zxmod_track_temp "$zxmod_active_backup"
+    printf '%s\n' "$zxmod_generation" > "$zxmod_generation_next" || {
         zxmod_remove_failed_generation "$zxmod_generation_root"
-        zxmod_die 'cannot switch /usr module generation'
+        rm -rf -- "$zxmod_retired_root"
+        zxmod_die 'cannot record module generation'
     }
-    if ! mount --bind "$zxmod_generation_root/opt" "$ZXMOD_OPT_TARGET"; then
-        umount "$ZXMOD_USR_TARGET" 2>/dev/null || :
+    cp -- "$ZXMOD_RUN_ROOT/active" "$zxmod_active_backup" || {
         zxmod_remove_failed_generation "$zxmod_generation_root"
+        rm -rf -- "$zxmod_retired_root"
+        zxmod_die 'cannot preserve active module state'
+    }
+
+    if ! zxmod_move_generation_target \
+        "$zxmod_generation_root/usr" \
+        "$ZXMOD_USR_TARGET" \
+        "$zxmod_retired_root/usr"; then
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        rm -rf -- "$zxmod_retired_root"
+        zxmod_die 'cannot switch /usr module generation'
+    fi
+    if ! zxmod_move_generation_target \
+        "$zxmod_generation_root/opt" \
+        "$ZXMOD_OPT_TARGET" \
+        "$zxmod_retired_root/opt"; then
+        zxmod_restore_generation_target \
+            "$zxmod_generation_root/usr" \
+            "$ZXMOD_USR_TARGET" \
+            "$zxmod_retired_root/usr"
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        rm -rf -- "$zxmod_retired_root"
         zxmod_die 'cannot switch /opt module generation'
     fi
 
-    printf '%s\n' "$zxmod_generation" > "$ZXMOD_RUN_ROOT/current-generation.next" || {
-        umount "$ZXMOD_OPT_TARGET" 2>/dev/null || :
-        umount "$ZXMOD_USR_TARGET" 2>/dev/null || :
-        zxmod_remove_failed_generation "$zxmod_generation_root"
-        zxmod_die 'cannot record module generation'
-    }
     if ! mv -- "$zxmod_candidate" "$ZXMOD_RUN_ROOT/active"; then
-        rm -f -- "$ZXMOD_RUN_ROOT/current-generation.next"
-        umount "$ZXMOD_OPT_TARGET" 2>/dev/null || :
-        umount "$ZXMOD_USR_TARGET" 2>/dev/null || :
+        zxmod_restore_generation_target \
+            "$zxmod_generation_root/opt" \
+            "$ZXMOD_OPT_TARGET" \
+            "$zxmod_retired_root/opt"
+        zxmod_restore_generation_target \
+            "$zxmod_generation_root/usr" \
+            "$ZXMOD_USR_TARGET" \
+            "$zxmod_retired_root/usr"
         zxmod_remove_failed_generation "$zxmod_generation_root"
+        rm -rf -- "$zxmod_retired_root"
         zxmod_die 'cannot commit active module state'
     fi
-    mv -- "$ZXMOD_RUN_ROOT/current-generation.next" "$ZXMOD_RUN_ROOT/current-generation"
+    if ! mv -- "$zxmod_generation_next" "$ZXMOD_RUN_ROOT/current-generation"; then
+        mv -- "$zxmod_active_backup" "$ZXMOD_RUN_ROOT/active" ||
+            zxmod_die 'cannot restore active module state after failed generation commit'
+        zxmod_restore_generation_target \
+            "$zxmod_generation_root/opt" \
+            "$ZXMOD_OPT_TARGET" \
+            "$zxmod_retired_root/opt"
+        zxmod_restore_generation_target \
+            "$zxmod_generation_root/usr" \
+            "$ZXMOD_USR_TARGET" \
+            "$zxmod_retired_root/usr"
+        zxmod_remove_failed_generation "$zxmod_generation_root"
+        rm -rf -- "$zxmod_retired_root"
+        zxmod_die 'cannot commit module generation number'
+    fi
+
+    rm -f -- "$zxmod_active_backup"
+    zxmod_discard_retired_generation "$zxmod_retired_root"
+    zxmod_remove_generation_directory "$zxmod_old_generation"
 }
 
 zxmod_persist_root() {

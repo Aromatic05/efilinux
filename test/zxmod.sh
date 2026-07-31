@@ -6,8 +6,18 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 builder="$ROOT/005-utils/zxmod/files/usr/bin/zxmod-build"
 command="$ROOT/005-utils/zxmod/files/usr/bin/zxmod"
 library="$ROOT/005-utils/zxmod/files/usr/lib/zxmod/common.sh"
+init_script="$ROOT/005-utils/zxmod/files/etc/rc.d/init.d/zxmod"
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
+
+[[ -x "$init_script" ]] || {
+    printf 'zxmod SysVinit integration is missing\n' >&2
+    exit 1
+}
+if ! grep -Fq '/usr/bin/zxmod startup' "$init_script"; then
+    printf 'zxmod SysVinit integration does not restore enabled modules\n' >&2
+    exit 1
+fi
 
 require_command() {
     command -v "$1" >/dev/null || {
@@ -37,10 +47,66 @@ grep -Fxq 'version=1.0' <<<"$inspection"
 unsquashfs -s "$work/sample.zxm" | grep -Eq '^Compression[[:space:]]+zstd$'
 unsquashfs -cat "$work/sample.zxm" metadata/manifest | grep -Fxq 'format=1'
 
+mkdir -p "$work/valid-hidden/usr/share"
+printf 'hidden payload\n' > "$work/valid-hidden/usr/share/.zxmod-hidden"
+"$builder" --id valid-hidden --version 1.0 --arch "$(uname -m)" \
+    "$work/valid-hidden" "$work/valid-hidden.zxm"
+unsquashfs -cat "$work/valid-hidden.zxm" root/usr/share/.zxmod-hidden | \
+    grep -Fxq 'hidden payload'
+
+assert_builder_rejects() {
+    local name=$1 root=$2
+    local output="$work/$name.zxm"
+    if "$builder" --id "$name" --version 1.0 --arch "$(uname -m)" \
+        "$root" "$output" >/dev/null 2>&1; then
+        printf 'zxmod builder accepted invalid tree: %s\n' "$name" >&2
+        exit 1
+    fi
+    [[ ! -e $output ]] || {
+        printf 'zxmod builder left output for invalid tree: %s\n' "$name" >&2
+        exit 1
+    }
+}
+
+mkdir -p "$work/hidden-top/usr"
+printf 'unexpected\n' > "$work/hidden-top/.unexpected"
+assert_builder_rejects hidden-top "$work/hidden-top"
+
+mkdir -p "$work/special-file/usr"
+mkfifo "$work/special-file/usr/fifo"
+assert_builder_rejects special-file "$work/special-file"
+
+mkdir -p "$work/newline-path/usr/bin"
+printf 'bad\n' > "$work/newline-path/usr/bin/bad"$'\n'"name"
+assert_builder_rejects newline-path "$work/newline-path"
+
 if ! unshare --user --map-root-user --mount --fork true 2>/dev/null; then
     printf 'zxmod runtime test skipped: user and mount namespaces are unavailable\n' >&2
     exit 0
 fi
+
+mkdir -p \
+    "$work/move/base" \
+    "$work/move/new" \
+    "$work/move/live" \
+    "$work/move/stage" \
+    "$work/move/retired"
+printf 'base view\n' > "$work/move/base/value"
+printf 'new view\n' > "$work/move/new/value"
+unshare --user --map-root-user --mount --fork bash -ceu '
+    library=$1
+    root=$2
+    mount --make-rprivate /
+    mount --bind "$root/base" "$root/live"
+    mount --bind "$root/new" "$root/stage"
+    . "$library"
+    zxmod_move_generation_target "$root/stage" "$root/live" "$root/retired"
+    test "$(cat "$root/live/value")" = "new view"
+    test "$(cat "$root/retired/value")" = "base view"
+    zxmod_restore_generation_target "$root/stage" "$root/live" "$root/retired"
+    test "$(cat "$root/live/value")" = "base view"
+    test "$(cat "$root/stage/value")" = "new view"
+' bash "$library" "$work/move"
 
 set +e
 runtime_output=$(unshare --user --map-root-user --mount --fork bash -ceu '

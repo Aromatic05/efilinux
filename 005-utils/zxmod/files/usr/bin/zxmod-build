@@ -52,17 +52,42 @@ case $output in
     *) printf 'zxmod-build: output must end in .zxm\n' >&2; exit 1 ;;
 esac
 
-for entry in "$root"/*; do
+for entry in \
+    "$root"/* \
+    "$root"/.[!.]* \
+    "$root"/..?*; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
     case $(basename -- "$entry") in
         usr|opt) [ -d "$entry" ] && [ ! -L "$entry" ] || exit 1 ;;
         *) printf 'zxmod-build: ROOT may only contain usr and opt\n' >&2; exit 1 ;;
     esac
 done
-if find "$root" -mindepth 1 ! -type d ! -type f ! -type l -print -quit | grep -q .; then
-    printf 'zxmod-build: special files are not supported\n' >&2
-    exit 1
-fi
+
+zxmod_build_validate_tree() (
+    zxmod_build_directory=$1
+    for zxmod_build_path in \
+        "$zxmod_build_directory"/* \
+        "$zxmod_build_directory"/.[!.]* \
+        "$zxmod_build_directory"/..?*; do
+        [ -e "$zxmod_build_path" ] || [ -L "$zxmod_build_path" ] || continue
+        case $zxmod_build_path in
+            *"$newline"*)
+                printf 'zxmod-build: path contains a newline\n' >&2
+                exit 1
+                ;;
+        esac
+        if [ -d "$zxmod_build_path" ] && [ ! -L "$zxmod_build_path" ]; then
+            zxmod_build_validate_tree "$zxmod_build_path"
+        elif [ -f "$zxmod_build_path" ] || [ -L "$zxmod_build_path" ]; then
+            :
+        else
+            printf 'zxmod-build: special files are not supported\n' >&2
+            exit 1
+        fi
+    done
+)
+
+zxmod_build_validate_tree "$root"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' 0 1 2 15
