@@ -11,5 +11,14 @@ strace
 lsof
 dmidecode
 pciutils
+libusb
+usbutils
+lm-sensors
+efivar
+efibootmgr
+gptfdisk
+smartmontools
+nvme-cli
+hdparm
 ddrescue
 parted

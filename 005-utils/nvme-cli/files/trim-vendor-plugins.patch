@@ -1,0 +1,41 @@
+--- a/plugins/meson.build
++++ b/plugins/meson.build
+@@ -2,0 +3,2 @@
++# EFI Linux keeps standards-oriented plugins in the base maintenance image.
++# Vendor-specific diagnostics belong in optional recovery modules.
+@@ -4,4 +5,0 @@
+-  'plugins/amzn/amzn-nvme.c',
+-  'plugins/dapustor/dapustor-nvme.c',
+-  'plugins/dell/dell-nvme.c',
+-  'plugins/dera/dera-nvme.c',
+@@ -9,8 +6,0 @@
+-  'plugins/huawei/huawei-nvme.c',
+-  'plugins/ibm/ibm-nvme.c',
+-  'plugins/innogrit/innogrit-nvme.c',
+-  'plugins/inspur/inspur-nvme.c',
+-  'plugins/intel/intel-nvme.c',
+-  'plugins/mangoboost/mangoboost-nvme.c',
+-  'plugins/memblaze/memblaze-nvme.c',
+-  'plugins/micron/micron-nvme.c',
+@@ -18,14 +7,0 @@
+-  'plugins/netapp/netapp-nvme.c',
+-  'plugins/nvidia/nvidia-nvme.c',
+-  'plugins/sandisk/sandisk-nvme.c',
+-  'plugins/sandisk/sandisk-utils.c',
+-  'plugins/scaleflux/sfx-nvme.c',
+-  'plugins/seagate/seagate-nvme.c',
+-  'plugins/shannon/shannon-nvme.c',
+-  'plugins/ssstc/ssstc-nvme.c',
+-  'plugins/toshiba/toshiba-nvme.c',
+-  'plugins/transcend/transcend-nvme.c',
+-  'plugins/virtium/virtium-nvme.c',
+-  'plugins/wdc/wdc-nvme.c',
+-  'plugins/wdc/wdc-utils.c',
+-  'plugins/ymtc/ymtc-nvme.c',
+@@ -36 +11,0 @@
+-subdir('lm')
+@@ -41,4 +15,0 @@
+-endif
+-
+-if json_c_dep.found()
+-  subdir('solidigm')
