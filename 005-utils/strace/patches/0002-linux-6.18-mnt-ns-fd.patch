@@ -1,0 +1,34 @@
+diff --git a/src/listmount.c b/src/listmount.c
+index 66b2543..0c12fdc 100644
+--- a/src/listmount.c
++++ b/src/listmount.c
+@@ -36,10 +36,8 @@ print_mnt_id_req(struct tcb *const tcp, const kernel_ulong_t addr)
+ 		return;
+ 	}
+ 
+-	if (req.spare) {
+-		tprint_struct_next();
+-		PRINT_FIELD_X(req, spare);
+-	}
++	tprint_struct_next();
++	PRINT_FIELD_FD(req, mnt_ns_fd, tcp);
+ 
+ 	tprint_struct_next();
+ 	PRINT_FIELD_XVAL(req, mnt_id, listmount_mnt_id, NULL);
+diff --git a/src/statmount.c b/src/statmount.c
+index f93603e..68ea9f1 100644
+--- a/src/statmount.c
++++ b/src/statmount.c
+@@ -94,10 +94,8 @@ print_mnt_id_req(struct tcb *const tcp, const kernel_ulong_t addr)
+ 		return;
+ 	}
+ 
+-	if (req.spare) {
+-		tprint_struct_next();
+-		PRINT_FIELD_X(req, spare);
+-	}
++	tprint_struct_next();
++	PRINT_FIELD_FD(req, mnt_ns_fd, tcp);
+ 
+ 	tprint_struct_next();
+ 	PRINT_FIELD_X(req, mnt_id);

@@ -1,0 +1,13 @@
+diff --git a/src/ioctl.c b/src/ioctl.c
+index 32ca96b..8a98323 100644
+--- a/src/ioctl.c
++++ b/src/ioctl.c
+@@ -47,7 +47,7 @@ compare(const void *a, const void *b)
+ static const struct_ioctlent *
+ ioctl_lookup(const unsigned int code)
+ {
+-	struct_ioctlent *iop;
++	const struct_ioctlent *iop;
+ 
+ 	iop = bsearch((const void *) (const uintptr_t) code, ioctlent,
+ 			nioctlents, sizeof(ioctlent[0]), compare);
