@@ -9,8 +9,8 @@ source "$ROOT/lib/common.sh"
 
 require_command python3 readelf sha256sum unsquashfs
 
-artifact="$MODULE_DIR/output/001-recovery.zxm"
-work="$MODULE_DIR/test/artifact"
+artifact="$MODULE_DIR/build/output/001-recovery.zxm"
+work="$MODULE_DIR/build/test/artifact"
 image="$work/image"
 module_root="$image/root"
 loader="$EFILINUX_ROOTFS/usr/lib/ld-linux-x86-64.so.2"
@@ -28,16 +28,19 @@ grep -Fxq 'version=1' "$image/metadata/manifest"
 cat > "$work/expected-packages" <<'PACKAGES'
 bzip2	1.0.8
 chntpw	140201
+cifs-utils	7.7
 dislocker	0.7.3
 foremost	1.5.7
 fsarchiver	0.8.9
 fuse2	2.9.9
+krb5	1.22.2
 libldm	0.2.5
 lz4	1.10.0
 mbedtls2	2.28.10
 partclone	0.3.47
 sleuthkit	4.15.0
 sshfs	3.7.6
+talloc	2.4.4
 testdisk	7.2
 wimlib	1.14.5
 PACKAGES
@@ -50,7 +53,9 @@ cmp -s "$work/expected-packages" "$work/actual-packages" ||
 for command in \
     testdisk photorec fsarchiver partclone.info foremost fls tsk_recover \
     wimlib-imagex ldmtool dislocker dislocker-fuse sshfs mount.sshfs \
-    chntpw reged samusrgrp sampasswd samunlock; do
+    chntpw reged samusrgrp sampasswd samunlock \
+    mount.cifs mount.smb3 cifs.upcall cifscreds getcifsacl setcifsacl smbinfo \
+    kinit klist; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
 done
@@ -88,6 +93,10 @@ run_target "$module_root/usr/bin/sshfs" --version 2>&1 |
     grep -Fq 'SSHFS version 3.7.6'
 chntpw_output=$(run_target "$module_root/usr/bin/chntpw" 2>&1 || true)
 grep -Fq 'chntpw version 1.00 140201' <<<"$chntpw_output"
+run_target "$module_root/usr/bin/cifs.upcall" --version 2>&1 |
+    grep -Fxq 'version: 7.7'
+run_target "$module_root/usr/bin/klist" -V 2>&1 |
+    grep -Fxq 'Kerberos 5 version 1.22.2'
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path

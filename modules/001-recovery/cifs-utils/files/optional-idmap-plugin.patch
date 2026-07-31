@@ -1,0 +1,67 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -293,7 +293,7 @@
+ AM_CONDITIONAL(CONFIG_SMBINFO, [test "$enable_smbinfo" != "no"])
+ AM_CONDITIONAL(CONFIG_PYTHON_TOOLS, [test "$enable_pythontools" != "no"])
+ AM_CONDITIONAL(CONFIG_PAM, [test "$enable_pam" != "no"])
+-AM_CONDITIONAL(CONFIG_PLUGIN, [test "$enable_cifsidmap" != "no" -o "$enable_cifsacl" != "no"])
++AM_CONDITIONAL(CONFIG_PLUGIN, [test "$enable_cifsidmap" != "no"])
+ 
+ LIBCAP_NG_PATH
+ 
+--- a/aclocal/idmap.m4
++++ b/aclocal/idmap.m4
+@@ -2,7 +2,7 @@
+ dnl
+ 
+ AC_DEFUN([AC_TEST_WBCHL],[
+-if test $enable_cifsidmap != "no" -o $enable_cifsacl != "no"; then
++if test $enable_cifsidmap != "no"; then
+ 	PKG_CHECK_MODULES(WBCLIENT, wbclient, , [
+ 				if test "$enable_cifsidmap" = "yes"; then
+ 					AC_MSG_ERROR([wbclient.h not found, consider installing libwbclient-devel.])
+@@ -10,16 +10,10 @@
+ 					AC_MSG_WARN([wbclient.h not found, consider installing libwbclient-devel. Disabling cifs.idmap.])
+ 					enable_cifsidmap="no"
+ 				fi
+-				if test "$enable_cifsacl" = "yes"; then
+-					AC_MSG_ERROR([wbclient.h not found, consider installing libwbclient-devel.])
+-				else
+-					AC_MSG_WARN([wbclient.h not found, consider installing libwbclient-devel. Disabling cifsacl.])
+-					enable_cifsacl="no"
+-				fi
+ 			])
+ fi
+ 
+-if test $enable_cifsidmap != "no" -o $enable_cifsacl != "no"; then
++if test $enable_cifsidmap != "no"; then
+ 	ac_wbc_save_LDFLAGS="$LDFLAGS"
+ 	ac_wbc_save_LIBS="$LIBS"
+ 	LDFLAGS="$LDFLAGS $WBCLIENT_LIBS"
+@@ -30,12 +24,6 @@
+ 					AC_MSG_WARN([wbclient library lacks wbcSidsToUnixIds(). Disabling cifs.idmap.])
+ 					enable_cifsidmap="no"
+ 				fi
+-				if test "$enable_cifsacl" = "yes"; then
+-					AC_MSG_ERROR([wbclient library lacks wbcSidsToUnixIds.])
+-				else
+-					AC_MSG_WARN([wbclient library lacks wbcSidsToUnixIds(). Disabling cifsacl tools.])
+-					enable_cifsacl="no"
+-				fi
+ 			])
+ 	LDFLAGS=$ac_wbc_save_LDFLAGS
+ 	LIBS=$ac_wbc_save_LIBS
+@@ -54,6 +42,7 @@
+ ])
+ 
+ AC_DEFUN([AC_TEST_WBC_IDMAP_BOTH],[
++if test $enable_cifsidmap != "no"; then
+ 	AC_MSG_CHECKING([whether WBC_ID_TYPE_BOTH enum value is defined])
+ 	AC_LANG_PUSH([C])
+ 	ac_wbc_save_CFLAGS="$CFLAGS"
+@@ -65,4 +54,5 @@
+ 			  AC_MSG_RESULT([yes]), AC_MSG_RESULT([no]))
+ 	CFLAGS=$ac_wbc_save_CFLAGS
+ 	AC_LANG_POP([C])
++fi
+ ])

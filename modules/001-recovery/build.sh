@@ -24,6 +24,9 @@ module_components=(
     dislocker
     sshfs
     chntpw
+    talloc
+    krb5
+    cifs-utils
 )
 
 module_main "$@"

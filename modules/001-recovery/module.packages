@@ -8,3 +8,4 @@ libldm
 dislocker
 sshfs
 chntpw
+cifs-utils
