@@ -51,7 +51,7 @@ build() {
             --with-writecache=none \
             --with-default-dm-run-dir=/run
     make -j"$EFILINUX_JOBS" device-mapper
-    make DESTDIR="$develdir" install_device-mapper
+    make -j1 DESTDIR="$develdir" install_device-mapper
 }
 
 devel() {
