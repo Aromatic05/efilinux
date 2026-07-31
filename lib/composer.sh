@@ -173,6 +173,40 @@ compose_run_target() {
         "$loader" --library-path "$rootfs/usr/lib" "$@"
 }
 
+compose_package_is_installed() {
+    local package=$1
+    local owners=$2
+
+    awk -F '\t' -v package="$package" \
+        'NR > 1 && $3 == package { found = 1; exit }
+         END { exit !found }' "$owners"
+}
+
+compose_remove_generated_paths() {
+    local rootfs=$1
+    local owners=$2
+    local filtered="$owners.filtered.$$"
+    local depth install_path target
+
+    while IFS=$'\t' read -r depth install_path; do
+        [[ -n "$install_path" ]] || continue
+        target="$rootfs$install_path"
+        if [[ -d "$target" && ! -L "$target" ]]; then
+            rmdir -- "$target" 2>/dev/null || true
+        else
+            rm -f -- "$target"
+        fi
+    done < <(
+        awk -F '\t' 'NR > 1 && $3 == "@composer" {
+            depth = gsub(/\//, "/", $1)
+            print depth "\t" $1
+        }' "$owners" | LC_ALL=C sort -t $'\t' -k1,1nr -k2,2r
+    )
+
+    awk -F '\t' 'NR == 1 || $3 != "@composer"' "$owners" > "$filtered"
+    mv -- "$filtered" "$owners"
+}
+
 compose_write_ownership() {
     local rootfs=$1
     local owners=$2
@@ -381,7 +415,7 @@ compose_profile() {
 
 compose_extend_profile() {
     local profile=$1
-    local work rootfs owners sorted_owners package archive subset list temporary_owners
+    local work rootfs owners sorted_owners package archive subset list
 
     [[ -d "$EFILINUX_ROOTFS" ]] || die "rootfs has not been composed"
     [[ -f "$EFILINUX_ROOTFS_OWNERS" ]] || die "rootfs ownership manifest is missing"
@@ -397,17 +431,15 @@ compose_extend_profile() {
     rootfs="$work/rootfs"
     owners="$work/owners.tsv"
     sorted_owners="$work/owners.sorted.tsv"
-    temporary_owners="$work/owners.filtered.tsv"
     reset_directory "$work"
     package_clone_tree "$EFILINUX_ROOTFS" "$rootfs"
     cp "$EFILINUX_ROOTFS_OWNERS" "$owners"
-    awk -F '\t' \
-        'NR == 1 || $1 != "/etc/filemeta/ownership.tsv"' \
-        "$owners" > "$temporary_owners"
-    mv "$temporary_owners" "$owners"
-    rm -f "$rootfs/etc/filemeta/ownership.tsv"
+    compose_remove_generated_paths "$rootfs" "$owners"
 
     for package in "${COMPOSE_ORDER[@]}"; do
+        if compose_package_is_installed "$package" "$owners"; then
+            continue
+        fi
         archive=${COMPOSE_ARCHIVES[$package]}
         subset="$work/packages/$package"
         list="$work/$package.install"
@@ -418,7 +450,7 @@ compose_extend_profile() {
         compose_merge_subset "$subset" "$rootfs"
     done
 
-    compose_write_ownership "$rootfs" "$owners"
+    compose_finalize_rootfs "$rootfs" "$owners"
     {
         printf 'path\ttype\towner\n'
         tail -n +2 "$owners" | LC_ALL=C sort -t $'\t' -k1,1 -k3,3

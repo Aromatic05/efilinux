@@ -166,3 +166,19 @@ for path in \
     /usr/lib/libparted-fs-resize.so.0; do
     grep -Fxq "$path" "$parted_install" || die "parted runtime subset is missing $path"
 done
+
+for command in \
+    mousepad \
+    ristretto \
+    pavucontrol \
+    xfce4-taskmanager \
+    xfce4-screenshooter \
+    xarchiver \
+    galculator; do
+    [[ -x "$EFILINUX_ROOTFS/usr/bin/$command" ]] || \
+        die "default desktop application is missing from rootfs: $command"
+done
+if [[ -e "$EFILINUX_ROOTFS/usr/bin/gparted" || \
+      -e "$EFILINUX_ROOTFS/usr/sbin/gparted" ]]; then
+    die "GParted leaked into the ordinary desktop rootfs"
+fi

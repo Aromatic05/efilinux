@@ -8,7 +8,7 @@ source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
 source "$ROOT/lib/composer.sh"
 
-profile="$ROOT/profiles/utils-zxmod.packages"
+profile="$ROOT/profiles/applications-desktop.packages"
 
 if [[ ${1:-} == --internal-extend ]]; then
     [[ $# == 1 ]] || die "unexpected internal composer arguments"
