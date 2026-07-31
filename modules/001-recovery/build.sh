@@ -22,6 +22,7 @@ module_components=(
     wimlib
     libldm
     dislocker
+    sshfs
 )
 
 module_main "$@"

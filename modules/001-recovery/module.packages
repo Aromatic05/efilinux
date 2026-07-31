@@ -6,3 +6,4 @@ sleuthkit
 wimlib
 libldm
 dislocker
+sshfs

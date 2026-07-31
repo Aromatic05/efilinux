@@ -36,6 +36,7 @@ lz4	1.10.0
 mbedtls2	2.28.10
 partclone	0.3.47
 sleuthkit	4.15.0
+sshfs	3.7.6
 testdisk	7.2
 wimlib	1.14.5
 PACKAGES
@@ -47,7 +48,7 @@ cmp -s "$work/expected-packages" "$work/actual-packages" ||
 
 for command in \
     testdisk photorec fsarchiver partclone.info foremost fls tsk_recover \
-    wimlib-imagex ldmtool dislocker dislocker-fuse; do
+    wimlib-imagex ldmtool dislocker dislocker-fuse sshfs mount.sshfs; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
 done
@@ -81,6 +82,8 @@ run_target "$module_root/usr/bin/ldmtool" --help 2>&1 |
     grep -Fq 'Available commands:'
 run_target "$module_root/usr/bin/dislocker" -h 2>&1 |
     grep -Fq 'v0.7.3'
+run_target "$module_root/usr/bin/sshfs" --version 2>&1 |
+    grep -Fq 'SSHFS version 3.7.6'
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path
