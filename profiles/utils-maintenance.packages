@@ -1,5 +1,6 @@
 # EFI Linux console/rescue image with the maintenance utility set.
 @include system-base.packages
+@include utils-zxmod.packages
 
 file
 less
