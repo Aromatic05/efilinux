@@ -175,7 +175,6 @@ for gparted_file in \
     /usr/libexec/gpartedbin \
     /usr/share/applications/gparted.desktop \
     /usr/share/locale/zh_CN/LC_MESSAGES/gparted.mo \
-    /usr/share/metainfo/gparted.appdata.xml \
     /usr/share/polkit-1/actions/org.gnome.gparted.policy; do
     [[ -e "$EFILINUX_ROOTFS$gparted_file" ]] || \
         die "GParted runtime component is missing: $gparted_file"

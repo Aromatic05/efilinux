@@ -111,10 +111,6 @@ package() {
     if [[ -d "$pkgdir/usr/lib/gio" ]]; then
         keep+=(/usr/lib/gio/)
     fi
-    if [[ -d "$pkgdir/usr/lib/glib-2.0" ]]; then
-        keep+=(/usr/lib/glib-2.0/)
-    fi
-
     package_keep "${keep[@]}"
 }
 

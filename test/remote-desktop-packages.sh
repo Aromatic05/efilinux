@@ -60,7 +60,6 @@ mapfile -t themes < <(find "$work/remmina/usr/share/remmina/theme" -maxdepth 1 -
 for required in \
     "$work/remmina/usr/share/applications/org.remmina.Remmina.desktop" \
     "$work/remmina/usr/share/applications/org.remmina.Remmina-file.desktop" \
-    "$work/remmina/usr/share/metainfo/org.remmina.Remmina.appdata.xml" \
     "$work/remmina/usr/share/mime/packages/org.remmina.Remmina-mime.xml" \
     "$work/remmina/usr/share/locale/zh_CN/LC_MESSAGES/remmina.mo"; do
     [[ -r "$required" ]] || die "Remmina desktop integration file is missing: $required"
@@ -106,8 +105,20 @@ needed_of "$plugin_dir/remmina-plugin-rdp.so" | grep -Fxq libfreerdp-client3.so.
     die "Remmina RDP plugin is not linked to FreeRDP"
 needed_of "$plugin_dir/remmina-plugin-vnc.so" | grep -Fxq libvncclient.so.1 ||
     die "Remmina VNC plugin is not linked to LibVNCClient"
-needed_of "$plugin_dir/remmina-plugin-vnc.so" | grep -Fxq libvncserver.so.1 ||
-    die "Remmina VNC listener dependency is missing"
+if needed_of "$plugin_dir/remmina-plugin-vnc.so" | grep -Fxq libvncserver.so.1; then
+    die "Remmina VNC client plugin retains the unused VNC server library"
+fi
+freerdp_needed=$(
+    while IFS= read -r binary; do
+        file -b "$binary" | grep -q ELF || continue
+        needed_of "$binary"
+    done < <(find "$work/freerdp" -type f -print) | LC_ALL=C sort -u
+)
+grep -Fxq libswscale.so.9 <<<"$freerdp_needed" ||
+    die "FreeRDP lacks its required FFmpeg scaling backend"
+if grep -Fxq libavdevice.so.62 <<<"$freerdp_needed"; then
+    die "FreeRDP retains the unused FFmpeg device library"
+fi
 needed_of "$plugin_dir/remmina-plugin-spice.so" | grep -Fxq libspice-client-glib-2.0.so.8 ||
     die "Remmina SPICE plugin is not linked to spice-gtk"
 

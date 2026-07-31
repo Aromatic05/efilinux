@@ -92,8 +92,7 @@ package() {
     for soname in \
         libcom_err.so.2 \
         libe2p.so.2 \
-        libext2fs.so.2 \
-        libss.so.2; do
+        libext2fs.so.2; do
         target=$(readlink -- "$pkgdir/usr/lib/$soname")
         [[ -f "$pkgdir/usr/lib/$target" ]] || \
             die "E2fsprogs SONAME target is missing: $target"

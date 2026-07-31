@@ -64,6 +64,10 @@ devel() {
 }
 
 package() {
+    rm -f \
+        "$pkgdir/usr/lib/security/pam_debug.so" \
+        "$pkgdir/usr/lib/security/pam_stress.so"
+
     local -a keep=(
         /usr/bin/faillock
         /usr/bin/unix_chkpwd

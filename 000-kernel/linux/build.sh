@@ -68,6 +68,8 @@ build() {
             INSTALL_MOD_STRIP=1 \
             modules_install
     rm -f "$module_directory/build" "$module_directory/source"
+    find "$module_directory/kernel/net/core" -maxdepth 1 \
+        -type f -name 'selftests.ko*' -delete 2>/dev/null || true
     depmod -b "$develdir" -m /usr/lib/modules "$pkgver"
 
     reset_directory "$state"

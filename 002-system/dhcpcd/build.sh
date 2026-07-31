@@ -53,7 +53,9 @@ build() {
 
 devel() {
     rm -rf "$develdir/usr/share/man"
-    rm -f "$develdir/usr/share/dhcpcd/hooks/10-wpa_supplicant"
+    rm -f \
+        "$develdir/usr/share/dhcpcd/hooks/10-wpa_supplicant" \
+        "$develdir/usr/lib/dhcpcd/dhcpcd-hooks/01-test"
     strip_all "$develdir/usr/bin" "$develdir/usr/lib"
 }
 

@@ -52,8 +52,7 @@ for library in \
     libntfs-3g.so.90 \
     libncursesw.so.6 libreadline.so.8 libhistory.so.8 \
     libduktape.so.207 liblua.so.5.4 libasound.so.2 \
-    libell.so.0 \
-    libnl-3.so.200 libnl-genl-3.so.200 libjansson.so.4 libndp.so.0 \
+    libell.so.0 libndp.so.0 \
     libarchive.so.13 libfuse3.so.4 libsqlite3.so.0 libdconf.so.1 \
     libgpg-error.so.0 libgcrypt.so.20 libsecret-1.so.0 \
     libgmp.so.10 libmpfr.so.6 libjson-c.so.5 libpopt.so.0 \

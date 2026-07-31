@@ -40,7 +40,6 @@ package() {
         /usr/lib/parole-0/
         /usr/share/applications/org.xfce.Parole.desktop
         /usr/share/icons/hicolor/
-        /usr/share/metainfo/parole.appdata.xml
         /usr/share/parole/
     )
     [[ ! -f "$pkgdir/usr/share/locale/zh_CN/LC_MESSAGES/parole.mo" ]] || \

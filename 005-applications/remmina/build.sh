@@ -56,6 +56,7 @@ devel() {
 package() {
     local -a keep=(
         /usr/bin/remmina
+        /usr/bin/remmina-file-wrapper
         /usr/lib/remmina/plugins/remmina-plugin-rdp.so
         /usr/lib/remmina/plugins/remmina-plugin-vnc.so
         /usr/lib/remmina/plugins/remmina-plugin-spice.so
@@ -70,7 +71,6 @@ package() {
         /usr/share/remmina/theme/tokyonight.colors
         /usr/share/applications/
         /usr/share/icons/hicolor/
-        /usr/share/metainfo/
         /usr/share/mime/packages/
     )
     local optional

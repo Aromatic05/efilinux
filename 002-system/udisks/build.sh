@@ -63,6 +63,7 @@ build() {
 
 devel() {
     find "$develdir" -type f -name '*.la' -delete
+    rm -f "$develdir/etc/udisks2/mount_options.conf.example"
     strip_all "$develdir/usr/bin" "$develdir/usr/lib"
 }
 

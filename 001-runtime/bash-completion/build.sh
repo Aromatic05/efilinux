@@ -26,12 +26,11 @@ prepare() {
 }
 
 build() {
-    local completion source_file
+    local completion destination source_file
     local -a completions=(
         7z bind chmod chown cpio cryptsetup curl dd doas env file find free
-        gzip hostname ip iptables kill killall lsof lsusb make mount mtr nmap
-        nmcli openssl pgrep ping ps rsync smartctl ssh ssh-add ssh-keygen
-        strace sysctl tar tcpdump umount watch xz
+        gzip hostname ip kill killall lsof lsusb mount nmcli openssl pgrep ping
+        ps rsync smartctl ssh ssh-add ssh-keygen strace sysctl tar umount watch xz
     )
 
     install -Dm0644 "$srcdir/source/bash_completion" \
@@ -47,8 +46,10 @@ build() {
             [[ -f "$source_file" ]] && break
         done
         [[ -f "$source_file" ]] || continue
+        destination=$completion
+        [[ $completion != 7z ]] || destination=7zz
         install -m0644 "$source_file" \
-            "$develdir/usr/share/bash-completion/completions/$completion"
+            "$develdir/usr/share/bash-completion/completions/$destination"
     done
 
     cp -a "$srcdir/files/usr/share/bash-completion/completions/." \

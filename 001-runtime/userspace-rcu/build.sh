@@ -61,12 +61,7 @@ package() {
 
     for soname in \
         liburcu.so.8 \
-        liburcu-bp.so.8 \
-        liburcu-cds.so.8 \
-        liburcu-common.so.8 \
-        liburcu-mb.so.8 \
-        liburcu-memb.so.8 \
-        liburcu-qsbr.so.8; do
+        liburcu-common.so.8; do
         target=$(readlink -- "$pkgdir/usr/lib/$soname")
         [[ -f "$pkgdir/usr/lib/$target" ]] || \
             die "Userspace RCU SONAME target is missing: $target"

@@ -43,8 +43,6 @@ devel() {
 
 package() {
     local -a keep=()
-    package_add_library_family keep 'libasm.so.1*'
-    package_add_library_family keep 'libdw.so.1*'
     package_add_library_family keep 'libelf.so.1*'
     package_keep "${keep[@]}"
 }

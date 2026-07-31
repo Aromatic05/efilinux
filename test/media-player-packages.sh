@@ -41,7 +41,6 @@ done
 
 for required in \
     "$work/parole/usr/share/applications/org.xfce.Parole.desktop" \
-    "$work/parole/usr/share/metainfo/parole.appdata.xml" \
     "$work/parole/usr/share/locale/zh_CN/LC_MESSAGES/parole.mo"; do
     [[ -r "$required" ]] || die "Parole integration file is missing: $required"
 done

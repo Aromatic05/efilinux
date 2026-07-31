@@ -65,7 +65,6 @@ devel() {
 package() {
     local -a keep=()
     package_add_library_family keep 'libharfbuzz.so.0*'
-    package_add_library_family keep 'libharfbuzz-subset.so.0*'
     package_keep "${keep[@]}"
 }
 

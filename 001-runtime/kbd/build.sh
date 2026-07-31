@@ -88,6 +88,7 @@ PY
 }
 
 devel() {
+    find "$develdir/usr/share/keymaps" -type f -name '*.orig' -delete
     strip_all "$develdir/usr/bin"
 }
 

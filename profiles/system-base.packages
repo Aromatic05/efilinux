@@ -17,7 +17,6 @@ lzo
 libffi
 pcre2
 glib
-libyaml
 libexif
 
 ncurses
@@ -38,8 +37,6 @@ lua
 duktape
 alsa-lib
 ell
-libnl
-jansson
 libndp
 libarchive
 fuse

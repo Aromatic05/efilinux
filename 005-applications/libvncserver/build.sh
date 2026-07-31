@@ -45,7 +45,6 @@ devel() { strip_all "$develdir/usr/lib"; }
 package() {
     local -a keep=()
     package_add_library_family keep 'libvncclient.so.1*'
-    package_add_library_family keep 'libvncserver.so.1*'
     package_keep "${keep[@]}"
 }
 recipe_main "$@"

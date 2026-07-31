@@ -121,7 +121,8 @@ package() {
         /usr/lib/nm-priv-helper
         /usr/lib/NetworkManager/
         /usr/lib/udev/rules.d/
-        /usr/share/dbus-1/
+        /usr/share/dbus-1/system.d/
+        /usr/share/dbus-1/system-services/
         /usr/share/polkit-1/
     )
     package_add_library_family keep 'libnm.so.0*'

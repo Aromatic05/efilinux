@@ -47,7 +47,8 @@ package() {
         "$pkgdir/usr/lib/pkgconfig" \
         "$pkgdir/usr/share/gir-1.0" \
         "$pkgdir/usr/share/gtk-doc" \
-        "$pkgdir/usr/share/man"
+        "$pkgdir/usr/share/man" \
+        "$pkgdir/usr/share/metainfo"
     find "$pkgdir/usr/lib" -type f \
         \( -name '*.a' -o -name '*.la' -o -name '*.pc' \) -delete 2>/dev/null || true
 }

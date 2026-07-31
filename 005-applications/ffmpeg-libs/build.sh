@@ -82,7 +82,7 @@ devel() {
 package() {
     local -a keep=()
     local library
-    for library in avcodec avdevice avfilter avformat avutil swresample swscale; do
+    for library in avcodec avfilter avformat avutil swresample swscale; do
         package_add_library_family keep "lib$library.so.*"
     done
     package_keep "${keep[@]}"

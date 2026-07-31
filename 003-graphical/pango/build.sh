@@ -49,8 +49,15 @@ devel() {
 }
 
 package() {
+    local family
     local -a keep=()
-    package_add_library_family keep 'libpango*.so.*'
+
+    for family in \
+        'libpango-1.0.so.0*' \
+        'libpangocairo-1.0.so.0*' \
+        'libpangoft2-1.0.so.0*'; do
+        package_add_library_family keep "$family"
+    done
     package_keep "${keep[@]}"
 }
 

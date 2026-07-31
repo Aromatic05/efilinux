@@ -61,9 +61,6 @@ package() {
     local -a keep=()
     package_add_library_family keep 'libdrm.so.2*'
     package_add_library_family keep 'libdrm_amdgpu.so.1*'
-    package_add_library_family keep 'libdrm_intel.so.1*'
-    package_add_library_family keep 'libdrm_nouveau.so.2*'
-    package_add_library_family keep 'libdrm_radeon.so.1*'
     keep+=("/usr/share/libdrm/")
     package_keep "${keep[@]}"
 }

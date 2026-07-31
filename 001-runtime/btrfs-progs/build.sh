@@ -75,31 +75,14 @@ devel() {
 }
 
 package() {
-    local library relative
-    local -a keep=(
-        /usr/bin/btrfs
-        /usr/bin/btrfs-find-root
-        /usr/bin/btrfs-image
-        /usr/bin/btrfstune
-        /usr/bin/fsck.btrfs
-        /usr/bin/mkfs.btrfs
+    package_keep \
+        /usr/bin/btrfs \
+        /usr/bin/btrfs-find-root \
+        /usr/bin/btrfs-image \
+        /usr/bin/btrfstune \
+        /usr/bin/fsck.btrfs \
+        /usr/bin/mkfs.btrfs \
         /usr/lib/udev/rules.d/64-btrfs-dm.rules
-    )
-    local -a libraries=()
-
-    mapfile -d '' -t libraries < <(
-        find "$pkgdir/usr/lib" -maxdepth 1 \
-            \( -type f -o -type l \) \
-            \( -name 'libbtrfs.so.*' -o -name 'libbtrfsutil.so.*' \) \
-            -print0 | LC_ALL=C sort -z
-    )
-    ((${#libraries[@]} > 0)) || die "Btrfs runtime libraries are missing"
-    for library in "${libraries[@]}"; do
-        relative=/${library#"$pkgdir/"}
-        keep+=("$relative")
-    done
-
-    package_keep "${keep[@]}"
 }
 
 recipe_main "$@"

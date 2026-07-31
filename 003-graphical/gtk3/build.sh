@@ -43,7 +43,7 @@ build() {
         -Dgtk_doc=false \
         -Dman=false \
         -Dintrospection=false \
-        -Ddemos=true \
+        -Ddemos=false \
         -Dexamples=false \
         -Dtests=false \
         -Dinstalled_tests=false \
@@ -61,8 +61,6 @@ devel() {
 
 package() {
     local -a keep=(
-        /usr/bin/gtk3-demo
-        /usr/bin/gtk3-widget-factory
         /usr/bin/gtk-update-icon-cache
         /usr/share/gtk-3.0/
         /usr/share/icons/

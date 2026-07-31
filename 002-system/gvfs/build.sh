@@ -86,6 +86,10 @@ devel() {
 }
 
 package() {
+    rm -f \
+        "$pkgdir/usr/lib/gvfsd-localtest" \
+        "$pkgdir/usr/share/gvfs/mounts/localtest.mount"
+
     local helper
     local -a keep=(
         /usr/lib/gvfs/

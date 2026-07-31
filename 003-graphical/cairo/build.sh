@@ -55,8 +55,14 @@ devel() {
 }
 
 package() {
+    local family
     local -a keep=()
-    package_add_library_family keep 'libcairo*.so.*'
+
+    for family in \
+        'libcairo.so.2*' \
+        'libcairo-gobject.so.2*'; do
+        package_add_library_family keep "$family"
+    done
     package_keep "${keep[@]}"
 }
 

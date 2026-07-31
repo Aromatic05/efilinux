@@ -102,8 +102,6 @@ require_program xwininfo xorg
 require_program xauth xorg
 require_program iceauth xorg
 require_program mcookie util-linux
-require_program gtk3-demo gtk3
-require_program gtk3-widget-factory gtk3
 require_program gdk-pixbuf-query-loaders gdk-pixbuf
 require_program gdk-pixbuf-csource gdk-pixbuf
 require_program fc-cache fontconfig
@@ -243,7 +241,6 @@ if ! "$loader" --library-path "$library_path" \
     "$rootfs/usr/libexec/Xorg" -version 2>&1 | grep -q 'X.Org X Server'; then
     die "real Xorg server does not execute against the target library closure"
 fi
-"$loader" --library-path "$library_path" "$rootfs/usr/bin/gtk3-demo" --help-all >/dev/null
 "$loader" --library-path "$library_path" \
     "$rootfs/usr/bin/gdk-pixbuf-query-loaders" "$svg_loader" | \
     grep -Fq '"svg"'

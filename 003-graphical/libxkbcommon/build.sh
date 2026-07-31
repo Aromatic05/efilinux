@@ -45,7 +45,6 @@ devel() {
 package() {
     local -a keep=()
     package_add_library_family keep 'libxkbcommon.so.0*'
-    package_add_library_family keep 'libxkbcommon-x11.so.0*'
     package_keep "${keep[@]}"
 }
 

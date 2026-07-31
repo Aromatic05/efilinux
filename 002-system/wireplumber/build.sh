@@ -61,6 +61,7 @@ build() {
 }
 
 devel() {
+    rm -f "$develdir/usr/share/wireplumber/scripts/linking/find-user-target.lua.example"
     strip_all "$develdir/usr/bin" "$develdir/usr/lib"
 }
 
