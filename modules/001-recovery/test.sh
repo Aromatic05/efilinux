@@ -27,6 +27,7 @@ grep -Fxq 'version=1' "$image/metadata/manifest"
 
 cat > "$work/expected-packages" <<'PACKAGES'
 bzip2	1.0.8
+chntpw	140201
 dislocker	0.7.3
 foremost	1.5.7
 fsarchiver	0.8.9
@@ -48,7 +49,8 @@ cmp -s "$work/expected-packages" "$work/actual-packages" ||
 
 for command in \
     testdisk photorec fsarchiver partclone.info foremost fls tsk_recover \
-    wimlib-imagex ldmtool dislocker dislocker-fuse sshfs mount.sshfs; do
+    wimlib-imagex ldmtool dislocker dislocker-fuse sshfs mount.sshfs \
+    chntpw reged samusrgrp sampasswd samunlock; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
 done
@@ -84,6 +86,8 @@ run_target "$module_root/usr/bin/dislocker" -h 2>&1 |
     grep -Fq 'v0.7.3'
 run_target "$module_root/usr/bin/sshfs" --version 2>&1 |
     grep -Fq 'SSHFS version 3.7.6'
+chntpw_output=$(run_target "$module_root/usr/bin/chntpw" 2>&1 || true)
+grep -Fq 'chntpw version 1.00 140201' <<<"$chntpw_output"
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path

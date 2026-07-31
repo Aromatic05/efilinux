@@ -1,0 +1,33 @@
+--- a/ntreg.c
++++ b/ntreg.c
+@@ -80,6 +80,7 @@
+ #include <string.h>
+ #include <unistd.h>
+ #include <inttypes.h>
++#include <stddef.h>
+ #include <stdarg.h>
+ 
+ #include "ntreg.h"
+@@ -2152,7 +2153,7 @@
+ 
+ 
+   } else { /* 4 bytes or less are inlined */
+-    datablk = vkofs + (int32_t)&(vkkey->ofs_data) - (int32_t)vkkey;
++    datablk = vkofs + offsetof(struct vk_key, ofs_data);
+     size |= 0x80000000;
+   }
+ 
+--- a/chntpw.c
++++ b/chntpw.c
+@@ -868,9 +868,8 @@
+       if (ff) { 
+ 	ff->syskeymode = 0;
+ 
+-	for (i = 0; i < 0x3b; i++) {
+-	  ff->syskeyflags1[i] = 0;
+-	}
++	memset(ff->syskeyflags1, 0, sizeof(ff->syskeyflags1));
++	memset(ff->syskeyobf, 0, sizeof(ff->syskeyobf));
+ 
+ 	put_buf2val(hive[H_SAM], samf, 0, "\\SAM\\Domains\\Account\\F", REG_BINARY, TPF_VK_EXACT);
+ 

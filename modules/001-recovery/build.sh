@@ -23,6 +23,7 @@ module_components=(
     libldm
     dislocker
     sshfs
+    chntpw
 )
 
 module_main "$@"
