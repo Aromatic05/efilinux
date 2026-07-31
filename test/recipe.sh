@@ -424,6 +424,37 @@ shared_visits=$(wc -l < "$work/shared-visits")
     exit 1
 }
 
+shared_session_build="$work/shared-session-build"
+shared_session_packages="$work/shared-session-packages"
+shared_session_sysroot="$work/shared-session-sysroot"
+shared_session_target="$work/shared-session-target"
+shared_session="$shared_session_build/recipe-sessions/build"
+mkdir -p "$shared_session"
+rm -f "$work/shared-visits"
+shared_session_environment=(
+    EFILINUX_ROOT="$diamond_root"
+    EFILINUX_BUILD="$shared_session_build"
+    EFILINUX_PACKAGES="$shared_session_packages"
+    EFILINUX_PACKAGE_INDEX="$shared_session_packages/index.tsv"
+    EFILINUX_PACKAGE_WORK="$shared_session_build/packages"
+    EFILINUX_SYSROOT="$shared_session_sysroot"
+    EFILINUX_TARGET="$shared_session_target"
+    EFILINUX_ROOTFS="$shared_session_target/rootfs"
+    EFILINUX_STATE="$shared_session_build/state"
+    EFILINUX_TEST="$shared_session_build/test"
+    EFILINUX_LOGS="$shared_session_build/logs"
+    EFILINUX_RECIPE_SESSION_DIR="$shared_session"
+)
+env "${shared_session_environment[@]}" "$left_directory/build.sh"
+first_shared_session_visits=$(wc -l < "$work/shared-visits")
+env "${shared_session_environment[@]}" "$right_directory/build.sh"
+second_shared_session_visits=$(wc -l < "$work/shared-visits")
+[[ "$first_shared_session_visits" == 1 && "$second_shared_session_visits" == 1 ]] || {
+    printf 'shared build session repeated dependency resolution: %s then %s visits\n' \
+        "$first_shared_session_visits" "$second_shared_session_visits" >&2
+    exit 1
+}
+
 bad_directory="$work/bad"
 mkdir -p "$bad_directory"
 cat > "$bad_directory/build.sh" <<EOF

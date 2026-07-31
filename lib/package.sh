@@ -4,6 +4,65 @@ set -euo pipefail
 
 readonly EFILINUX_PACKAGE_FORMAT=4
 readonly EFILINUX_PACKAGE_INDEX_HEADER='# efilinux-package-index-v4'
+readonly EFILINUX_PACKAGE_VERIFICATION_CACHE_HEADER='# efilinux-package-verification-v1'
+
+package_archive_fingerprint() {
+    LC_ALL=C stat -c '%d:%i:%s:%y:%z' -- "$1"
+}
+
+package_verification_cache_path() {
+    local archive=$1
+    printf '%s/package-verification/%s.cache' \
+        "$EFILINUX_STATE" "$(basename -- "$archive")"
+}
+
+package_verification_cache_matches() {
+    local archive=$1
+    local expected_name=$2
+    local expected_version=$3
+    local expected_recipe_key=$4
+    local expected_digest=$5
+    local cache header record
+    local cached_fingerprint cached_digest cached_name cached_version cached_key extra
+
+    cache=$(package_verification_cache_path "$archive")
+    [[ -f "$cache" ]] || return 1
+    IFS= read -r header < "$cache" || return 1
+    IFS= read -r record < <(sed -n '2p' "$cache") || return 1
+    IFS=$'\t' read -r \
+        cached_fingerprint cached_digest cached_name cached_version cached_key extra \
+        <<<"$record"
+    if [[ "$header" != "$EFILINUX_PACKAGE_VERIFICATION_CACHE_HEADER" || \
+          -n ${extra:-} || \
+          "$cached_fingerprint" != "$(package_archive_fingerprint "$archive")" || \
+          "$cached_digest" != "$expected_digest" || \
+          "$cached_name" != "$expected_name" || \
+          "$cached_version" != "$expected_version" || \
+          "$cached_key" != "$expected_recipe_key" ]]; then
+        rm -f -- "$cache"
+        return 1
+    fi
+}
+
+package_store_verification_cache() {
+    local archive=$1
+    local name=$2
+    local version=$3
+    local recipe_key=$4
+    local digest=$5
+    local cache temporary
+
+    cache=$(package_verification_cache_path "$archive")
+    temporary="$cache.tmp.$$"
+    mkdir -p "$(dirname -- "$cache")"
+    {
+        printf '%s\n' "$EFILINUX_PACKAGE_VERIFICATION_CACHE_HEADER"
+        printf '%s\t%s\t%s\t%s\t%s\n' \
+            "$(package_archive_fingerprint "$archive")" \
+            "$digest" "$name" "$version" "$recipe_key"
+    } > "$temporary"
+    mv -- "$temporary" "$cache"
+}
 
 package_clone_tree() {
     local source=$1
@@ -47,6 +106,11 @@ package_verify_archive() {
     local metadata
 
     [[ -f "$archive" ]] || die "package archive is missing: $archive"
+    if package_verification_cache_matches \
+            "$archive" "$expected_name" "$expected_version" \
+            "$expected_recipe_key" "$expected_digest"; then
+        return
+    fi
     [[ $(sha256sum "$archive" | awk '{print $1}') == "$expected_digest" ]] || \
         die "package archive digest mismatch: $archive"
 
@@ -66,6 +130,9 @@ package_verify_archive() {
     tar --list --file "$archive" | \
         awk '$0 ~ /^\// || $0 ~ /(^|\/)\.\.($|\/)/ { exit 1 }' || \
         die "package archive contains an unsafe path: $archive"
+    package_store_verification_cache \
+        "$archive" "$expected_name" "$expected_version" \
+        "$expected_recipe_key" "$expected_digest"
 }
 
 package_find_archive() {
@@ -229,10 +296,12 @@ EOF
     mv -- "$temporary" "$archive"
     printf '%s  %s\n' "$digest" "$(basename -- "$archive")" > "$archive.sha256"
     package_update_index "$name" "$version" "$recipe_key" "$content_hash" "$archive" "$digest"
+    package_store_verification_cache "$archive" "$name" "$version" "$recipe_key" "$digest"
     if [[ -n "$previous_archive_name" && "$previous_archive_name" != "$(basename -- "$archive")" ]]; then
         rm -f -- \
             "$EFILINUX_PACKAGES/$previous_archive_name" \
-            "$EFILINUX_PACKAGES/$previous_archive_name.sha256"
+            "$EFILINUX_PACKAGES/$previous_archive_name.sha256" \
+            "$(package_verification_cache_path "$EFILINUX_PACKAGES/$previous_archive_name")"
     fi
     rm -rf -- "$work"
 

@@ -17,6 +17,7 @@ framework_commands=(
     sed
     sha256sum
     sort
+    stat
     strip
     tar
     zstd

@@ -2,9 +2,120 @@
 
 set -euo pipefail
 
+readonly COMPOSE_RESOLUTION_CACHE_HEADER='# efilinux-compose-resolution-cache-v1'
+
 compose_validate_package_name() {
     local name=$1
     [[ $name =~ ^[a-z0-9][a-z0-9+._-]*$ ]] || die "invalid package name: $name"
+}
+
+compose_resolution_cache_path() {
+    local profile=$1
+    local profile_directory profile_name profile_identity
+
+    profile_directory=$(cd -- "$(dirname -- "$profile")" && pwd -P)
+    profile_name=$(basename -- "$profile")
+    profile_identity=$(
+        printf '%s/%s' "$profile_directory" "$profile_name" |
+            sha256sum |
+            awk '{print substr($1, 1, 16)}'
+    )
+    printf '%s/compose-resolution/%s-%s.cache' \
+        "$EFILINUX_STATE" "$profile_name" "$profile_identity"
+}
+
+compose_resolution_cache_key() {
+    local profile=$1
+    local profile_directory profile_file
+
+    package_assert_current_index
+    profile_directory=$(cd -- "$(dirname -- "$profile")" && pwd -P)
+    {
+        printf 'cache=%s\n' "$COMPOSE_RESOLUTION_CACHE_HEADER"
+        printf 'package-format=%s\n' "$EFILINUX_PACKAGE_FORMAT"
+        printf 'arch=%s\n' "$EFILINUX_ARCH"
+        printf 'package-index='
+        sha256sum "$EFILINUX_PACKAGE_INDEX" | awk '{print $1}'
+        while IFS= read -r -d '' profile_file; do
+            printf 'profile=%s\n' "${profile_file#"$profile_directory/"}"
+            sha256sum "$profile_file"
+        done < <(
+            find "$profile_directory" -maxdepth 1 -type f -name '*.packages' \
+                -print0 |
+                LC_ALL=C sort -z
+        )
+    } | sha256sum | awk '{print $1}'
+}
+
+compose_load_resolution_cache() {
+    local profile=$1
+    local cache expected_key header key_line name archive_name extra archive index
+    local valid=true
+    local -a names=() archives=()
+    local -A seen=()
+
+    cache=$(compose_resolution_cache_path "$profile")
+    [[ -f "$cache" ]] || return 1
+    expected_key=$(compose_resolution_cache_key "$profile")
+
+    exec 3< "$cache"
+    IFS= read -r header <&3 || valid=false
+    IFS= read -r key_line <&3 || valid=false
+    [[ $valid == false || "$header" == "$COMPOSE_RESOLUTION_CACHE_HEADER" ]] || \
+        valid=false
+    [[ $valid == false || "$key_line" == "key=$expected_key" ]] || valid=false
+
+    while [[ $valid == true ]] && \
+          IFS=$'\t' read -r name archive_name extra <&3; do
+        if [[ -z $name || -z $archive_name || -n ${extra:-} || \
+              ! $name =~ ^[a-z0-9][a-z0-9+._-]*$ || \
+              $archive_name == */* || $archive_name == *[$'\t\r\n']* || \
+              -n ${seen[$name]:-} ]]; then
+            valid=false
+            break
+        fi
+        archive="$EFILINUX_PACKAGES/$archive_name"
+        if [[ ! -f "$archive" ]]; then
+            valid=false
+            break
+        fi
+        seen[$name]=1
+        names+=("$name")
+        archives+=("$archive")
+    done
+    exec 3<&-
+
+    if [[ $valid != true ]] || ((${#names[@]} == 0)); then
+        rm -f -- "$cache"
+        return 1
+    fi
+
+    for index in "${!names[@]}"; do
+        name=${names[$index]}
+        COMPOSE_ARCHIVES[$name]=${archives[$index]}
+        COMPOSE_VISIT_STATE[$name]=done
+        COMPOSE_ORDER+=("$name")
+    done
+    log "Using dependency resolution cache for $(basename -- "$profile")"
+}
+
+compose_store_resolution_cache() {
+    local profile=$1
+    local cache temporary key package archive
+
+    cache=$(compose_resolution_cache_path "$profile")
+    temporary="$cache.tmp.$$"
+    key=$(compose_resolution_cache_key "$profile")
+    mkdir -p "$(dirname -- "$cache")"
+    {
+        printf '%s\n' "$COMPOSE_RESOLUTION_CACHE_HEADER"
+        printf 'key=%s\n' "$key"
+        for package in "${COMPOSE_ORDER[@]}"; do
+            archive=${COMPOSE_ARCHIVES[$package]}
+            printf '%s\t%s\n' "$package" "$(basename -- "$archive")"
+        done
+    } > "$temporary"
+    mv -- "$temporary" "$cache"
 }
 
 compose_validate_path() {
@@ -80,8 +191,12 @@ compose_read_profile() {
 
     COMPOSE_PROFILE_ROOT=$(cd -- "$(dirname -- "$profile")" && pwd)
     declare -gA COMPOSE_PROFILE_STATE=()
+    if compose_load_resolution_cache "$profile"; then
+        return
+    fi
     compose_read_profile_file "$profile"
     ((${#COMPOSE_ORDER[@]} > 0)) || die "package profile is empty: $profile"
+    compose_store_resolution_cache "$profile"
 }
 
 compose_path_type() {
@@ -360,10 +475,14 @@ compose_finalize_rootfs() {
                     die "a package shipped a generated icon cache: ${theme#"$rootfs"}"
                 compose_run_target "$rootfs" \
                     "$rootfs/usr/bin/gtk-update-icon-cache" --force "$theme"
-                [[ -s "$icon_cache" ]] || \
+                if [[ -s "$icon_cache" ]]; then
+                    compose_record_generated_path \
+                        "$rootfs" "$owners" "${icon_cache#"$rootfs"}"
+                elif find "$theme" -mindepth 1 \
+                        \( -type f -o -type l \) ! -name index.theme \
+                        -print -quit | grep -q .; then
                     die "icon cache was not generated: ${theme#"$rootfs"}"
-                compose_record_generated_path \
-                    "$rootfs" "$owners" "${icon_cache#"$rootfs"}"
+                fi
             done
         fi
     fi

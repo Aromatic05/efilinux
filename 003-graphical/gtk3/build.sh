@@ -63,7 +63,6 @@ package() {
     local -a keep=(
         /usr/bin/gtk-update-icon-cache
         /usr/share/gtk-3.0/
-        /usr/share/icons/
         /usr/share/themes/
         /usr/share/glib-2.0/schemas/
     )
