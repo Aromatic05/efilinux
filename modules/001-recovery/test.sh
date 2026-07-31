@@ -37,7 +37,9 @@ krb5	1.22.2
 libldm	0.2.5
 lz4	1.10.0
 mbedtls2	2.28.10
+nbd	3.24
 partclone	0.3.47
+qemu-img	11.0.3
 sleuthkit	4.15.0
 sshfs	3.7.6
 talloc	2.4.4
@@ -55,7 +57,7 @@ for command in \
     wimlib-imagex ldmtool dislocker dislocker-fuse sshfs mount.sshfs \
     chntpw reged samusrgrp sampasswd samunlock \
     mount.cifs mount.smb3 cifs.upcall cifscreds getcifsacl setcifsacl smbinfo \
-    kinit klist; do
+    kinit klist qemu-img qemu-nbd nbd-client; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
 done
@@ -97,6 +99,10 @@ run_target "$module_root/usr/bin/cifs.upcall" --version 2>&1 |
     grep -Fxq 'version: 7.7'
 run_target "$module_root/usr/bin/klist" -V 2>&1 |
     grep -Fxq 'Kerberos 5 version 1.22.2'
+run_target "$module_root/usr/bin/qemu-img" --version 2>&1 |
+    grep -Fq 'qemu-img version 11.0.3'
+run_target "$module_root/usr/bin/nbd-client" --version 2>&1 |
+    grep -Fq 'This is nbd-client, from nbd 3.24'
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path

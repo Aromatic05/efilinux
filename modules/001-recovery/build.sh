@@ -27,6 +27,8 @@ module_components=(
     talloc
     krb5
     cifs-utils
+    qemu-img
+    nbd
 )
 
 module_main "$@"

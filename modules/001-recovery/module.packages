@@ -9,3 +9,5 @@ dislocker
 sshfs
 chntpw
 cifs-utils
+qemu-img
+nbd
