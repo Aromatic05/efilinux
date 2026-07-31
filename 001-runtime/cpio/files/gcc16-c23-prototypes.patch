@@ -1,0 +1,15 @@
+--- a/src/extern.h
++++ b/src/extern.h
+@@ -100,2 +100,2 @@
+-extern int (*xstat) ();
+-extern void (*copy_function) ();
++extern int (*xstat) (const char *, struct stat *);
++extern void (*copy_function) (void);
+--- a/src/global.c
++++ b/src/global.c
+@@ -188 +188 @@
+-int (*xstat) ();
++int (*xstat) (const char *, struct stat *);
+@@ -191 +191 @@
+-void (*copy_function) () = 0;
++void (*copy_function) (void) = 0;

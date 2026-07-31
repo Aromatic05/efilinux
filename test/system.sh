@@ -83,7 +83,7 @@ require_program fsmeta-replay fsmeta-replay
 require_program telinit sysvinit
 require_program shutdown sysvinit
 require_program udevadm udev
-require_program '[' busybox
+require_program '[' coreutils
 require_program hwclock util-linux
 require_program login shadow
 require_program passwd shadow
@@ -147,7 +147,7 @@ expected_root_password_hash=$(openssl passwd -6 -salt "$root_account" "$root_acc
 [[ "$root_password_hash" == "$expected_root_password_hash" ]] || \
     die "root password does not match the root account name"
 user_passwd=$(awk -F: '$1 == "user" { print; exit }' "$rootfs/etc/passwd")
-[[ "$user_passwd" == 'user:x:1000:1000:User:/home/user:/usr/bin/sh' ]] || \
+[[ "$user_passwd" == 'user:x:1000:1000:User:/home/user:/usr/bin/bash' ]] || \
     die "normal user account is missing or malformed"
 user_password_hash=$(awk -F: '$1 == "user" { print $2; exit }' "$rootfs/etc/shadow")
 expected_user_password_hash=$(openssl passwd -6 -salt user user)

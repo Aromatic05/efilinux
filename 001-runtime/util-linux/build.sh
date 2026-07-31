@@ -98,7 +98,11 @@ package() {
         /usr/bin/agetty
         /usr/bin/blockdev
         /usr/bin/blkid
+        /usr/bin/dmesg
         /usr/bin/fdisk
+        /usr/bin/kill
+        /usr/bin/logger
+        /usr/bin/setsid
         /usr/bin/findmnt
         /usr/bin/fsck
         /usr/bin/hwclock

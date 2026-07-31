@@ -39,12 +39,8 @@ assert_link /lib64 usr/lib
 assert_link /usr/sbin bin
 
 required_applets=(
-    awk blkid cat chmod chown cp cpio cut date dd depmod df dmesg du env
-    expr find free grep gzip head hostname id init insmod kill killall ln ls
-    lsmod mdev mkdir mkfifo mknod modinfo modprobe mount mv ps pwd
-    readlink realpath reboot rm rmdir rmmod sed setsid sh sleep sort stat
-    switch_root sync tail tar tee test touch tr true tty udhcpc umount uname
-    uniq uptime vi wc xargs
+    ash cat clear cp cttyhack dmesg hostname killall ls mdev mkdir mount mv
+    rm sh switch_root sync udhcpc umount vi
 )
 
 busybox_applets=$(
@@ -59,6 +55,19 @@ done
 for replaced_applet in ip ping; do
     if grep -qx "$replaced_applet" <<< "$busybox_applets"; then
         die "BusyBox still provides replaced network applet: $replaced_applet"
+    fi
+done
+
+rescue_links=(ash clear cttyhack hostname killall mdev sh switch_root udhcpc vi)
+for applet in "${rescue_links[@]}"; do
+    [[ -L "$rootfs/usr/bin/$applet" ]] || die "BusyBox rescue link is missing: $applet"
+    [[ $(readlink -- "$rootfs/usr/bin/$applet") == busybox ]] ||
+        die "BusyBox rescue link has the wrong target: $applet"
+done
+for standard_command in awk cat chmod chown cp cpio cut date dd df diff dmesg du env     expr find free grep gzip head id kill ln logger ls mkdir mkfifo mknod mount mv ps     readlink realpath rm rmdir sed setsid sleep sort stat sync tail tar tee test touch     tr true tty umount uname uniq uptime wc xargs; do
+    if [[ -L "$rootfs/usr/bin/$standard_command" ]] &&
+        [[ $(readlink -- "$rootfs/usr/bin/$standard_command") == busybox ]]; then
+        die "standard runtime command still resolves to BusyBox: $standard_command"
     fi
 done
 

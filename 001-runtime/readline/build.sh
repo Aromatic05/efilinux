@@ -9,7 +9,7 @@ source "$ROOT/lib/package.sh"
 source "$ROOT/lib/recipe.sh"
 
 pkgname=readline
-pkgver=8.2
+pkgver=8.3
 
 depends=(glibc ncurses)
 builddepends=()
@@ -18,8 +18,17 @@ makedepends=(gcc make pkg-config)
 prepare() {
     local archive="$downloaddir/readline-$pkgver.tar.gz"
     download "https://ftp.gnu.org/gnu/readline/readline-$pkgver.tar.gz" "$archive"
-    checksum sha256 3feb7171f16a84ee82ca18a36d7b9be109a52c04f492a053331d7d1095007c35 "$archive"
+    checksum sha256 fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc "$archive"
     extract "$archive" "$srcdir/readline"
+    [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
+    sed -i '/MV.*old/d' "$srcdir/readline/Makefile.in"
+    sed -i '/{OLDSUFF}/c:' "$srcdir/readline/support/shlib-install"
+    sed -i 's/-Wl,-rpath,[^ ]*//' "$srcdir/readline/support/shobj-conf"
+    sed -e '270a\
+         else\
+           chars_avail = 1;' \
+        -e '288i\   result = -1;' \
+        -i.orig "$srcdir/readline/input.c"
 }
 
 build() {
@@ -31,7 +40,8 @@ build() {
             --prefix=/usr \
             --libdir=/usr/lib \
             --sysconfdir=/etc \
-            --disable-static
+            --disable-static \
+            --with-curses
     make -j"$EFILINUX_JOBS" SHLIB_LIBS=-lncursesw
     make DESTDIR="$develdir" SHLIB_LIBS=-lncursesw install
 }

@@ -22,6 +22,17 @@ libexif
 
 ncurses
 readline
+bash
+coreutils
+diffutils
+findutils
+gawk
+grep
+sed
+tar
+gzip
+cpio
+procps-ng
 lua
 duktape
 alsa-lib

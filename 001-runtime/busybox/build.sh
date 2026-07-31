@@ -131,20 +131,18 @@ devel() {
 }
 
 package() {
-    rm -f \
-        "$pkgdir/usr/bin/blkid" \
-        "$pkgdir/usr/bin/depmod" \
-        "$pkgdir/usr/bin/halt" \
-        "$pkgdir/usr/bin/insmod" \
-        "$pkgdir/usr/bin/init" \
-        "$pkgdir/usr/bin/lsmod" \
-        "$pkgdir/usr/bin/modinfo" \
-        "$pkgdir/usr/bin/modprobe" \
-        "$pkgdir/usr/bin/mount" \
-        "$pkgdir/usr/bin/poweroff" \
-        "$pkgdir/usr/bin/reboot" \
-        "$pkgdir/usr/bin/rmmod" \
-        "$pkgdir/usr/bin/umount"
+    package_keep \
+        /usr/bin/busybox \
+        /usr/bin/ash \
+        /usr/bin/sh \
+        /usr/bin/clear \
+        /usr/bin/cttyhack \
+        /usr/bin/hostname \
+        /usr/bin/killall \
+        /usr/bin/mdev \
+        /usr/bin/switch_root \
+        /usr/bin/udhcpc \
+        /usr/bin/vi
 }
 
 recipe_main "$@"
