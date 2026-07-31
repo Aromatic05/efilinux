@@ -2,3 +2,11 @@
 /packages/
 /build/
 /target/
+/modules/*/build/
+/modules/*/packages/
+/modules/*/sysroot/
+/modules/*/state/
+/modules/*/logs/
+/modules/*/test/
+/modules/*/work/
+/modules/*/output/
