@@ -25,15 +25,21 @@ prepare() {
 build() {
     target_release_configure "$srcdir/source" "$builddir" --disable-doc
     target_make_install "$builddir" "$develdir"
+    sed -i 's/^[[:space:]]*egrep /	grep -E /' "$develdir/usr/bin/gparted"
 }
 
 devel() { strip_all "$develdir/usr/bin" "$develdir/usr/libexec"; }
 
 package() {
-    local -a keep=(/usr/bin/gparted /usr/libexec/gpartedbin /usr/share/applications/ /usr/share/icons/hicolor/)
-    [[ ! -d "$pkgdir/usr/libexec" ]] || keep+=(/usr/libexec/)
-    [[ ! -d "$pkgdir/usr/share/glib-2.0/schemas" ]] || keep+=(/usr/share/glib-2.0/schemas/)
-    keep+=(/usr/share/polkit-1/actions/)
+    local -a keep=(
+        /usr/bin/gparted
+        /usr/libexec/gpartedbin
+        /usr/share/applications/gparted.desktop
+        /usr/share/icons/hicolor/
+        /usr/share/locale/zh_CN/LC_MESSAGES/gparted.mo
+        /usr/share/metainfo/gparted.appdata.xml
+        /usr/share/polkit-1/actions/org.gnome.gparted.policy
+    )
     package_keep "${keep[@]}"
 }
 

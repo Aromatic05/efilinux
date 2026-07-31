@@ -1,5 +1,0 @@
-# EFI Linux graphical maintenance image.  Destructive partition editing stays
-# separate from the ordinary desktop-usability profile.
-@include applications-desktop.packages
-
-gparted

@@ -5,38 +5,33 @@ libraries. Console maintenance commands, partitioning backends, SquashFS tools,
 and `zxmod` belong to `005-utils`.
 
 All recipes use versioned upstream releases with pinned SHA-256 checksums.
-Optional applications install their own icons under `hicolor`; the base Qogir
-theme does not preinstall icons for unloaded software.
+Applications install their own icons under `hicolor`; the base Qogir theme does
+not preinstall icons for software that is absent.
 
-## Ordinary desktop profile
+## Default desktop profile
 
-`profiles/applications-desktop.packages` extends the XFCE desktop with:
+`profiles/applications-desktop.packages` extends the XFCE rootfs with:
 
-- Mousepad, a lightweight GTK3 text editor;
-- Ristretto, the XFCE image viewer;
-- Pavucontrol 5.0 for PipeWire's PulseAudio compatibility API, built without optional event sounds;
+- Mousepad;
+- Ristretto;
+- Pavucontrol 5.0 without the optional event-sound stack;
 - XFCE Task Manager;
-- XFCE Screenshooter;
+- XFCE Screenshooter without the Imgur/libsoup upload stack;
 - Xarchiver and the Thunar Archive Plugin;
-- Galculator.
+- Galculator;
+- GParted, including its privileged helper, polkit policy, Chinese translation,
+  AppStream metadata, and GNU Parted backend.
 
-The applications remain outside `profiles/desktop.packages`, so the default
-single-EFI desktop does not grow merely because the recipes exist.
-
-## GUI maintenance profile
-
-`profiles/applications-gui-maintenance.packages` includes the ordinary desktop
-profile and adds GParted. GParted uses the real GNU Parted package from
-`005-utils` and retains its polkit action and privileged helper. Destructive
-partition editing is therefore not part of the ordinary desktop profile.
+`005-applications/image` composes this profile into the default single EFI
+image.
 
 ## Deferred ZXM applications
 
 Large or externally distributed software should be delivered as local `.zxm`
 modules rather than embedded into the single EFI image. Current candidates are:
 
-- WPS Office 2016 x86_64 for offline Office document compatibility;
+- WPS Office 2016 x86_64;
 - a browser such as Firefox ESR;
 - larger recovery and forensic suites;
-- remote-desktop and multimedia applications when their dependency closures
-  have been measured.
+- remote-desktop and multimedia applications after measuring their dependency
+  closures.

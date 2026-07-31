@@ -14,17 +14,9 @@ require_text() {
 }
 
 desktop_profile="$ROOT/profiles/applications-desktop.packages"
-gui_maintenance_profile="$ROOT/profiles/applications-gui-maintenance.packages"
-
-for package in mousepad ristretto pavucontrol xfce4-taskmanager xfce4-screenshooter thunar-archive-plugin xarchiver galculator; do
+for package in mousepad ristretto pavucontrol xfce4-taskmanager xfce4-screenshooter thunar-archive-plugin xarchiver galculator gparted; do
     require_text "$desktop_profile" "$package"
 done
-if grep -Eq '^(gparted|parted)$' "$desktop_profile"; then
-    printf 'destructive partition tools leaked into applications-desktop\n' >&2
-    exit 1
-fi
-require_text "$gui_maintenance_profile" '@include applications-desktop.packages'
-require_text "$gui_maintenance_profile" 'gparted'
 
 while IFS=$'\t' read -r package desktop_entry icon_data; do
     recipe="$ROOT/005-applications/$package/build.sh"
@@ -174,11 +166,20 @@ for command in \
     xfce4-taskmanager \
     xfce4-screenshooter \
     xarchiver \
-    galculator; do
+    galculator \
+    gparted; do
     [[ -x "$EFILINUX_ROOTFS/usr/bin/$command" ]] || \
         die "default desktop application is missing from rootfs: $command"
 done
-if [[ -e "$EFILINUX_ROOTFS/usr/bin/gparted" || \
-      -e "$EFILINUX_ROOTFS/usr/sbin/gparted" ]]; then
-    die "GParted leaked into the ordinary desktop rootfs"
+for gparted_file in \
+    /usr/libexec/gpartedbin \
+    /usr/share/applications/gparted.desktop \
+    /usr/share/locale/zh_CN/LC_MESSAGES/gparted.mo \
+    /usr/share/metainfo/gparted.appdata.xml \
+    /usr/share/polkit-1/actions/org.gnome.gparted.policy; do
+    [[ -e "$EFILINUX_ROOTFS$gparted_file" ]] || \
+        die "GParted runtime component is missing: $gparted_file"
+done
+if grep -Eq '(^|[[:space:]])egrep([[:space:]]|$)' "$EFILINUX_ROOTFS/usr/bin/gparted"; then
+    die "GParted launcher still requires the unavailable egrep command"
 fi

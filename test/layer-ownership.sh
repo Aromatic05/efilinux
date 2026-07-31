@@ -30,7 +30,7 @@ for recipe in "${gui_recipes[@]}"; do
 done
 
 stale_layer="005-""zxmod"
-stale_profile="applications-""maintenance"
+stale_profile="applications-gui-maintenance|maintenance-image"
 if rg -n --glob '!test/layer-ownership.sh' "$stale_layer|$stale_profile" \
     "$ROOT/build.sh" "$ROOT/005-utils" "$ROOT/005-applications" \
     "$ROOT/docs" "$ROOT/profiles" "$ROOT/test" "$ROOT/README.md"; then
