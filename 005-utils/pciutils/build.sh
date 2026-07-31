@@ -26,11 +26,12 @@ build() {
             PREFIX=/usr LIBDIR=/usr/lib SHARED=yes ZLIB=yes DNS=no IDSDIR=/usr/share/hwdata
     make -C "$srcdir/pciutils" PREFIX=/usr LIBDIR=/usr/lib DESTDIR="$develdir" \
         SHARED=yes ZLIB=yes DNS=no IDSDIR=/usr/share/hwdata install install-lib
+    mv "$develdir/usr/sbin/setpci" "$develdir/usr/bin/setpci"
 }
 
 devel() { strip_all "$develdir/usr/bin" "$develdir/usr/lib"; }
 package() {
-    local -a keep=(/usr/bin/lspci /usr/bin/setpci /usr/share/hwdata/pci.ids)
+    local -a keep=(/usr/bin/lspci /usr/bin/setpci /usr/share/hwdata/pci.ids.gz)
     package_add_library_family keep 'libpci.so.3*'
     package_keep "${keep[@]}"
 }
