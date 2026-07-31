@@ -22,6 +22,10 @@ prepare() {
         "$archive"
     checksum sha256 b564614be46fafe6654a497836c48bdbd411ed14d34a525dbf0cd549e33b4cda "$archive"
     extract "$archive" "$srcdir/networkmanager"
+    input_file "$recipedir/files/target-dbus-install-dirs.patch" \
+        "$srcdir/target-dbus-install-dirs.patch"
+    [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
+    patch -d "$srcdir/networkmanager" -Np1 -i "$srcdir/target-dbus-install-dirs.patch"
 }
 
 build() {
@@ -95,15 +99,29 @@ build() {
     DESTDIR="$develdir" meson install -C "$builddir"
 }
 
+check() {
+    local install_plan="$recipework/installed.json"
+
+    meson introspect --installed "$builddir" > "$install_plan"
+    python3 - "$install_plan" "$EFILINUX_SYSROOT" "$EFILINUX_BUILD" <<'PY'
+import json
+import sys
+
+plan_path, sysroot, build_root = sys.argv[1:]
+plan = json.load(open(plan_path, encoding="utf-8"))
+leaks = sorted({
+    destination
+    for destination in plan.values()
+    if sysroot in destination or build_root in destination
+})
+if leaks:
+    for destination in leaks:
+        print(destination, file=sys.stderr)
+    raise SystemExit("NetworkManager install plan contains build-host paths")
+PY
+}
+
 devel() {
-    local leaked_root="$develdir$EFILINUX_SYSROOT"
-    if [[ -d "$leaked_root" ]]; then
-        cp -a "$leaked_root/." "$develdir/"
-        rm -rf "$leaked_root"
-    fi
-    if find "$develdir" -path "*$EFILINUX_SYSROOT*" -print -quit | grep -q .; then
-        die "package contains an installation path prefixed by the target sysroot"
-    fi
     find "$develdir" -type f -name '*.la' -delete
     strip_all "$develdir/usr/bin" "$develdir/usr/lib"
 }
