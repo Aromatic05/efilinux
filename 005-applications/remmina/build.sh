@@ -60,14 +60,14 @@ package() {
         /usr/lib/remmina/plugins/remmina-plugin-vnc.so
         /usr/lib/remmina/plugins/remmina-plugin-spice.so
         /usr/lib/remmina/plugins/remmina-plugin-secret.so
-        /usr/share/remmina/theme/Builtin\ Dark.colors
-        /usr/share/remmina/theme/Builtin\ Light.colors
-        /usr/share/remmina/theme/Builtin\ Solarized\ Dark.colors
-        /usr/share/remmina/theme/Builtin\ Solarized\ Light.colors
-        /usr/share/remmina/theme/Builtin\ Tango\ Dark.colors
-        /usr/share/remmina/theme/Builtin\ Tango\ Light.colors
+        /usr/share/remmina/theme/Breeze.colors
+        /usr/share/remmina/theme/Cobalt2.colors
         /usr/share/remmina/theme/Dracula.colors
-        /usr/share/remmina/theme/Gruvbox\ Dark.colors
+        /usr/share/remmina/theme/MaterialDark.colors
+        /usr/share/remmina/theme/OneHalfDark.colors
+        /usr/share/remmina/theme/OneHalfLight.colors
+        /usr/share/remmina/theme/nord.colors
+        /usr/share/remmina/theme/tokyonight.colors
         /usr/share/applications/
         /usr/share/icons/hicolor/
         /usr/share/metainfo/
