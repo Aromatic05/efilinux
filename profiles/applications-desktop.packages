@@ -1,6 +1,9 @@
 # EFI Linux XFCE image.  GUI applications are deliberately separate from rescue.
 @include desktop.packages
 
+openjpeg
+poppler
+epdfview
 xarchiver
 mousepad
 ristretto
