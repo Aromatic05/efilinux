@@ -1,0 +1,40 @@
+--- a/engine.c
++++ b/engine.c
+@@ -20,9 +20,9 @@
+ 
+ 	/* RBF - Write user_interrupt */
+ 	fclose(i->handle);
+-	free(s);
+-	free(i);
+ 	cleanup_output(s);
++	free(i);
++	free(s);
+ 	exit(-1);
+ 	return FALSE;
+ 	}
+--- a/dir.c
++++ b/dir.c
+@@ -23,10 +23,7 @@
+ 	struct dirent	*entry;
+ 
+ 	if ((outputDir = opendir(get_output_directory(s))) == NULL)
+-		{
+-
+-		/*Error?*/
+-		}
++		return;
+ 
+ 	while ((entry = readdir(outputDir)))
+ 		{
+@@ -41,9 +38,11 @@
+ 				{
+ 				rmdir(dir_name);
+ 				}
++			closedir(temp);
+ 			}
+ 
+ 		}
++	closedir(outputDir);
+ 
+ }
+ 

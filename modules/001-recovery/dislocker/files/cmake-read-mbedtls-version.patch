@@ -1,0 +1,44 @@
+--- a/cmake/FindPolarSSL.cmake
++++ b/cmake/FindPolarSSL.cmake
+@@ -49,30 +49,17 @@
+   return()
+ endif()
+ 
+-if( NOT CMAKE_CROSSCOMPILING )
+-  execute_process(
+-    COMMAND echo "#include <${POLARSSL_INC_FOLDER}/version.h>\n#include <stdio.h>\nint main(){printf(${POLARSSL_REAL_NAME}_VERSION_STRING);return 0;}"
+-    OUTPUT_FILE a.c
+-  )
+-  execute_process(
+-    COMMAND ${CMAKE_C_COMPILER} a.c -I${POLARSSL_INCLUDE_DIRS} ${POLARSSL_LIBRARIES}
+-  )
+-  execute_process(
+-    COMMAND ./a.out
+-    OUTPUT_VARIABLE POLARSSL_VERSION_STRING
+-  )
+-  execute_process(
+-    COMMAND ${CMAKE_COMMAND} -E remove a.c a.out
+-  )
+-else()
+-  execute_process(
+-    COMMAND grep -w "MBEDTLS_VERSION_STRING" ${POLARSSL_INCLUDE_DIRS}/${POLARSSL_INC_FOLDER}/version.h
+-    COMMAND sed -e "s@\s\+@ @g"
+-    COMMAND cut -d\  -f3
+-    COMMAND sed -e "s@\"@@g"
+-    OUTPUT_VARIABLE POLARSSL_VERSION_STRING
+-  )
+-endif()
++file(STRINGS
++  "${POLARSSL_INCLUDE_DIRS}/${POLARSSL_INC_FOLDER}/version.h"
++  POLARSSL_VERSION_LINE
++  REGEX "^[ \t]*#define[ \t]+${POLARSSL_REAL_NAME}_VERSION_STRING[ \t]+\"[^\"]+\""
++)
++string(REGEX REPLACE
++  ".*\"([^\"]+)\".*"
++  "\\1"
++  POLARSSL_VERSION_STRING
++  "${POLARSSL_VERSION_LINE}"
++)
+ 
+ message("PolarSSL/mbedTLS version: " ${POLARSSL_VERSION_STRING})
+ 

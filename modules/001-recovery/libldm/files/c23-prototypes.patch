@@ -1,0 +1,33 @@
+--- a/src/ldm.h
++++ b/src/ldm.h
+@@ -254,7 +254,7 @@ GType ldm_disk_group_get_type(void);
+  *
+  * Returns: (transfer full): a new #LDM object
+  */
+-LDM *ldm_new();
++LDM *ldm_new(void);
+ 
+ /**
+  * ldm_add:
+--- a/src/ldm.c
++++ b/src/ldm.c
+@@ -2351,7 +2351,7 @@ _read_privhead(const int fd, const gchar * const path, GError ** const err)
+ }
+ 
+ LDM *
+-ldm_new()
++ldm_new(void)
+ {
+     LDM *ldm = LDM_CAST(g_object_new(LDM_TYPE, NULL));
+     ldm->priv->disk_groups = g_array_sized_new(FALSE, FALSE,
+--- a/src/ldmtool.c
++++ b/src/ldmtool.c
+@@ -815,7 +815,7 @@ main(int argc, char *argv[])
+     g_type_init();
+ #endif
+ 
+-    LDM * const ldm = ldm_new(&err);
++    LDM * const ldm = ldm_new();
+ 
+     int ret = 0;
+ 
