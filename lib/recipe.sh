@@ -620,17 +620,25 @@ recipe_print_metadata() {
 
 recipe_find_dependency() {
     local dependency=$1
-    local candidate found=
+    local layer candidate found=
+    local -a layers=(
+        000-kernel
+        001-runtime
+        002-system
+        003-graphical
+        004-desktop
+        005-utils
+        005-applications
+    )
 
-    while IFS= read -r -d '' candidate; do
+    for layer in "${layers[@]}"; do
+        candidate="$EFILINUX_ROOT/$layer/$dependency/build.sh"
+        [[ -f "$candidate" ]] || continue
         if [[ -n "$found" ]]; then
             die "multiple recipe directories provide $dependency"
         fi
         found=$candidate
-    done < <(
-        find "$EFILINUX_ROOT" -mindepth 3 -maxdepth 3 -type f \
-            -path "*/$dependency/build.sh" -print0
-    )
+    done
     [[ -n "$found" ]] || die "dependency recipe is missing: $dependency"
     printf '%s' "$found"
 }

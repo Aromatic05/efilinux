@@ -171,9 +171,18 @@ fi
 grep -Fxq '/usr/share/mock/optional.txt' < <(tar -xOf "$archive" .FILELIST)
 
 dependency_root="$work/dependency-root"
-dependency_directory="$dependency_root/stage/dependency"
-consumer_directory="$dependency_root/stage/consumer"
-mkdir -p "$dependency_directory" "$consumer_directory" "$dependency_root/profiles"
+dependency_directory="$dependency_root/001-runtime/dependency"
+consumer_directory="$dependency_root/005-utils/consumer"
+module_shadow_directory="$dependency_root/modules/999-shadow/dependency"
+module_only_directory="$dependency_root/modules/999-shadow/module-only"
+module_consumer_directory="$dependency_root/005-utils/module-consumer"
+mkdir -p \
+    "$dependency_directory" \
+    "$consumer_directory" \
+    "$module_shadow_directory" \
+    "$module_only_directory" \
+    "$module_consumer_directory" \
+    "$dependency_root/profiles"
 cp "$ROOT/profiles/makepkg.conf" "$dependency_root/profiles/makepkg.conf"
 
 cat > "$dependency_directory/build.sh" <<EOF
@@ -190,11 +199,60 @@ depends=()
 builddepends=()
 makedepends=(install)
 prepare() { :; }
-build() { install -Dm0644 /dev/null "\$develdir/usr/include/dependency.h"; }
+build() {
+    printf 'base\n' >> "$work/dependency-builds"
+    install -Dm0644 /dev/null "\$develdir/usr/include/dependency.h"
+}
 package() { package_keep; }
 recipe_main "\$@"
 EOF
 chmod 0755 "$dependency_directory/build.sh"
+
+cat > "$module_shadow_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+pkgname=dependency
+pkgver=1
+depends=()
+builddepends=()
+makedepends=(install)
+prepare() { :; }
+build() {
+    printf 'module-shadow\n' >> "$work/module-dependency-builds"
+    install -Dm0644 /dev/null "\$develdir/usr/include/dependency.h"
+}
+package() { package_keep; }
+recipe_main "\$@"
+EOF
+chmod 0755 "$module_shadow_directory/build.sh"
+
+cat > "$module_only_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+pkgname=module-only
+pkgver=1
+depends=()
+builddepends=()
+makedepends=(install)
+prepare() { :; }
+build() {
+    printf 'module-only\n' >> "$work/module-only-builds"
+    install -Dm0644 /dev/null "\$develdir/usr/include/module-only.h"
+}
+package() { package_keep; }
+recipe_main "\$@"
+EOF
+chmod 0755 "$module_only_directory/build.sh"
 
 cat > "$consumer_directory/build.sh" <<EOF
 #!/usr/bin/env bash
@@ -221,6 +279,14 @@ EOF
 chmod 0755 "$consumer_directory/build.sh"
 
 EFILINUX_ROOT="$dependency_root" "$consumer_directory/build.sh"
+[[ $(cat "$work/dependency-builds") == base ]] || {
+    printf 'dependency lookup did not select the fixed base layer\n' >&2
+    exit 1
+}
+[[ ! -e "$work/module-dependency-builds" ]] || {
+    printf 'base dependency lookup executed a module recipe\n' >&2
+    exit 1
+}
 rm -rf -- "$EFILINUX_SYSROOT"
 mkdir -p "$EFILINUX_SYSROOT"
 EFILINUX_ROOT="$dependency_root" "$consumer_directory/build.sh"
@@ -229,11 +295,41 @@ EFILINUX_ROOT="$dependency_root" "$consumer_directory/build.sh"
     exit 1
 }
 
+cat > "$module_consumer_directory/build.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$ROOT"
+source "\$ROOT/config.sh"
+source "\$ROOT/lib/common.sh"
+source "\$ROOT/lib/package.sh"
+source "\$ROOT/lib/recipe.sh"
+pkgname=module-consumer
+pkgver=1
+depends=(module-only)
+builddepends=()
+makedepends=(install)
+prepare() { :; }
+build() { install -Dm0644 /dev/null "\$develdir/usr/share/module-consumer"; }
+package() { :; }
+recipe_main "\$@"
+EOF
+chmod 0755 "$module_consumer_directory/build.sh"
+if EFILINUX_ROOT="$dependency_root" "$module_consumer_directory/build.sh" \
+        >"$work/module-consumer.stdout" 2>"$work/module-consumer.stderr"; then
+    printf 'base recipe accepted a dependency provided only by a module\n' >&2
+    exit 1
+fi
+grep -Fq 'dependency recipe is missing: module-only' "$work/module-consumer.stderr"
+[[ ! -e "$work/module-only-builds" ]] || {
+    printf 'base dependency lookup executed a module-only recipe\n' >&2
+    exit 1
+}
+
 diamond_root="$work/diamond-root"
-shared_directory="$diamond_root/stage/shared"
-left_directory="$diamond_root/stage/left"
-right_directory="$diamond_root/stage/right"
-top_directory="$diamond_root/stage/top"
+shared_directory="$diamond_root/001-runtime/shared"
+left_directory="$diamond_root/002-system/left"
+right_directory="$diamond_root/003-graphical/right"
+top_directory="$diamond_root/005-utils/top"
 mkdir -p \
     "$shared_directory" \
     "$left_directory" \
@@ -267,7 +363,10 @@ EOF
 chmod 0755 "$shared_directory/build.sh"
 
 for branch in left right; do
-    branch_directory="$diamond_root/stage/$branch"
+    case $branch in
+        left) branch_directory=$left_directory ;;
+        right) branch_directory=$right_directory ;;
+    esac
     cat > "$branch_directory/build.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
