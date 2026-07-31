@@ -6,7 +6,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command qemu-system-x86_64 timeout
+require_command gcc mke2fs qemu-system-x86_64 readelf timeout truncate
 ensure_directories
 
 qemu_cpu=${QEMU_CPU:-Nehalem}
@@ -15,11 +15,37 @@ ovmf_vars_template=${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}
 ovmf_vars="$EFILINUX_TEST/OVMF_VARS.graphical.fd"
 boot_log="$EFILINUX_LOGS/qemu-graphical-boot.log"
 efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
+probe_source="$ROOT/test/helpers/glx-llvmpipe-probe.c"
+guest_checks="$ROOT/test/helpers/graphical-guest-checks.sh"
+probe_binary="$EFILINUX_TEST/glx-llvmpipe-probe"
+probe_stage="$EFILINUX_TEST/glx-llvmpipe-stage"
+probe_disk="$EFILINUX_TEST/glx-llvmpipe.img"
 
 [[ -f "$efi_binary" ]] || die "EFI binary is missing: $efi_binary"
 [[ -f "$ovmf_code" ]] || die "OVMF code image is missing: $ovmf_code"
 [[ -f "$ovmf_vars_template" ]] || \
     die "OVMF variables image is missing: $ovmf_vars_template"
+[[ -f "$probe_source" ]] || die "GLX llvmpipe probe source is missing: $probe_source"
+[[ -x "$guest_checks" ]] || die "graphical guest checks are missing: $guest_checks"
+
+(
+    source "$ROOT/profiles/makepkg.conf"
+    gcc $CFLAGS "$probe_source" -o "$probe_binary" \
+        $LDFLAGS -lGL -lX11 -ldl -lm
+)
+while IFS= read -r needed; do
+    [[ -e "$EFILINUX_ROOTFS/usr/lib/$needed" ]] ||
+        die "GLX probe dependency is outside the rootfs: $needed"
+done < <(LC_ALL=C readelf -d "$probe_binary" |
+    awk '/NEEDED/ { gsub(/\[|\]/, "", $NF); print $NF }')
+
+rm -rf -- "$probe_stage"
+rm -f -- "$probe_disk"
+mkdir -p "$probe_stage"
+install -m0755 "$probe_binary" "$probe_stage/glx-llvmpipe-probe"
+install -m0755 "$guest_checks" "$probe_stage/graphical-guest-checks.sh"
+truncate -s 16M "$probe_disk"
+mke2fs -q -F -t ext2 -L GLXPROBE -d "$probe_stage" "$probe_disk"
 
 cp "$ovmf_vars_template" "$ovmf_vars"
 
@@ -27,89 +53,24 @@ log "Booting graphical EFI Linux with VirtIO-GPU"
 set +e
 {
     sleep 100
-    cat <<'GUEST_CHECKS'
-ok=1
-test "$(cat /run/efilinux/runlevel 2>/dev/null)" = 5 || { echo FAIL:runlevel; ok=0; }
-test -S /tmp/.X11-unix/X0 || { echo FAIL:x11-socket; ok=0; }
-test -s /run/efilinux/graphical.pid || { echo FAIL:graphical-pidfile; ok=0; }
-test "$ok" = 0 || kill -0 "$(cat /run/efilinux/graphical.pid)" || { echo FAIL:graphical-wrapper; ok=0; }
-test -s /etc/xdg/menus/xfce-applications.menu || { echo FAIL:applications-menu; ok=0; }
-pidof Xorg >/dev/null || { echo FAIL:Xorg; ok=0; }
-pidof xfce4-session >/dev/null || { echo FAIL:xfce4-session; ok=0; }
-pidof xfsettingsd >/dev/null || { echo FAIL:xfsettingsd; ok=0; }
-pidof xfwm4 >/dev/null || { echo FAIL:xfwm4; ok=0; }
-pidof xfce4-panel >/dev/null || { echo FAIL:xfce4-panel; ok=0; }
-pidof xfdesktop >/dev/null || { echo FAIL:xfdesktop; ok=0; }
-pidof xfce4-notifyd >/dev/null || { echo FAIL:xfce4-notifyd; ok=0; }
-pidof xfce4-screensaver >/dev/null || { echo FAIL:xfce4-screensaver; ok=0; }
-pidof xfce-polkit >/dev/null || { echo FAIL:xfce-polkit; ok=0; }
-test -x /usr/bin/gparted || { echo FAIL:gparted-launcher; ok=0; }
-test -x /usr/libexec/gpartedbin || { echo FAIL:gparted-helper; ok=0; }
-test -f /usr/share/polkit-1/actions/org.gnome.gparted.policy || { echo FAIL:gparted-policy; ok=0; }
-test -f /usr/share/applications/gparted.desktop || { echo FAIL:gparted-desktop; ok=0; }
-test -f /etc/pam.d/xfce4-screensaver || { echo FAIL:xfce4-screensaver-pam; ok=0; }
-grep -Fqx 'auth include system-auth' /etc/pam.d/xfce4-screensaver || { echo FAIL:xfce4-screensaver-pam-policy; ok=0; }
-xorg_log=/var/log/Xorg.0.log
-test -f "$xorg_log" || { echo FAIL:xorg-log; ok=0; }
-grep -Fq "Using input driver 'libinput' for 'AT Translated Set 2 keyboard'" "$xorg_log" || { echo FAIL:keyboard-libinput; ok=0; }
-grep -Fq "Using input driver 'libinput' for 'QEMU QEMU USB Tablet'" "$xorg_log" || { echo FAIL:tablet-libinput; ok=0; }
-! grep -Fq 'No input driver specified, ignoring this device.' "$xorg_log" || { echo FAIL:ignored-input-device; ok=0; }
-! grep -Fq 'AIGLX error:' "$xorg_log" || { echo FAIL:aiglx; ok=0; }
-! grep -Fq '/tmp/efilinux' "$xorg_log" || { echo FAIL:xorg-host-path; ok=0; }
-notification_wrapper=
-for cmdline in /proc/[0-9]*/cmdline; do
-    if tr '\0' '\n' <"$cmdline" | grep -Fxq notification-plugin; then
-        wrapper_path=${cmdline#/proc/}
-        notification_wrapper=${wrapper_path%/cmdline}
-        break
-    fi
-done
-test -n "$notification_wrapper" || { echo FAIL:notification-wrapper-missing; ok=0; }
-test -z "$notification_wrapper" || kill -0 "$notification_wrapper" || { echo FAIL:notification-wrapper-dead; ok=0; }
-! grep -qi 'failed to load applications menu' /var/log/graphical.log || { echo FAIL:menu-load; ok=0; }
-test -x /usr/bin/dbus-update-activation-environment || { echo FAIL:dbus-update-tool; ok=0; }
-test -f /usr/share/defaults/at-spi2/accessibility.conf || { echo FAIL:atspi-config; ok=0; }
-pidof at-spi-bus-launcher >/dev/null || { echo FAIL:atspi-launcher; ok=0; }
-pidof at-spi2-registryd >/dev/null || { echo FAIL:atspi-registry; ok=0; }
-pidof pipewire >/dev/null || { echo FAIL:pipewire; ok=0; }
-pidof pipewire-pulse >/dev/null || { echo FAIL:pipewire-pulse; ok=0; }
-pidof wireplumber >/dev/null || { echo FAIL:wireplumber; ok=0; }
-test -S /run/user/1000/pipewire-0 || { echo FAIL:pipewire-socket; ok=0; }
-test -S /run/user/1000/pulse/native || { echo FAIL:pulse-socket; ok=0; }
-su -s /usr/bin/sh user -c 'XDG_RUNTIME_DIR=/run/user/1000 pactl info >/dev/null 2>&1' || { echo FAIL:pactl; ok=0; }
-su -s /usr/bin/sh user -c 'XDG_RUNTIME_DIR=/run/user/1000 elogind-inhibit --what=sleep --mode=delay --who=efilinux-test --why=screen-lock-test /usr/bin/true' || { echo FAIL:elogind-sleep-inhibit; ok=0; }
-! grep -Fq 'Failed to start message bus: Failed to open "/usr/share/defaults/at-spi2/accessibility.conf"' /var/log/graphical.log || { echo FAIL:atspi-bus-log; ok=0; }
-! grep -Fq 'dbus-update-activation-environment' /var/log/graphical.log || { echo FAIL:dbus-env-log; ok=0; }
-! grep -Fq 'pa_context_connect() failed: Access denied' /var/log/graphical.log || { echo FAIL:pulse-access; ok=0; }
-settings_pid=$(pidof xfsettingsd 2>/dev/null || true)
-test -n "$settings_pid" || { echo FAIL:settings-pid; ok=0; }
-bus=
-test -z "$settings_pid" || bus=$(tr '\0' '\n' </proc/$settings_pid/environ | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p')
-test -n "$bus" || { echo FAIL:session-bus; ok=0; }
-gtk_theme=
-test -z "$bus" || gtk_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xsettings -p /Net/ThemeName")
-test "$gtk_theme" = Qogir || { echo FAIL:gtk-theme; ok=0; }
-icon_theme=
-test -z "$bus" || icon_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xsettings -p /Net/IconThemeName")
-test "$icon_theme" = Qogir || { echo FAIL:icon-theme; ok=0; }
-cursor_theme=
-test -z "$bus" || cursor_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xsettings -p /Gtk/CursorThemeName")
-test "$cursor_theme" = Qogir || { echo FAIL:cursor-theme; ok=0; }
-xfwm_theme=
-test -z "$bus" || xfwm_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xfwm4 -p /general/theme")
-test "$xfwm_theme" = Qogir || { echo FAIL:xfwm-theme; ok=0; }
-su -s /usr/bin/sh user -c 'DISPLAY=:0 XAUTHORITY=/home/user/.Xauthority xwininfo -root >/dev/null' || { echo FAIL:xwininfo; ok=0; }
-test "$ok" = 1 && echo EFILINUX_XFCE_OK
-echo EFILINUX_XFCE_CHECK_DONE
-poweroff -f
-GUEST_CHECKS
-} | timeout --signal=TERM 180s qemu-system-x86_64 \
+    printf '%s\n' 'stty -ixon -ixoff 2>/dev/null || true'
+    sleep 1
+    printf '%s\n' 'modprobe virtio_blk || { echo FAIL:virtio-blk-module; poweroff -f; exit; }'
+    printf '%s\n' 'udevadm settle --timeout=10 2>/dev/null || true'
+    printf '%s\n' 'test -b /dev/vda || { echo FAIL:glx-probe-device; cat /proc/partitions; poweroff -f; exit; }'
+    printf '%s\n' 'mkdir -p /mnt/glx-probe'
+    printf '%s\n' 'mount -t ext2 -o ro /dev/vda /mnt/glx-probe || { echo FAIL:glx-probe-mount; poweroff -f; exit; }'
+    printf '%s\n' 'exec /mnt/glx-probe/graphical-guest-checks.sh'
+} | timeout --signal=TERM 220s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \
+    -smp 4 \
     -m 3G \
     -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
     -drive if=pflash,format=raw,file="$ovmf_vars" \
     -drive format=raw,file=fat:rw:"$EFILINUX_EFI_DIR" \
+    -drive if=none,id=glxprobe,format=raw,file="$probe_disk" \
+    -device virtio-blk-pci,drive=glxprobe \
     -vga none \
     -device virtio-vga \
     -device qemu-xhci,id=xhci \
@@ -142,6 +103,19 @@ if ! grep -Fxq 'EFILINUX_XFCE_OK' "$normalized_log"; then
     tail -n 200 "$boot_log" >&2
     die "Xorg and the XFCE desktop did not become operational on VirtIO-GPU"
 fi
+for marker in \
+    EFILINUX_GL_RENDERER=llvmpipe \
+    EFILINUX_GL_SHADER_OK \
+    EFILINUX_GL_COMPUTE_OK; do
+    grep -Fxq "$marker" "$normalized_log" || {
+        tail -n 240 "$boot_log" >&2
+        die "graphical guest did not report $marker"
+    }
+done
+if ! grep -Eq '^EFILINUX_LLVMPIPE_THREADS=[2-9][0-9]*$' "$normalized_log"; then
+    tail -n 240 "$boot_log" >&2
+    die "llvmpipe did not report multiple worker threads"
+fi
 
-log "OVMF boot reached a live XFCE 4.18 session on Xorg and VirtIO-GPU"
+log "OVMF boot reached XFCE and completed llvmpipe GLX, GLSL, compute, and threading checks"
 printf 'Boot log: %s\n' "$boot_log"

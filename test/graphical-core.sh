@@ -31,6 +31,7 @@ harfbuzz_version=$(recipe_version "$ROOT/003-graphical/harfbuzz/build.sh")
 fribidi_version=$(recipe_version "$ROOT/003-graphical/fribidi/build.sh")
 pixman_version=$(recipe_version "$ROOT/003-graphical/pixman/build.sh")
 mesa_version=$(recipe_version "$ROOT/003-graphical/mesa/build.sh")
+mesa_gallium_zstd_limit=32500000
 
 require_file() {
     local path=$1
@@ -115,6 +116,22 @@ done
 gallium_library=$(find "$sysroot/usr/lib" -maxdepth 1 -type f -name 'libgallium-*.so' -print -quit)
 [[ -n "$gallium_library" ]] || die "Mesa Gallium shared library is missing"
 
+grep -Fqx 'llvmpipe' < <(strings "$gallium_library") || \
+    die "Mesa Gallium library does not contain llvmpipe"
+grep -Fqx 'LP_NUM_THREADS' < <(strings "$gallium_library") || \
+    die "Mesa Gallium library does not contain llvmpipe threading support"
+
+if grep -Eq '(^|[[:space:]])LLVM' < <(LC_ALL=C nm -D --undefined-only "$gallium_library"); then
+    die "Mesa Gallium library has unresolved dynamic LLVM symbols"
+fi
+if grep -Eq '(^|[[:space:]])LLVM' < <(LC_ALL=C nm -D --defined-only "$gallium_library"); then
+    die "Mesa Gallium library exports LLVM symbols as public ABI"
+fi
+
+gallium_zstd_size=$(zstd -q -19 -c "$gallium_library" | wc -c)
+((gallium_zstd_size <= mesa_gallium_zstd_limit)) || \
+    die "static-LLVM libgallium is too large: $gallium_zstd_size bytes (limit $mesa_gallium_zstd_limit)"
+
 dri_entry="$sysroot/usr/lib/dri/libdril_dri.so"
 [[ -f $dri_entry ]] || die "Mesa DRI entry library is missing"
 for driver in \
@@ -158,4 +175,4 @@ font_count=$(find "$sysroot/usr/share/fonts/truetype/dejavu" \
     -maxdepth 1 -type f -name '*.ttf' | wc -l)
 ((font_count >= 20)) || die "DejaVu font set is incomplete: $font_count files"
 
-log "003-graphical core no-LLVM Mesa, input, text, fonts, and no-Wayland contract passed"
+log "003-graphical core static-LLVM llvmpipe, input, text, fonts, and no-Wayland contract passed"

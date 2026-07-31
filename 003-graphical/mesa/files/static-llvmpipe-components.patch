@@ -1,0 +1,14 @@
+--- a/meson.build
++++ b/meson.build
+@@ -1877,3 +1877,3 @@
+-llvm_modules = ['bitwriter', 'engine', 'mcdisassembler', 'mcjit', 'core', 'executionengine', 'scalaropts', 'transformutils', 'instcombine']
+-llvm_optional_modules = ['coroutines']
+-if with_amd_vk or with_gallium_radeonsi
++llvm_modules = ['bitwriter', 'mcdisassembler', 'mcjit', 'core', 'executionengine', 'scalaropts', 'transformutils', 'instcombine']
++llvm_optional_modules = []
++if with_amd_vk or (with_gallium_radeonsi and amd_with_llvm)
+@@ -1890,3 +1890 @@
+-  llvm_modules += 'native'
+-  # lto is needded with LLVM>=15, but we don't know what LLVM verrsion we are using yet
+-  llvm_optional_modules += ['lto']
++  llvm_modules += ['native', 'passes']

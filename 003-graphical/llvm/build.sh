@@ -26,6 +26,10 @@ prepare() {
 }
 
 build() {
+    CFLAGS+=" -ffunction-sections -fdata-sections"
+    CXXFLAGS+=" -ffunction-sections -fdata-sections"
+    export CFLAGS CXXFLAGS
+
     target_cmake_setup "$srcdir/source/llvm" "$builddir" \
         -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU' \
         -DLLVM_BUILD_LLVM_DYLIB=ON \

@@ -22,7 +22,47 @@ prepare() {
     download "https://archive.mesa3d.org/mesa-$pkgver.tar.xz" "$archive"
     checksum sha256 79e421c7ce18cd9e790b8375920325779f10798630bf30e0b22f1a21c8617122 "$archive"
     extract "$archive" "$srcdir/source"
+    input_file "$recipedir/files/static-llvmpipe-components.patch" "$srcdir/static-llvmpipe-components.patch"
     input_shared_file "$ROOT/lib/target-build.sh" "$srcdir/target-build.sh"
+}
+
+create_target_llvm_config_wrapper() {
+    local wrapper_directory=$1
+    local wrapper="$wrapper_directory/llvm-config"
+
+    mkdir -p "$wrapper_directory"
+    cat > "$wrapper" <<'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${EFILINUX_SYSROOT:?}"
+
+target_prefix="$EFILINUX_SYSROOT/usr"
+loader="$target_prefix/lib/ld-linux-x86-64.so.2"
+program="$target_prefix/bin/llvm-config"
+
+run_llvm_config() {
+    env -u LD_PRELOAD -u LD_LIBRARY_PATH \
+        "$loader" \
+        --library-path "$target_prefix/lib" \
+        "$program" "$@"
+}
+
+reported_prefix=$(run_llvm_config --prefix)
+output=$(run_llvm_config "$@")
+output=${output//"$reported_prefix"/"$target_prefix"}
+
+case " $* " in
+    *" --cppflags "*)
+        output=${output//"-I$target_prefix/include"/}
+        output=$(printf '%s\n' "$output" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
+        ;;
+esac
+
+printf '%s\n' "$output"
+WRAPPER
+    chmod 0755 "$wrapper"
+    TARGET_LLVM_CONFIG=$wrapper
 }
 
 build_mesa_clc_tools() {
@@ -31,11 +71,16 @@ build_mesa_clc_tools() {
     local tools_directory="$recipework/host-tools"
     local mesa_clc vtn_bindgen2
 
+    reset_directory "$tools_build"
+    reset_directory "$tools_directory"
+
+    LLVM_CONFIG="$TARGET_LLVM_CONFIG" \
     PATH="$wrapper_directory:$PATH" target_meson_setup "$srcdir/source" "$tools_build" \
         -Dplatforms=x11 \
         -Dgallium-drivers=iris,crocus \
         -Dvulkan-drivers= \
         -Dllvm=enabled \
+        -Dshared-llvm=enabled \
         -Dmesa-clc=enabled \
         -Dspirv-tools=enabled \
         -Dstatic-libclc=all \
@@ -47,6 +92,10 @@ build_mesa_clc_tools() {
         -Dbuild-tests=false \
         -Denable-glcpp-tests=false \
         -Dtools=
+    LLVM_CONFIG="$TARGET_LLVM_CONFIG" \
+    PKG_CONFIG_SYSROOT_DIR="$EFILINUX_SYSROOT" \
+    PKG_CONFIG_LIBDIR="$EFILINUX_SYSROOT/usr/lib/pkgconfig:$EFILINUX_SYSROOT/usr/share/pkgconfig" \
+    PYTHONPATH="$(target_python_path)" \
     PATH="$wrapper_directory:$PATH" \
         meson compile -C "$tools_build" -j "$EFILINUX_JOBS" mesa_clc vtn_bindgen2
 
@@ -81,17 +130,29 @@ unset LD_PRELOAD LD_LIBRARY_PATH
 exec "$system_zstd" "\$@"
 WRAPPER
     chmod 0755 "$wrapper_directory/zstd"
+    create_target_llvm_config_wrapper "$wrapper_directory"
+    LLVM_CONFIG=$TARGET_LLVM_CONFIG
+    export LLVM_CONFIG
     build_mesa_clc_tools "$wrapper_directory"
     mesa_clc_tools=$MESA_CLC_TOOLS
+
+    patch -d "$srcdir/source" -p1 < "$srcdir/static-llvmpipe-components.patch"
+
+    CFLAGS+=" -ffunction-sections -fdata-sections"
+    CXXFLAGS+=" -ffunction-sections -fdata-sections"
+    LDFLAGS+=" -Wl,--gc-sections"
+    export CFLAGS CXXFLAGS LDFLAGS
 
     PATH="$mesa_clc_tools:$wrapper_directory:$PATH" target_meson_setup "$srcdir/source" "$builddir" \
         -Dplatforms=x11 \
         -Degl-native-platform=x11 \
-        -Dgallium-drivers=iris,crocus,radeonsi,nouveau,virgl,softpipe \
+        -Dgallium-drivers=iris,crocus,radeonsi,nouveau,virgl,llvmpipe,softpipe \
         -Dvulkan-drivers= \
         -Dvideo-codecs= \
-        -Dllvm=disabled \
-        -Ddraw-use-llvm=false \
+        -Dllvm=enabled \
+        -Dshared-llvm=disabled \
+        -Ddraw-use-llvm=true \
+        -Dllvm-orcjit=false \
         -Damd-use-llvm=false \
         -Dmesa-clc=system \
         -Dspirv-tools=disabled \
