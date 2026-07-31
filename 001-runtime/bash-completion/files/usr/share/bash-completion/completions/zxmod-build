@@ -1,0 +1,13 @@
+_zxmod_build() {
+    local current=${COMP_WORDS[COMP_CWORD]}
+
+    case $current in
+        --*)
+            COMPREPLY=($(compgen -W '--id --version --arch --description' -- "$current"))
+            ;;
+        *)
+            _filedir
+            ;;
+    esac
+}
+complete -F _zxmod_build zxmod-build

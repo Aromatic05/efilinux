@@ -1,0 +1,21 @@
+_zxmod() {
+    local current=${COMP_WORDS[COMP_CWORD]}
+    local command=${COMP_WORDS[1]-}
+
+    if (( COMP_CWORD == 1 )); then
+        COMPREPLY=($(compgen -W 'inspect list load unload enable disable startup' -- "$current"))
+        return
+    fi
+
+    case $command in
+        inspect|load|enable)
+            _filedir zxm
+            ;;
+        unload|disable)
+            if command -v zxmod >/dev/null 2>&1; then
+                COMPREPLY=($(compgen -W "$(zxmod list 2>/dev/null | awk 'NR > 1 { print $1 }')" -- "$current"))
+            fi
+            ;;
+    esac
+}
+complete -F _zxmod zxmod

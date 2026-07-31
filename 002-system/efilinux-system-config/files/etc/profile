@@ -1,5 +1,16 @@
 export PATH=/usr/bin
 export HOME=${HOME:-/root}
 export TERM=${TERM:-linux}
-export PAGER=${PAGER:-cat}
+export EDITOR=${EDITOR:-vi}
+export VISUAL=${VISUAL:-$EDITOR}
+if command -v less >/dev/null 2>&1; then
+    export PAGER=${PAGER:-less}
+    export LESS=${LESS:--R}
+else
+    export PAGER=${PAGER:-cat}
+fi
 umask 022
+
+if [ -n "${BASH_VERSION:-}" ] && [ -r /etc/bash.bashrc ]; then
+    . /etc/bash.bashrc
+fi

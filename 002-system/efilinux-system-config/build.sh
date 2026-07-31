@@ -12,7 +12,7 @@ pkgname=efilinux-system-config
 pkgver=1
 sysroot=false
 
-depends=(base-files doas)
+depends=(base-files bash bash-completion doas)
 builddepends=()
 makedepends=(awk install openssl)
 

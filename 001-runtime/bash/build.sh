@@ -15,6 +15,10 @@ prepare() {
     download "https://ftp.gnu.org/gnu/bash/bash-$pkgver.tar.gz" "$archive"
     checksum sha256 0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba "$archive"
     extract "$archive" "$srcdir/source"
+    [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
+    sed -i \
+        's@^/\* #define SYS_BASHRC "/etc/bash.bashrc" \*/@#define SYS_BASHRC "/etc/bash.bashrc"@' \
+        "$srcdir/source/config-top.h"
 }
 build() {
     local small_cflags="${CFLAGS/-O2/-Os} -ffunction-sections -fdata-sections"

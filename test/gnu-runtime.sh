@@ -54,6 +54,24 @@ assert_gnu_program ps procps-ng
 assert_gnu_program free procps-ng
 assert_gnu_program top procps-ng
 
+[[ -r "$rootfs/etc/bash.bashrc" ]] || die "system Bash configuration is missing"
+grep -Fq '/etc/bash.bashrc' < <(strings "$rootfs/usr/bin/bash") ||
+    die "Bash was not built with the system bashrc path"
+grep -Fq 'source /usr/share/bash-completion/bash_completion' \
+    "$rootfs/etc/bash.bashrc" || die "system Bash completion is not enabled"
+grep -Fq 'HISTCONTROL=ignoreboth:erasedups' "$rootfs/etc/bash.bashrc" ||
+    die "Bash history policy is missing"
+grep -Fq 'history-search-backward' "$rootfs/etc/bash.bashrc" ||
+    die "Bash history search binding is missing"
+grep -Fq '__efilinux_prompt_command' "$rootfs/etc/bash.bashrc" ||
+    die "EFILinux prompt implementation is missing"
+[[ -r "$rootfs/usr/share/bash-completion/bash_completion" ]] ||
+    die "bash-completion framework is missing"
+[[ -r "$rootfs/usr/share/bash-completion/completions/ssh" ]] ||
+    die "SSH completion is missing"
+[[ -r "$rootfs/usr/share/bash-completion/completions/zxmod" ]] ||
+    die "ZXMOD completion is missing"
+
 [[ -L "$rootfs/usr/bin/sh" ]] || die "/usr/bin/sh is not a symbolic link"
 [[ $(readlink -- "$rootfs/usr/bin/sh") == busybox ]] || \
     die "/usr/bin/sh must remain the BusyBox rescue shell"
@@ -121,16 +139,17 @@ declare -A limits=(
     [gzip]=80000
     [cpio]=80000
     [procps-ng]=260000
+    [bash-completion]=260000
 )
 
 total=0
-for package in bash coreutils findutils grep sed gawk diffutils tar gzip cpio procps-ng; do
+for package in bash bash-completion coreutils findutils grep sed gawk diffutils tar gzip cpio procps-ng; do
     size=$(package_payload_size "$package")
     printf '%-12s %8d bytes (limit %d)\n' "$package" "$size" "${limits[$package]}"
     (( size <= limits[$package] )) || die "$package runtime payload exceeds its size budget"
     total=$((total + size))
 done
-(( total <= 2400000 )) || die "GNU runtime payload exceeds the 2.4 MB aggregate budget"
+(( total <= 2650000 )) || die "GNU runtime payload exceeds the 2.65 MB aggregate budget"
 printf 'GNU runtime payload total: %d bytes\n' "$total"
 
 log "GNU runtime commands, semantics, login shell, and size budgets passed"

@@ -23,6 +23,7 @@ libexif
 ncurses
 readline
 bash
+bash-completion
 coreutils
 diffutils
 findutils
