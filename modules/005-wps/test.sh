@@ -111,6 +111,6 @@ for name in wps et wpp; do
 done
 
 size=$(stat -c %s "$artifact")
-(( size <= 96 * 1024 * 1024 )) || die "WPS module exceeds 96 MiB: $size"
+(( size <= 128 * 1024 * 1024 )) || die "WPS module exceeds 128 MiB: $size"
 sha256sum "$artifact"
 log "WPS desktop integration, launchers, ELF closure, application startup, and size budget passed ($size bytes)"

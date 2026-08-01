@@ -31,15 +31,22 @@ build() {
 }
 
 devel() {
+    local office_lib="$develdir/opt/kingsoft/wps-office/office6"
+    local library
+
     find "$develdir" -type f \( -name '*.a' -o -name '*.la' \) -delete
     rm -rf "$develdir/usr/share/man"
     strip_all "$develdir/usr/lib"
+
+    install -d -m0755 "$office_lib"
+    while IFS= read -r -d '' library; do
+        mv -- "$library" "$office_lib/"
+    done < <(find "$develdir/usr/lib" -maxdepth 1 \
+        \( -type f -o -type l \) -name 'libpng12.so.*' -print0)
 }
 
 package() {
-    local -a keep=()
-    package_add_library_family keep 'libpng12.so.*'
-    package_keep "${keep[@]}"
+    package_keep /opt/kingsoft/wps-office/office6/
 }
 
 recipe_main "$@"

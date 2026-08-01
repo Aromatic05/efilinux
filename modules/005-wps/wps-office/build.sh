@@ -79,7 +79,7 @@ wps_prune_locales() {
         [[ -d "$directory" ]] || continue
         while IFS= read -r -d '' locale; do
             case $(basename -- "$locale") in
-                en_US|zh_CN) ;;
+                default|en_US|zh_CN) ;;
                 *) rm -rf -- "$locale" ;;
             esac
         done < <(find "$directory" -mindepth 1 -maxdepth 1 -type d -print0)
@@ -125,14 +125,21 @@ build() {
     dpkg-deb --extract "$downloaddir/$wps_deb_name" "$srcdir/unpacked"
     cp -a "$srcdir/unpacked/." "$develdir/"
 
+    # Qt 4.7 MIT-SHM rendering is broken with the current virtio-gpu/modesetting
+    # path and leaves the WPS document canvas blank. Keep the workaround local
+    # to WPS instead of disabling MIT-SHM for the whole desktop session.
+    local launcher
+    for launcher in wps et wpp; do
+        sed -i '2iexport QT_X11_NO_MITSHM=1' "$develdir/usr/bin/$launcher"
+    done
+
     rm -rf -- \
         "$develdir/usr/share/doc" \
         "$develdir/usr/share/man" \
         "$develdir/usr/include" \
-        "$develdir/usr/lib/pkgconfig" \
-        "$develdir/opt/kingsoft/wps-office/office6/addons/homepage"
+        "$develdir/usr/lib/pkgconfig"
     find "$develdir/opt/kingsoft/wps-office/office6" -type d \
-        \( -iname fonts -o -iname templates -o -iname help \) \
+        \( -iname fonts -o -iname help \) \
         -prune -exec rm -rf -- {} +
     find "$develdir/opt/kingsoft/wps-office" -type f \
         \( -name '*.a' -o -name '*.la' -o -name '*.o' -o -name '*.debug' \) -delete
