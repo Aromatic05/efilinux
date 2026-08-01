@@ -12,7 +12,6 @@ module_max_size=$((48 * 1024 * 1024))
 module_post_load=hooks/post-load
 module_pre_unload=hooks/pre-unload
 module_components=(
-    extra-cmake-modules
     libuv
     iso-codes
     xcb-util-keysyms
@@ -21,7 +20,6 @@ module_components=(
     fmt
     libxkbcommon-x11-runtime
     fcitx5
-    fcitx5-gtk
     efilinux-fcitx-config
     boost
     libime

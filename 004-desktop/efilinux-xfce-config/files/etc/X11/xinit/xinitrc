@@ -4,8 +4,6 @@ export LANG="${LANG:-en_US.UTF-8}"
 export XDG_CONFIG_DIRS="/opt/fcitx5/etc/xdg:/etc/xdg"
 export XDG_DATA_DIRS="/opt/fcitx5/share:/usr/local/share:/usr/share"
 export GTK_IM_MODULE=fcitx
-export GTK_IM_MODULE_FILE=/opt/fcitx5/etc/gtk-3.0/gtk.immodules
-export GTK_PATH=/opt/fcitx5/lib/gtk-3.0
 export QT_IM_MODULE=xim
 export XMODIFIERS=@im=fcitx
 export SDL_IM_MODULE=fcitx

@@ -1,6 +1,5 @@
 # Fcitx core integration, GTK3 frontend, configuration UI, Chinese Pinyin,
 # built-in Chinese tables, and additional lightweight tables.
-fcitx5-gtk
 efilinux-fcitx-config
 fcitx5-chinese-addons
 fcitx5-table-extra

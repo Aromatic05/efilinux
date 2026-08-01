@@ -55,12 +55,6 @@ for desktop in desktop_files:
 print(f"input desktop integration: {resolved} launchers resolved")
 PY
 
-gtk_module=$(find "$module_root/opt/fcitx5/lib/gtk-3.0" -type f -name 'im-fcitx5.so' -print -quit)
-[[ -n "$gtk_module" ]] || die "input module contains no GTK3 Fcitx frontend"
-grep -Fq '/opt/fcitx5/lib/gtk-3.0/3.0.0/immodules/im-fcitx5.so' \
-    "$module_root/opt/fcitx5/etc/gtk-3.0/gtk.immodules" || \
-    die "GTK3 input method cache does not expose the Fcitx frontend"
-
 configtool="$module_root/opt/fcitx5/bin/fcitx5-configtool"
 [[ -x "$configtool" ]] || die "input module contains no configuration tool"
 [[ $(head -c 4 "$configtool") == $'\x7fELF' ]] || \
@@ -133,4 +127,4 @@ PY
 size=$(stat -c %s "$artifact")
 (( size <= 48 * 1024 * 1024 )) || die "input module exceeds 48 MiB: $size"
 sha256sum "$artifact"
-log "Input module GTK frontend, tray, configuration, default profile, desktop integration, ELF closure, and size budget passed ($size bytes)"
+log "Input module tray, configuration, default profile, desktop integration, ELF closure, and size budget passed ($size bytes)"

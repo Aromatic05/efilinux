@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT=$(cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 source "$ROOT/lib/package.sh"
@@ -31,29 +31,29 @@ build() {
         -DENABLE_GTK4_IM_MODULE=OFF \
         -DENABLE_SNOOPER=ON \
         -DBUILD_ONLY_PLUGIN=ON \
-        -DGTK3_IM_MODULEDIR=/opt/fcitx5/lib/gtk-3.0/3.0.0/immodules
+        -DGTK3_IM_MODULEDIR=/usr/lib/gtk-3.0/3.0.0/immodules
     target_cmake_install "$builddir" "$develdir"
 }
 
 devel() {
     local module cache query
-    module=$(find "$develdir/opt/fcitx5/lib/gtk-3.0" -type f -name 'im-fcitx5*.so' -print -quit)
+    module=$(find "$develdir/usr/lib/gtk-3.0" -type f -name 'im-fcitx5*.so' -print -quit)
     [[ -n $module ]] || die 'fcitx5 GTK3 input method module was not installed'
     strip_all "$(dirname -- "$module")"
 
-    install -d -m0755 "$develdir/opt/fcitx5/etc/gtk-3.0"
-    cache="$develdir/opt/fcitx5/etc/gtk-3.0/gtk.immodules"
+    install -d -m0755 "$develdir/usr/lib/gtk-3.0/3.0.0"
+    cache="$develdir/usr/lib/gtk-3.0/3.0.0/immodules.cache"
     query=$(target_program_wrapper gtk-query-immodules-3.0 /usr/bin/gtk-query-immodules-3.0)
     "$query" "$module" > "$cache"
-    sed -i "s#$develdir/opt/fcitx5#/opt/fcitx5#g" "$cache"
-    grep -Fq '/opt/fcitx5/lib/gtk-3.0/3.0.0/immodules/' "$cache" || \
+    sed -i "s#$develdir##g" "$cache"
+    grep -Fq '/usr/lib/gtk-3.0/3.0.0/immodules/' "$cache" || \
         die 'fcitx5 GTK3 input method cache does not reference the runtime module'
 }
 
 package() {
     package_keep \
-        /opt/fcitx5/lib/gtk-3.0/ \
-        /opt/fcitx5/etc/gtk-3.0/
+        /usr/lib/gtk-3.0/3.0.0/immodules/ \
+        /usr/lib/gtk-3.0/3.0.0/immodules.cache
 }
 
 recipe_main "$@"
