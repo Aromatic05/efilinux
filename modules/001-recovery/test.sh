@@ -7,7 +7,7 @@ ROOT=$(cd -- "$MODULE_DIR/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command python3 readelf sha256sum timeout unsquashfs
+require_command bwrap python3 readelf sha256sum timeout unsquashfs
 
 artifact="$MODULE_DIR/build/output/001-recovery.zxm"
 work="$MODULE_DIR/build/test/artifact"
@@ -50,6 +50,7 @@ nbd	3.24
 netcat-traditional	1.10-50
 nfs-utils	2.9.1
 partclone	0.3.47
+perl-runtime	5.44.0
 qemu-img	11.0.3
 rpcbind	1.2.9
 sleuthkit	4.15.0
@@ -65,7 +66,7 @@ cmp -s "$work/expected-packages" "$work/actual-packages" ||
     die "recovery module package manifest differs from the expected self-contained set"
 
 for command in \
-    testdisk photorec fsarchiver partclone.info foremost fls tsk_recover \
+    testdisk photorec fsarchiver partclone.info foremost fls tsk_recover sorter mactime \
     wimlib-imagex ldmtool dislocker dislocker-fuse sshfs mount.sshfs \
     chntpw reged samusrgrp sampasswd samunlock \
     mount.cifs mount.smb3 cifs.upcall cifscreds getcifsacl setcifsacl smbinfo \
@@ -79,6 +80,8 @@ for command in \
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
 done
+[[ ! -e "$module_root/usr/bin/ocsmgrd" ]] ||
+    die "unsupported Clonezilla management daemon leaked into the recovery module"
 
 for config in netconfig nfs.conf nfsmount.conf idmapd.conf; do
     [[ -f "$module_root/opt/efilinux/modules/recovery/etc/$config" ]] ||
@@ -95,6 +98,17 @@ for library in drbl-conf-functions drbl-functions ocs-functions; do
     [[ -f "$module_root/opt/efilinux/modules/recovery/share/drbl/sbin/$library" ]] ||
         die "Clonezilla runtime function library is missing: $library"
 done
+private_perl=/opt/efilinux/modules/recovery/perl/bin/perl
+[[ -x "$module_root$private_perl" ]] ||
+    die "private recovery Perl runtime is missing"
+[[ ! -e "$module_root/usr/bin/perl" ]] ||
+    die "recovery module must not claim the global /usr/bin/perl path"
+if grep -RIlE '^#!/usr/bin/(env[[:space:]]+)?perl' \
+        "$module_root/usr/bin" \
+        "$module_root/opt/efilinux/modules/recovery/share/drbl" \
+        | grep -q .; then
+    die "Clonezilla payload still contains a global Perl shebang"
+fi
 if grep -RIlE '/usr/share/drbl|/etc/drbl|/etc/ocs' \
         "$module_root/usr/bin" \
         "$module_root/opt/efilinux/modules/recovery/share/drbl" \
@@ -114,6 +128,32 @@ run_target() {
         "$loader" --library-path "$library_path" "$@"
 }
 
+run_sandbox() {
+    env -u LD_PRELOAD -u LD_LIBRARY_PATH \
+        bwrap \
+        --unshare-all \
+        --share-net \
+        --die-with-parent \
+        --tmpfs / \
+        --dir /usr \
+        --ro-bind "$EFILINUX_ROOTFS/usr" /usr \
+        --symlink usr/bin /bin \
+        --symlink usr/lib /lib \
+        --symlink usr/lib /lib64 \
+        --dir /etc \
+        --ro-bind "$EFILINUX_ROOTFS/etc" /etc \
+        --dir /opt \
+        --ro-bind "$module_root/opt" /opt \
+        --ro-bind "$module_root" /module \
+        --dev /dev \
+        --proc /proc \
+        --tmpfs /tmp \
+        --dir /run \
+        --dir /var \
+        --chdir / \
+        "$@"
+}
+
 while IFS= read -r script; do
     run_target "$EFILINUX_ROOTFS/usr/bin/bash" -n "$script"
 done < <(find \
@@ -121,16 +161,55 @@ done < <(find \
     "$module_root/opt/efilinux/modules/recovery/share/drbl" \
     -type f -exec grep -Il '^#!.*bash' {} +)
 
-MODULE_ROOT="$module_root" \
-DRBL_SCRIPT_PATH="$module_root/opt/efilinux/modules/recovery/share/drbl" \
-DRBL_CONFIG_DIR="$module_root/opt/efilinux/modules/recovery/etc/drbl" \
-    run_target "$EFILINUX_ROOTFS/usr/bin/bash" -c '
-        set -e
+run_sandbox \
+    /usr/bin/env \
+    DRBL_SCRIPT_PATH=/opt/efilinux/modules/recovery/share/drbl \
+    DRBL_CONFIG_DIR=/opt/efilinux/modules/recovery/etc/drbl \
+    /usr/bin/bash -c '
+        set +e
         . "$DRBL_SCRIPT_PATH/sbin/drbl-conf-functions"
+        conf_status=$?
         . "$DRBL_SCRIPT_PATH/sbin/ocs-functions"
+        ocs_status=$?
+        test "$conf_status" -eq 0
+        test "$ocs_status" -eq 0
+        test "$(command -v perl)" = /opt/efilinux/modules/recovery/perl/bin/perl
         type check_if_root >/dev/null
         type USAGE_common_save >/dev/null
     '
+
+run_sandbox "$private_perl" \
+    -V:version \
+    -V:archname \
+    -V:useithreads \
+    -V:useshrplib \
+    -V:gnulibc_version 2>&1 |
+    grep -Fq "gnulibc_version='2.43'"
+run_sandbox "$private_perl" \
+    -MData::Dumper \
+    -MDigest::SHA \
+    -MEncode \
+    -MFile::Copy \
+    -MFile::Path \
+    -MFile::Temp \
+    -MGetopt::Std \
+    -MIO::Select \
+    -MIO::Socket \
+    -MJSON::PP \
+    -MMIME::Base64 \
+    -MMath::BigInt \
+    -MPOSIX \
+    -MSocket \
+    -MTerm::ANSIColor \
+    -e 'print qq(recovery-perl-modules-ok\n)' |
+    grep -Fxq 'recovery-perl-modules-ok'
+
+while IFS= read -r script; do
+    relative=${script#"$module_root"}
+    run_sandbox "$private_perl" -c "/module$relative" >/dev/null
+done < <(grep -RIl '^#!/opt/efilinux/modules/recovery/perl/bin/perl' \
+    "$module_root/usr/bin" \
+    "$module_root/opt/efilinux/modules/recovery/share/drbl")
 
 run_target "$module_root/usr/bin/testdisk" /version 2>&1 |
     grep -Fq 'Version: 7.2'
@@ -204,10 +283,16 @@ import sys
 module_root = Path(sys.argv[1])
 base_root = Path(sys.argv[2])
 library_directories = [module_root / "usr/lib", base_root / "usr/lib"]
+module_library_names = {
+    path.name
+    for path in module_root.rglob("*")
+    if path.is_file() or path.is_symlink()
+}
 missing = []
+glibc_too_new = []
 elf_count = 0
 
-for root in (module_root / "usr/bin", module_root / "usr/lib"):
+for root in (module_root / "usr/bin", module_root / "usr/lib", module_root / "opt"):
     if not root.exists():
         continue
     for path in root.rglob("*"):
@@ -224,15 +309,33 @@ for root in (module_root / "usr/bin", module_root / "usr/lib"):
             stderr=subprocess.DEVNULL,
         )
         for soname in re.findall(r"Shared library: \[(.*?)\]", result.stdout):
-            if not any((directory / soname).exists() for directory in library_directories):
+            if soname not in module_library_names and not any(
+                (directory / soname).exists() for directory in library_directories
+            ):
                 missing.append((path, soname))
+        version_result = subprocess.run(
+            ["readelf", "--version-info", str(path)],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        for major, minor in re.findall(r"GLIBC_(\d+)\.(\d+)", version_result.stdout):
+            version = (int(major), int(minor))
+            if version > (2, 43):
+                glibc_too_new.append((path, version))
 
 if missing:
     for path, soname in missing:
         print(f"{path}: missing {soname}", file=sys.stderr)
     raise SystemExit(1)
 
-print(f"recovery module ELF closure: {elf_count} files")
+if glibc_too_new:
+    for path, version in sorted(set(glibc_too_new)):
+        print(f"{path}: requires GLIBC_{version[0]}.{version[1]}", file=sys.stderr)
+    raise SystemExit(1)
+
+print(f"recovery module ELF closure: {elf_count} files, maximum GLIBC_2.43")
 PY
 
 size=$(stat -c %s "$artifact")

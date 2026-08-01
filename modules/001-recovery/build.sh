@@ -18,6 +18,7 @@ module_components=(
     foremost
     fuse2
     mbedtls2
+    perl-runtime
     sleuthkit
     wimlib
     libldm

@@ -10,7 +10,7 @@ source "$ROOT/lib/recipe.sh"
 
 pkgname=drbl-runtime
 pkgver=5.9.11
-depends=(bash coreutils findutils gawk grep iproute2 ncurses procps-ng sed util-linux)
+depends=(bash coreutils findutils gawk grep iproute2 ncurses perl-runtime procps-ng sed util-linux)
 builddepends=()
 makedepends=(make)
 
@@ -54,11 +54,13 @@ build() {
     python3 - \
         "$develdir$share_root/sbin/drbl-conf-functions" \
         "$develdir$share_root/sbin/drbl-functions" \
-        "$config_root" <<'PYCODE'
+        "$config_root" \
+        "$module_root/perl" <<'PYCODE'
 from pathlib import Path
 import sys
 
 config_root = sys.argv[3]
+perl_root = sys.argv[4]
 for name in sys.argv[1:3]:
     path = Path(name)
     text = path.read_text()
@@ -68,10 +70,35 @@ for name in sys.argv[1:3]:
         raise SystemExit(f'DRBL path marker missing in {path}')
     text = text.replace(
         marker,
-        marker + f'DRBL_CONFIG_DIR="${{DRBL_CONFIG_DIR:-{config_root}}}"\n',
+        marker
+        + f'DRBL_CONFIG_DIR="${{DRBL_CONFIG_DIR:-{config_root}}}"\n'
+        + f'RECOVERY_PERL_ROOT="${{RECOVERY_PERL_ROOT:-{perl_root}}}"\n'
+        + 'PATH="$RECOVERY_PERL_ROOT/bin:$PATH"\n'
+        + 'export PATH\n',
         1,
     )
     path.write_text(text)
+PYCODE
+
+    python3 - "$develdir$share_root" "$module_root/perl/bin/perl" <<'PYCODE'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+private_perl = sys.argv[2]
+for path in root.rglob('*'):
+    if not path.is_file():
+        continue
+    try:
+        text = path.read_text()
+    except UnicodeDecodeError:
+        continue
+    lines = text.splitlines(keepends=True)
+    if not lines:
+        continue
+    if lines[0].startswith('#!/usr/bin/perl'):
+        lines[0] = '#!' + private_perl + lines[0][len('#!/usr/bin/perl'):]
+        path.write_text(''.join(lines))
 PYCODE
 }
 

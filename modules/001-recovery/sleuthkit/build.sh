@@ -8,7 +8,7 @@ source "$ROOT/lib/recipe.sh"
 source "$ROOT/lib/target-build.sh"
 pkgname=sleuthkit
 pkgver=4.15.0
-depends=(gcc-libs glibc sqlite zlib)
+depends=(gcc-libs glibc perl-runtime sqlite zlib)
 builddepends=()
 makedepends=(autoconf automake gcc g++ libtool make pkg-config)
 prepare() {
@@ -36,6 +36,15 @@ build() {
     target_make_install "$builddir" "$develdir"
 }
 devel() {
+    local private_perl=/opt/efilinux/modules/recovery/perl/bin/perl
+    local script
+
+    for script in sorter mactime; do
+        [[ $(sed -n '1p' "$develdir/usr/bin/$script") == '#!/usr/bin/perl -w' ]] ||
+            die "Sleuth Kit Perl shebang changed upstream: $script"
+        sed -i "1s|^#!/usr/bin/perl|#!$private_perl|" \
+            "$develdir/usr/bin/$script"
+    done
     find "$develdir" -type f \( -name '*.a' -o -name '*.la' \) -delete
     strip_all "$develdir/usr/bin" "$develdir/usr/lib"
 }

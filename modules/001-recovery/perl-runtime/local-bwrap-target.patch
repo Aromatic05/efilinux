@@ -1,0 +1,96 @@
+--- a/Configure
++++ b/Configure
+@@ -3156,6 +3156,60 @@
+ $targetrun -p $targetport -l $targetuser $targethost "cd \$cwd && \$env \$exe \$@"
+ EOF
+ 	    ;;
++	local-bwrap)
++	    cat >$run <<EOF
++#!/bin/sh
++set -eu
++env=''
++cwd=''
++case "\${1-}" in
++-cwd)
++  shift
++  cwd=\$1
++  shift
++  ;;
++esac
++case "\${1-}" in
++-env)
++  shift
++  env=\$1
++  shift
++  ;;
++esac
++exe=\$1
++shift
++case "\$cwd" in
++'') sandbox_cwd=/target ;;
++'$targetdir') sandbox_cwd=/target ;;
++'$targetdir'/*) sandbox_cwd=/target/\${cwd#'$targetdir'/} ;;
++*) echo "unsupported local target cwd: \$cwd" >&2; exit 2 ;;
++esac
++case "\$exe" in
++/*) sandbox_exe=\$exe ;;
++*)  $to "\$exe"
++    sandbox_exe=/target/\${exe#./}
++    ;;
++esac
++script='exec "\$0" "\$@"'
++case "\$env" in
++'') ;;
++*) script="\$env \$script" ;;
++esac
++exec env -u LD_PRELOAD -u LD_LIBRARY_PATH \
++  /usr/bin/bwrap \
++    --unshare-all --share-net --die-with-parent \
++    --tmpfs / \
++    --dir /usr --ro-bind '$sysroot/usr' /usr \
++    --symlink usr/bin /bin \
++    --symlink usr/lib /lib \
++    --symlink usr/lib /lib64 \
++    --dir /etc --ro-bind '$sysroot/etc' /etc \
++    --dev /dev --proc /proc --tmpfs /tmp --dir /run --dir /var \
++    --bind '$targetdir' /target \
++    --chdir "\$sandbox_cwd" \
++    /usr/bin/sh -c "\$script" "\$sandbox_exe" "\$@"
++EOF
++	    ;;
+ 	adb)
+ 	    $touch $run
+ 	    ;;
+@@ -3163,16 +3217,27 @@
+ 	    exit 1
+ 	    ;;
+ 	esac
+-	case "$targetmkdir" in
+-	*/Cross/mkdir)
++	case "$targetrun" in
++	local-bwrap)
+ 	    cat >$targetmkdir <<EOF
+ #!/bin/sh
+-$targetrun -p $targetport -l $targetuser $targethost "mkdir -p \$@"
++exec /usr/bin/mkdir -p "\$@"
+ EOF
+ 	    $chmod a+rx $targetmkdir
+ 	    ;;
+-	*)  echo "Unknown targetmkdir '$targetmkdir'" >&4
+-	    exit 1
++	*)
++	    case "$targetmkdir" in
++	    */Cross/mkdir)
++	        cat >$targetmkdir <<EOF
++#!/bin/sh
++$targetrun -p $targetport -l $targetuser $targethost "mkdir -p \$@"
++EOF
++	        $chmod a+rx $targetmkdir
++	        ;;
++	    *)  echo "Unknown targetmkdir '$targetmkdir'" >&4
++	        exit 1
++	        ;;
++	    esac
+ 	    ;;
+ 	esac
+ 	case "$targetto" in
