@@ -7,7 +7,7 @@ ROOT=$(cd -- "$MODULE_DIR/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command python3 readelf sha256sum unsquashfs
+require_command python3 readelf sha256sum timeout unsquashfs
 
 artifact="$MODULE_DIR/build/output/001-recovery.zxm"
 work="$MODULE_DIR/build/test/artifact"
@@ -47,6 +47,7 @@ lvm2	2.03.41
 lz4	1.10.0
 mbedtls2	2.28.10
 nbd	3.24
+netcat-traditional	1.10-50
 nfs-utils	2.9.1
 partclone	0.3.47
 qemu-img	11.0.3
@@ -73,7 +74,7 @@ for command in \
     rpc.statd sm-notify start-statd rpc.gssd rpc.idmapd nfsidmap \
     rpcbind rpcinfo \
     lvm lvs pvs vgs vgchange lvchange lvcreate pvcreate \
-    bc dc dialog jq \
+    bc dc dialog jq nc.traditional \
     clonezilla ocs-sr ocs-onthefly ocs-chkimg ocs-live-ver; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
@@ -167,6 +168,32 @@ run_target "$module_root/usr/bin/dialog" --version 2>&1 |
     grep -Fxq 'Version: 1.3-20260721'
 run_target "$module_root/usr/bin/jq" --version 2>&1 |
     grep -Fxq 'jq-1.8.2'
+run_target "$module_root/usr/bin/nc.traditional" -h 2>&1 |
+    grep -Fq '[v1.10-50]'
+
+netcat_port=$(python3 - <<'PY'
+import socket
+
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)
+netcat_received="$work/netcat-received"
+timeout 5 \
+    env -u LD_PRELOAD -u LD_LIBRARY_PATH \
+    "$loader" --library-path "$library_path" \
+    "$module_root/usr/bin/nc.traditional" -l -p "$netcat_port" \
+    > "$netcat_received" &
+netcat_listener=$!
+sleep 0.2
+printf '%s\n' 'efilinux-netcat-ok' |
+    timeout 5 \
+        env -u LD_PRELOAD -u LD_LIBRARY_PATH \
+        "$loader" --library-path "$library_path" \
+        "$module_root/usr/bin/nc.traditional" -q 0 127.0.0.1 "$netcat_port"
+wait "$netcat_listener"
+grep -Fxq 'efilinux-netcat-ok' "$netcat_received"
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path

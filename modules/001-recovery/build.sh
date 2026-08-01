@@ -38,6 +38,7 @@ module_components=(
     bc
     dialog
     jq
+    netcat-traditional
     drbl-runtime
     clonezilla
 )

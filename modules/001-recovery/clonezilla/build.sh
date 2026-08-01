@@ -13,7 +13,7 @@ pkgver=5.16.25
 depends=(
     bash bc bzip2 cifs-utils coreutils curl dialog dosfstools drbl-runtime e2fsprogs
     findutils gawk gptfdisk grep gzip jq lvm2 mdadm nbd nfs-utils ntfs-3g parted
-    partclone procps-ng qemu-img sed smartmontools sshfs tar util-linux xfsprogs
+    netcat-traditional partclone procps-ng qemu-img sed smartmontools sshfs tar util-linux xfsprogs
     xz zstd
 )
 builddepends=()
