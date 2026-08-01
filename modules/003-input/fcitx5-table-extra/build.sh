@@ -29,11 +29,35 @@ build() {
 }
 
 devel() {
+    local opt_root="$develdir/opt/fcitx5/share/fcitx5"
+    local name dictionary
+    local -a methods=(cangjie5 jyutping-table quick5 wubi98)
+
     prune_translations "$develdir"
+    install -d -m0755 "$opt_root/inputmethod" "$opt_root/table"
+    for name in "${methods[@]}"; do
+        install -m0644 \
+            "$develdir/usr/share/fcitx5/inputmethod/$name.conf" \
+            "$opt_root/inputmethod/$name.conf"
+        dictionary=$(sed -n 's/^File=table\///p' \
+            "$develdir/usr/share/fcitx5/inputmethod/$name.conf" | head -n 1)
+        [[ -n "$dictionary" ]] || die "missing table dictionary for $name"
+        install -m0644 \
+            "$develdir/usr/share/fcitx5/table/$dictionary" \
+            "$opt_root/table/$dictionary"
+    done
 }
 
 package() {
-    package_keep /usr/share/fcitx5/inputmethod/
+    local path
+    local -a keep=(/opt/fcitx5/share/fcitx5/)
+
+    while IFS= read -r path; do
+        keep+=("${path#$develdir}")
+    done < <(find "$develdir/usr/share/icons/hicolor" -type f \
+        \( -name 'org.fcitx.Fcitx5.fcitx_jyutping_table.png' \
+        -o -name 'org.fcitx.Fcitx5.fcitx_quick5.png' \) -print)
+    package_keep "${keep[@]}"
 }
 
 recipe_main "$@"

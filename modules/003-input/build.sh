@@ -9,6 +9,8 @@ module_id=input
 module_version=1
 module_description='Fcitx5 Chinese input methods with Pinyin and table engines'
 module_max_size=$((48 * 1024 * 1024))
+module_post_load=hooks/post-load
+module_pre_unload=hooks/pre-unload
 module_components=(
     extra-cmake-modules
     libuv
@@ -17,7 +19,10 @@ module_components=(
     xcb-util-wm
     xcb-imdkit
     fmt
+    libxkbcommon-x11-runtime
     fcitx5
+    fcitx5-gtk
+    efilinux-fcitx-config
     boost
     libime
     opencc

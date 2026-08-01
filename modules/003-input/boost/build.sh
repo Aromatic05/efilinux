@@ -35,12 +35,26 @@ build() {
 }
 
 devel() {
-    strip_all "$develdir/usr/lib"
+    local opt_lib="$develdir/opt/fcitx5/lib"
+
+    install -d -m0755 "$opt_lib"
+    find "$develdir/usr/lib" -maxdepth 1 \
+        \( -type f -o -type l \) \
+        \( -name 'libboost_iostreams.so*' \) \
+        -exec cp -a -t "$opt_lib" {} +
+    strip_all "$develdir/usr/lib" "$opt_lib"
 }
 
 package() {
+    local path
     local -a keep=()
-    package_add_library_family keep 'libboost_iostreams.so.1.89.0'
+
+    while IFS= read -r -d '' path; do
+        keep+=("${path#$pkgdir}")
+    done < <(find "$pkgdir/opt/fcitx5/lib" -maxdepth 1 \
+        \( -type f -o -type l \) \
+        \( -name 'libboost_iostreams.so*' \) -print0)
+    ((${#keep[@]} > 0)) || die "runtime libraries are missing for boost"
     package_keep "${keep[@]}"
 }
 

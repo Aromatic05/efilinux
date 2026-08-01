@@ -38,25 +38,17 @@ build() {
 }
 
 devel() {
+    local opt_root="$develdir/opt/fcitx5"
+
     prune_translations "$develdir"
     strip_all "$develdir/usr/bin" "$develdir/usr/lib" "$develdir/usr/lib/fcitx5"
+    install -d -m0755 "$opt_root/lib/fcitx5" "$opt_root/share/fcitx5"
+    cp -a "$develdir/usr/lib/fcitx5/." "$opt_root/lib/fcitx5/"
+    cp -a "$develdir/usr/share/fcitx5/." "$opt_root/share/fcitx5/"
 }
 
 package() {
-    package_keep \
-        /usr/lib/fcitx5/libchttrans.so \
-        /usr/lib/fcitx5/libfullwidth.so \
-        /usr/lib/fcitx5/libpinyinhelper.so \
-        /usr/lib/fcitx5/libpinyin.so \
-        /usr/lib/fcitx5/libpunctuation.so \
-        /usr/lib/fcitx5/libtable.so \
-        /usr/share/fcitx5/addon/ \
-        /usr/share/fcitx5/chttrans/ \
-        /usr/share/fcitx5/inputmethod/ \
-        /usr/share/fcitx5/pinyin/ \
-        /usr/share/fcitx5/pinyinhelper/ \
-        /usr/share/fcitx5/punctuation/ \
-        /usr/share/icons/hicolor/
+    package_keep /opt/fcitx5/ /usr/share/icons/hicolor/
 }
 
 recipe_main "$@"

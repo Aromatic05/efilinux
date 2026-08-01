@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -u
+
+for session in /proc/[0-9]*; do
+    [ -r "$session/comm" ] && [ -r "$session/status" ] || continue
+    IFS= read -r command < "$session/comm" || continue
+    [ "$command" = xfce4-session ] || continue
+    uid=$(awk '/^Uid:/ { print $2; exit }' "$session/status")
+    case $uid in ''|0|*[!0-9]*) continue ;; esac
+    /usr/bin/pkill -TERM -u "$uid" -x fcitx5 >/dev/null 2>&1 || :
+done
+
+exit 0

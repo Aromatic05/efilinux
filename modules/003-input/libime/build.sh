@@ -25,6 +25,10 @@ prepare() {
     input_shared_file "$ROOT/lib/target-build.sh" "$srcdir/target-build.sh"
     [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
     patch -d "$srcdir/source" -p1 < "$srcdir/disable-fcitx4-migration-tools.patch"
+    sed -i \
+        -e 's#set(LIBIME_INSTALL_PKGDATADIR .*#set(LIBIME_INSTALL_PKGDATADIR "/opt/fcitx5/share/libime")#' \
+        -e 's#set(LIBIME_INSTALL_LIBDATADIR .*#set(LIBIME_INSTALL_LIBDATADIR "/opt/fcitx5/lib/libime")#' \
+        "$srcdir/source/CMakeLists.txt"
 }
 
 build() {
@@ -37,12 +41,28 @@ build() {
 }
 
 devel() {
-    strip_all "$develdir/usr/bin" "$develdir/usr/lib"
+    local opt_lib="$develdir/opt/fcitx5/lib"
+
+    install -d -m0755 "$opt_lib" "$develdir/usr/share"
+    ln -sfn /opt/fcitx5/share/libime "$develdir/usr/share/libime"
+    find "$develdir/usr/lib" -maxdepth 1 \
+        \( -type f -o -type l \) -name 'libIME*.so*' \
+        -exec cp -a -t "$opt_lib" {} +
+    strip_all "$develdir/usr/bin" "$develdir/usr/lib" "$opt_lib"
 }
 
 package() {
-    local -a keep=(/usr/lib/libime/ /usr/share/libime/)
-    package_add_library_family keep 'libIME*.so.1*'
+    local path
+    local -a keep=(
+        /opt/fcitx5/lib/libime/
+        /opt/fcitx5/share/libime/
+        /usr/share/libime
+    )
+
+    while IFS= read -r -d '' path; do
+        keep+=("${path#$pkgdir}")
+    done < <(find "$pkgdir/opt/fcitx5/lib" -maxdepth 1 \
+        \( -type f -o -type l \) -name 'libIME*.so*' -print0)
     package_keep "${keep[@]}"
 }
 

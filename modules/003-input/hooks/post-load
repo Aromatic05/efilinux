@@ -1,0 +1,39 @@
+#!/bin/sh
+
+set -u
+
+[ -x /usr/bin/fcitx5 ] || exit 0
+
+for session in /proc/[0-9]*; do
+    [ -r "$session/comm" ] && [ -r "$session/status" ] && [ -r "$session/environ" ] || continue
+    IFS= read -r command < "$session/comm" || continue
+    [ "$command" = xfce4-session ] || continue
+    uid=$(awk '/^Uid:/ { print $2; exit }' "$session/status")
+    case $uid in ''|0|*[!0-9]*) continue ;; esac
+    /usr/bin/pgrep -u "$uid" -x fcitx5 >/dev/null 2>&1 && exit 0
+    user=$(awk -F: -v uid="$uid" '$3 == uid { print $1; exit }' /etc/passwd)
+    gid=$(awk -F: -v uid="$uid" '$3 == uid { print $4; exit }' /etc/passwd)
+    home=$(awk -F: -v uid="$uid" '$3 == uid { print $6; exit }' /etc/passwd)
+    [ -n "$user" ] && [ -n "$gid" ] && [ -n "$home" ] || continue
+    profile_dir="$home/.config/fcitx5"
+    profile="$profile_dir/profile"
+    if [ ! -e "$profile" ] && [ -f /opt/fcitx5/share/efilinux/profile ]; then
+        mkdir -p "$profile_dir"
+        install -m0644 /opt/fcitx5/share/efilinux/profile "$profile"
+        chown -R "$uid:$gid" "$profile_dir"
+    fi
+    display=$(tr '\0' '\n' < "$session/environ" | sed -n 's/^DISPLAY=//p' | sed -n '1p')
+    dbus=$(tr '\0' '\n' < "$session/environ" | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p' | sed -n '1p')
+    runtime=$(tr '\0' '\n' < "$session/environ" | sed -n 's/^XDG_RUNTIME_DIR=//p' | sed -n '1p')
+    xauthority=$(tr '\0' '\n' < "$session/environ" | sed -n 's/^XAUTHORITY=//p' | sed -n '1p')
+    [ -n "$display" ] && [ -n "$dbus" ] && [ -n "$runtime" ] || continue
+    DISPLAY="$display" \
+    DBUS_SESSION_BUS_ADDRESS="$dbus" \
+    XDG_RUNTIME_DIR="$runtime" \
+    XAUTHORITY="${xauthority:-$home/.Xauthority}" \
+    HOME="$home" USER="$user" LOGNAME="$user" \
+        /usr/bin/su -p -s /usr/bin/bash "$user" -c '/usr/bin/fcitx5 -d --replace' >/dev/null 2>&1 || :
+    exit 0
+done
+
+exit 0

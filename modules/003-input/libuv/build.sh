@@ -32,12 +32,26 @@ build() {
 }
 
 devel() {
-    strip_all "$develdir/usr/lib"
+    local opt_lib="$develdir/opt/fcitx5/lib"
+
+    install -d -m0755 "$opt_lib"
+    find "$develdir/usr/lib" -maxdepth 1 \
+        \( -type f -o -type l \) \
+        \( -name 'libuv.so*' \) \
+        -exec cp -a -t "$opt_lib" {} +
+    strip_all "$develdir/usr/lib" "$opt_lib"
 }
 
 package() {
+    local path
     local -a keep=()
-    package_add_library_family keep 'libuv.so.1*'
+
+    while IFS= read -r -d '' path; do
+        keep+=("${path#$pkgdir}")
+    done < <(find "$pkgdir/opt/fcitx5/lib" -maxdepth 1 \
+        \( -type f -o -type l \) \
+        \( -name 'libuv.so*' \) -print0)
+    ((${#keep[@]} > 0)) || die "runtime libraries are missing for libuv"
     package_keep "${keep[@]}"
 }
 
