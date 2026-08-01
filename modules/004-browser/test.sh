@@ -9,7 +9,7 @@ source "$ROOT/lib/common.sh"
 
 require_command desktop-file-validate python3 readelf sha256sum strings timeout unsquashfs
 
-artifact="$MODULE_DIR/build/output/004-browser.zxm"
+artifact="$ROOT/modules/output/004-browser.zxm"
 work="$MODULE_DIR/build/test/artifact"
 image="$work/image"
 module_root="$image/root"

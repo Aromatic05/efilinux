@@ -9,7 +9,7 @@ source "$ROOT/lib/common.sh"
 
 require_command python3 readelf sha256sum unsquashfs
 
-artifact="$MODULE_DIR/build/output/002-network.zxm"
+artifact="$ROOT/modules/output/002-network.zxm"
 work="$MODULE_DIR/build/test/artifact"
 image="$work/image"
 module_root="$image/root"

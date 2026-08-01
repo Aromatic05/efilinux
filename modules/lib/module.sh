@@ -14,6 +14,7 @@ readonly MODULE_BASE_PACKAGE_INDEX=$EFILINUX_PACKAGE_INDEX
 readonly MODULE_BASE_SYSROOT=$EFILINUX_SYSROOT
 readonly MODULE_BASE_ROOTFS=$EFILINUX_ROOTFS
 readonly MODULE_BASE_ROOTFS_OWNERS=$EFILINUX_ROOTFS_OWNERS
+readonly MODULE_OUTPUT_DIR="$EFILINUX_ROOT/modules/output"
 
 module_validate_name() {
     local name=$1
@@ -173,7 +174,7 @@ module_initialize_workspace() {
         "$EFILINUX_STATE" \
         "$EFILINUX_TEST" \
         "$EFILINUX_PACKAGE_WORK" \
-        "$module_build/output"
+        "$MODULE_OUTPUT_DIR"
     package_assert_current_index
 
     [[ -d "$MODULE_BASE_SYSROOT" ]] ||
@@ -281,8 +282,8 @@ module_compose() {
         done
     } > "$stage/opt/efilinux/modules/$module_id/packages.tsv"
 
-    output="$EFILINUX_BUILD/output/$module_name.zxm"
-    temporary="$EFILINUX_BUILD/output/$module_name.tmp.$$.zxm"
+    output="$MODULE_OUTPUT_DIR/$module_name.zxm"
+    temporary="$MODULE_OUTPUT_DIR/$module_name.tmp.$$.zxm"
     rm -f -- "$temporary"
     "$EFILINUX_ROOT/005-utils/zxmod/files/usr/bin/zxmod-build" \
         --id "$module_id" \

@@ -3,3 +3,4 @@
 /build/
 /target/
 /modules/*/build/
+/modules/output/

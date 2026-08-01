@@ -11,6 +11,7 @@ usage() {
 Usage: ./run-qemu-gui.sh [--reset-nvram] [--fullscreen] [--dry-run]
 
 Start the built EFI Linux image with VirtIO-GPU in a GTK QEMU window.
+Available modules from modules/output are included under /modules on the EFI drive.
 The GTK window contains display, serial-console, and QEMU-monitor tabs.
 
 Environment overrides:
@@ -48,8 +49,11 @@ ovmf_code=${OVMF_CODE:-/usr/share/edk2/x64/OVMF_CODE.4m.fd}
 ovmf_vars_template=${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}
 ovmf_vars="$EFILINUX_TEST/OVMF_VARS.gui.fd"
 efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
+module_output_dir="$ROOT/modules/output"
+qemu_efi_dir="$EFILINUX_TEST/qemu-gui-efi"
+qemu_module_dir="$qemu_efi_dir/modules"
 
-require_command "$qemu_binary" cp grep id mkdir
+require_command "$qemu_binary" cp grep id install mkdir
 ensure_directories
 
 [[ -f "$efi_binary" ]] || die "EFI binary is missing; run ./build.sh first: $efi_binary"
@@ -64,6 +68,20 @@ ensure_directories
 if [[ -z ${DISPLAY:-} && -z ${WAYLAND_DISPLAY:-} ]]; then
     die "no graphical display is available (DISPLAY and WAYLAND_DISPLAY are unset)"
 fi
+
+reset_directory "$qemu_efi_dir"
+cp -a --reflink=auto "$EFILINUX_EFI_DIR/." "$qemu_efi_dir/"
+install -d -m0755 "$qemu_module_dir"
+
+module_artifacts=()
+if [[ -d "$module_output_dir" ]]; then
+    shopt -s nullglob
+    module_artifacts=("$module_output_dir"/*.zxm)
+    shopt -u nullglob
+fi
+for module_artifact in "${module_artifacts[@]}"; do
+    cp -a --reflink=auto "$module_artifact" "$qemu_module_dir/"
+done
 
 if ((reset_nvram)) || [[ ! -f "$ovmf_vars" ]]; then
     cp -- "$ovmf_vars_template" "$ovmf_vars"
@@ -82,7 +100,7 @@ qemu_command=(
     -m "$qemu_memory"
     -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code"
     -drive "if=pflash,format=raw,file=$ovmf_vars"
-    -drive "format=raw,file=fat:rw:$EFILINUX_EFI_DIR"
+    -drive "format=raw,file=fat:rw:$qemu_efi_dir"
     -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$qemu_ssh_port-:22"
     -device "e1000e,netdev=net0"
     -device "qemu-xhci,id=xhci"
@@ -96,6 +114,11 @@ qemu_command=(
 )
 
 printf 'EFI image:  %s\n' "$efi_binary"
+printf 'EFI drive:  %s\n' "$qemu_efi_dir"
+printf 'Modules:    %s packaged under /modules\n' "${#module_artifacts[@]}"
+for module_artifact in "${module_artifacts[@]}"; do
+    printf '            %s\n' "${module_artifact##*/}"
+done
 printf 'NVRAM:      %s\n' "$ovmf_vars"
 printf 'KVM:        enabled, CPU=host, SMP=%s, memory=%s\n' "$qemu_smp" "$qemu_memory"
 printf 'SSH:        127.0.0.1:%s -> guest:22\n' "$qemu_ssh_port"
