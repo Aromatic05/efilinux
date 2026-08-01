@@ -52,8 +52,11 @@ build() {
             "$develdir/usr/share/bash-completion/completions/$destination"
     done
 
-    cp -a "$srcdir/files/usr/share/bash-completion/completions/." \
-        "$develdir/usr/share/bash-completion/completions/"
+    for source_file in "$srcdir/files/usr/share/bash-completion/completions/"*; do
+        [[ -f "$source_file" ]] || continue
+        install -m0644 "$source_file" \
+            "$develdir/usr/share/bash-completion/completions/${source_file##*/}"
+    done
 }
 
 package() {
