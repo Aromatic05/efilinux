@@ -61,6 +61,7 @@ devel() {
         rmdir "$develdir/usr/sbin"
     fi
     strip_all "$develdir/usr/bin" "$develdir/usr/lib"
+    chmod 4755 "$develdir/usr/bin/unix_chkpwd"
 }
 
 package() {
