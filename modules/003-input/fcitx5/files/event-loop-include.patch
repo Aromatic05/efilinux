@@ -1,0 +1,4 @@
+--- a/src/modules/xcb/xcbkeyboard.h
++++ b/src/modules/xcb/xcbkeyboard.h
+@@ -14,0 +15 @@
++#include "fcitx-utils/event.h"

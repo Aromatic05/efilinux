@@ -1,0 +1,89 @@
+diff --git a/im/pinyin/pinyin.cpp b/im/pinyin/pinyin.cpp
+index fa92040..3f65249 100644
+--- a/im/pinyin/pinyin.cpp
++++ b/im/pinyin/pinyin.cpp
+@@ -956,10 +956,10 @@ void PinyinEngine::populateConfig() {
+                             "prediction? You can always toggle it later in "
+                             "configuration.");
+                 } else {
+                     msg = fmt::format(
+-                        _("Do you want to enable cloudpinyin now for better "
+-                          "prediction? You can always toggle it later in "
+-                          "configuration or by pressing {}."),
++                        fmt::runtime(_("Do you want to enable cloudpinyin now for better "
++                                       "prediction? You can always toggle it later in "
++                                       "configuration or by pressing {}.")),
+                         Key::keyListToString(key, KeyStringFormat::Localized));
+                 }
+                 std::vector<std::string> actions = {"yes", _("Yes"), "no",
+@@ -1814,10 +1814,10 @@ bool PinyinEngine::handlePunc(KeyEvent &event,
+         std::string text;
+         if (!output.empty()) {
+             if (!altOutput.empty()) {
+-                text = fmt::format(_("Press {} for {} and Return for {}"),
++                text = fmt::format(fmt::runtime(_("Press {} for {} and Return for {}")),
+                                    keyString, output, altOutput);
+             } else {
+-                text = fmt::format(_("Press {} for {}"), keyString, altOutput);
++                text = fmt::format(fmt::runtime(_("Press {} for {}")), keyString, altOutput);
+             }
+         }
+         quickphrase()->call<IQuickPhrase::trigger>(
+diff --git a/im/table/state.cpp b/im/table/state.cpp
+index 830db8c..5f0ac0f 100644
+--- a/im/table/state.cpp
++++ b/im/table/state.cpp
+@@ -674,8 +674,8 @@ bool TableState::handleLookupPinyinOrModifyDictionaryMode(KeyEvent &event) {
+                         if (sp.empty()) {
+                             text.append(allTones);
+                         } else {
+                             text.append(fmt::format(
+-                                C_("Pinyin & Shuangpin", "{0} ({1})"), allTones,
++                                fmt::runtime(C_("Pinyin & Shuangpin", "{0} ({1})")), allTones,
+                                 stringutils::join(sp, " ")));
+                         }
+                     }
+@@ -691,7 +691,7 @@ bool TableState::handleLookupPinyinOrModifyDictionaryMode(KeyEvent &event) {
+                     if (context_->dict().generateWithHint(
+                             subString.first, subString.second, result)) {
+                         auxDown.append(
+-                            fmt::format(_("{0}: {1}"), subString.first,
++                            fmt::format(fmt::runtime(_("{0}: {1}")), subString.first,
+                                         context_->customHint(result)));
+                         auto flag = context_->dict().wordExists(
+                             result, subString.first);
+@@ -707,7 +707,7 @@ bool TableState::handleLookupPinyinOrModifyDictionaryMode(KeyEvent &event) {
+                         }
+                     } else {
+                         auxDown.append(fmt::format(
+-                            _("{0}: No corresponding code."), subString.first));
++                            fmt::runtime(_("{0}: No corresponding code.")), subString.first));
+                     }
+                     auxDown.append(" ");
+                 }
+@@ -715,10 +715,10 @@ bool TableState::handleLookupPinyinOrModifyDictionaryMode(KeyEvent &event) {
+                 auto chrCode = context_->dict().reverseLookup(chrString);
+                 if (!chrCode.empty()) {
+                     auxDown.append(
+-                        fmt::format(_("{0}: {1}"), chrString, chrCode));
++                        fmt::format(fmt::runtime(_("{0}: {1}")), chrString, chrCode));
+                 } else {
+                     auxDown.append(
+-                        fmt::format(_("{0} is not in table."), chrString));
++                        fmt::format(fmt::runtime(_("{0} is not in table.")), chrString));
+                 }
+                 inputPanel.setAuxUp(auxUp);
+                 inputPanel.setAuxDown(auxDown);
+diff --git a/modules/pinyinhelper/pinyinhelper.cpp b/modules/pinyinhelper/pinyinhelper.cpp
+index 5ccca7e..23168d4 100644
+--- a/modules/pinyinhelper/pinyinhelper.cpp
++++ b/modules/pinyinhelper/pinyinhelper.cpp
+@@ -77,7 +77,7 @@ void PinyinHelper::initQuickPhrase() {
+                     auto result = lookup(c);
+                     if (!result.empty()) {
+                         auto py = stringutils::join(result, ", ");
+-                        auto display = fmt::format(_("{0} ({1})"),
++                        auto display = fmt::format(fmt::runtime(_("{0} ({1})")),
+                                                    utf8::UCS4ToUTF8(c), py);
+                         callback(display, display,
+                                  QuickPhraseAction::DoNothing);

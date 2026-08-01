@@ -1,0 +1,4 @@
+--- a/src/SerializedValues.cpp
++++ b/src/SerializedValues.cpp
+@@ -19,0 +20 @@
++#include <cstdint>
