@@ -106,6 +106,7 @@ package() {
         /usr/lib/libpthread.so.0 \
         /usr/lib/libresolv.so.2 \
         /usr/lib/librt.so.1 \
+        /usr/lib/gconv/ \
         /usr/lib/locale/locale-archive
 }
 
