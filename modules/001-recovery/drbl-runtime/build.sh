@@ -22,7 +22,7 @@ prepare() {
 }
 
 build() {
-    local module_root=/opt/efilinux/modules/recovery
+    local module_root=/opt/recovery
     local share_root="$module_root/share/drbl"
     local config_root="$module_root/etc/drbl"
 
@@ -65,7 +65,7 @@ for name in sys.argv[1:3]:
     path = Path(name)
     text = path.read_text()
     text = text.replace(config_root, '${DRBL_CONFIG_DIR}')
-    marker = 'DRBL_SCRIPT_PATH="${DRBL_SCRIPT_PATH:-/opt/efilinux/modules/recovery/share/drbl}"\n'
+    marker = 'DRBL_SCRIPT_PATH="${DRBL_SCRIPT_PATH:-/opt/recovery/share/drbl}"\n'
     if marker not in text:
         raise SystemExit(f'DRBL path marker missing in {path}')
     text = text.replace(
@@ -105,7 +105,7 @@ PYCODE
 devel() { :; }
 
 package() {
-    package_keep /opt/efilinux/modules/recovery/
+    package_keep /opt/recovery/
 }
 
 recipe_main "$@"

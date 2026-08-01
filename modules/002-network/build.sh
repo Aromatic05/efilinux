@@ -9,7 +9,9 @@ module_id=network
 module_version=1
 module_description='Network diagnostics, packet capture, throughput testing, and security auditing tools'
 module_max_size=$((32 * 1024 * 1024))
+module_relocate_usr=true
 module_components=(
+    jansson
     libpcap
     mtr
     traceroute

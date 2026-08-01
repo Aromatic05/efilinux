@@ -27,7 +27,7 @@ prepare() {
 }
 
 build() {
-    local module_root=/opt/efilinux/modules/recovery
+    local module_root=/opt/recovery
     local share_root="$module_root/share/drbl"
     local config_root="$module_root/etc/drbl"
     local ocs_config_root="$module_root/etc/ocs"
@@ -118,7 +118,7 @@ devel() { :; }
 package() {
     package_keep \
         /usr/bin/ \
-        /opt/efilinux/modules/recovery/
+        /opt/recovery/
 }
 
 recipe_main "$@"

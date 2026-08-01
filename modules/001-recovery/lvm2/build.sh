@@ -24,7 +24,7 @@ prepare() {
 }
 
 build() {
-    local config_root=/opt/efilinux/modules/recovery/etc/lvm
+    local config_root=/opt/recovery/etc/lvm
 
     target_release_configure "$srcdir/source" "$builddir" \
         --bindir=/usr/bin \
@@ -61,7 +61,7 @@ build() {
         --with-default-dm-run-dir=/run \
         --with-default-run-dir=/run/lvm \
         --with-default-locking-dir=/run/lvm/lock \
-        --with-confdir=/opt/efilinux/modules/recovery/etc \
+        --with-confdir=/opt/recovery/etc \
         --with-default-system-dir="$config_root"
     make -C "$builddir" -j"$EFILINUX_JOBS" lib libdaemon tools
     make -C "$builddir/tools" \
@@ -99,8 +99,8 @@ package() {
         /usr/bin/vgscan
         /usr/bin/vgs
     )
-    [[ ! -d "$pkgdir/opt/efilinux/modules/recovery/etc/lvm" ]] ||
-        keep+=(/opt/efilinux/modules/recovery/etc/lvm/)
+    [[ ! -d "$pkgdir/opt/recovery/etc/lvm" ]] ||
+        keep+=(/opt/recovery/etc/lvm/)
     package_keep "${keep[@]}"
 }
 

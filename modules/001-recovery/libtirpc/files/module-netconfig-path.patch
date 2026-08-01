@@ -2,4 +2,4 @@
 +++ b/tirpc/netconfig.h
 @@ -8 +8 @@
 -#define NETCONFIG "/etc/netconfig"
-+#define NETCONFIG "/opt/efilinux/modules/recovery/etc/netconfig"
++#define NETCONFIG "/opt/recovery/etc/netconfig"

@@ -51,7 +51,7 @@ build_host_rpcgen() {
 }
 
 build() {
-    local config_root=/opt/efilinux/modules/recovery/etc
+    local config_root=/opt/recovery/etc
 
     cp -a "$srcdir/source/." "$builddir/"
     PKG_CONFIG=/usr/bin/pkg-config \
@@ -120,9 +120,9 @@ package() {
         /usr/bin/rpc.gssd
         /usr/bin/rpc.idmapd
         /usr/bin/nfsidmap
-        /opt/efilinux/modules/recovery/etc/nfs.conf
-        /opt/efilinux/modules/recovery/etc/nfsmount.conf
-        /opt/efilinux/modules/recovery/etc/idmapd.conf
+        /opt/recovery/etc/nfs.conf
+        /opt/recovery/etc/nfsmount.conf
+        /opt/recovery/etc/idmapd.conf
     )
     package_add_library_family keep 'libnfsidmap.so.*'
     [[ ! -d "$pkgdir/usr/lib/libnfsidmap" ]] || keep+=(/usr/lib/libnfsidmap/)

@@ -13,3 +13,5 @@ qemu-img
 nbd
 nfs-utils
 clonezilla
+
+recovery-launchers

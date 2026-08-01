@@ -9,6 +9,7 @@ module_id=recovery
 module_version=1
 module_description='Disk imaging, filesystem recovery, Windows recovery, and forensic utilities'
 module_max_size=$((64 * 1024 * 1024))
+module_relocate_usr=true
 module_components=(
     bzip2
     lz4
@@ -31,6 +32,7 @@ module_components=(
     qemu-img
     nbd
     libevent
+    libnl
     libtirpc
     rpcbind
     nfs-utils
@@ -43,6 +45,7 @@ module_components=(
     wget
     drbl-runtime
     clonezilla
+    recovery-launchers
 )
 
 module_main "$@"

@@ -32,7 +32,7 @@ prepare() {
 }
 
 build() {
-    local prefix=/opt/efilinux/modules/recovery/perl
+    local prefix=/opt/recovery/perl
     local compiler target_directory
 
     compiler=$(target_compiler_wrapper gcc)
@@ -80,7 +80,7 @@ build() {
 }
 
 devel() {
-    local prefix="$develdir/opt/efilinux/modules/recovery/perl"
+    local prefix="$develdir/opt/recovery/perl"
 
     rm -rf \
         "$prefix/man" \
@@ -96,7 +96,7 @@ devel() {
 }
 
 package() {
-    package_keep /opt/efilinux/modules/recovery/perl/
+    package_keep /opt/recovery/perl/
 }
 
 recipe_main "$@"

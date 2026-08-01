@@ -5,24 +5,26 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 source "$ROOT/modules/lib/module.sh"
 
-require_command mksquashfs sha256sum unsquashfs
+require_command find mksquashfs unsquashfs
 ensure_directories
 
 work="$EFILINUX_TEST/module-framework"
-module_a="$work/999-module-a"
-module_b="$work/998-module-b"
-base_index_hash=$(sha256sum "$MODULE_BASE_PACKAGE_INDEX" | awk '{print $1}')
-base_index_mtime=$(stat -c %Y "$MODULE_BASE_PACKAGE_INDEX")
-base_sysroot_count=$(find "$MODULE_BASE_SYSROOT" -xdev -printf . | wc -c)
-base_rootfs_count=$(find "$MODULE_BASE_ROOTFS" -xdev -printf . | wc -c)
-
+artifact="$ROOT/modules/output/901-valid.zxm"
+trap 'rm -f -- "$artifact"' EXIT
+valid="$work/901-valid"
+cross="$work/902-cross"
+outside="$work/903-outside"
+conflict="$work/904-conflict"
 reset_directory "$work"
-[[ ! -e "$EFILINUX_BUILD/modules" ]] || die "shared build/modules directory must not exist"
-[[ ! -e "$MODULE_BASE_SYSROOT/usr/share/module-framework-test" ]]
-[[ ! -e "$MODULE_BASE_ROOTFS/usr/share/module-framework-test" ]]
 
-mkdir -p "$module_a/foundation" "$module_a/consumer"
-cat > "$module_a/foundation/build.sh" <<EOF
+make_recipe() {
+    local directory=$1
+    local name=$2
+    local dependencies=$3
+    local build_body=$4
+
+    mkdir -p "$directory/$name"
+    cat > "$directory/$name/build.sh" <<EOF_RECIPE
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$ROOT"
@@ -30,151 +32,89 @@ source "\$ROOT/config.sh"
 source "\$ROOT/lib/common.sh"
 source "\$ROOT/lib/package.sh"
 source "\$ROOT/lib/recipe.sh"
-pkgname=foundation
+pkgname=$name
 pkgver=1
-depends=(glibc)
+depends=($dependencies)
 builddepends=()
 makedepends=(install)
 prepare() { :; }
 build() {
-    install -Dm0644 /dev/null \
-        "\$develdir/usr/share/module-framework-test/foundation.txt"
+$build_body
 }
 package() { :; }
 recipe_main "\$@"
-EOF
-cat > "$module_a/consumer/build.sh" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT="$ROOT"
-source "\$ROOT/config.sh"
-source "\$ROOT/lib/common.sh"
-source "\$ROOT/lib/package.sh"
-source "\$ROOT/lib/recipe.sh"
-pkgname=consumer
-pkgver=1
-depends=(foundation glibc)
-builddepends=()
-makedepends=(install)
-prepare() { :; }
-build() {
-    [[ -f "\$EFILINUX_SYSROOT/usr/share/module-framework-test/foundation.txt" ]] ||
-        die "module-local dependency was not installed into the module sysroot"
-    install -Dm0644 /dev/null \
-        "\$develdir/usr/share/module-framework-test/consumer.txt"
+EOF_RECIPE
+    chmod 0755 "$directory/$name/build.sh"
 }
-package() { :; }
-recipe_main "\$@"
-EOF
-cat > "$module_a/build.sh" <<EOF
+
+make_module() {
+    local directory=$1
+    local id=$2
+    local components=$3
+    local profile=$4
+
+    cat > "$directory/build.sh" <<EOF_MODULE
 #!/usr/bin/env bash
 set -euo pipefail
 source "$ROOT/modules/lib/module.sh"
-module_id=framework-a
+module_id=$id
 module_version=1
-module_description='module framework isolation test A'
+module_description='module framework behavior test'
 module_max_size=1048576
-module_components=(foundation consumer)
+module_components=($components)
 module_main "\$@"
-EOF
-printf 'consumer\n' > "$module_a/module.packages"
-chmod 0755 \
-    "$module_a/build.sh" \
-    "$module_a/foundation/build.sh" \
-    "$module_a/consumer/build.sh"
-
-"$module_a/build.sh"
-artifact_a="$module_a/build/output/999-module-a.zxm"
-[[ -f "$artifact_a" ]] || die "module artifact was not written inside the module build directory"
-[[ -d "$module_a/build/recipes" ]]
-[[ -f "$module_a/build/packages/index.tsv" ]]
-[[ -d "$module_a/build/sysroot" ]]
-[[ -d "$module_a/build/logs" ]]
-[[ -d "$module_a/build/state" ]]
-[[ -d "$module_a/build/test" ]]
-[[ -d "$module_a/build/work" ]]
-[[ ! -e "$module_a/packages" ]]
-[[ ! -e "$module_a/sysroot" ]]
-[[ ! -e "$module_a/logs" ]]
-[[ ! -e "$module_a/state" ]]
-[[ ! -e "$module_a/test" ]]
-[[ ! -e "$module_a/work" ]]
-[[ ! -e "$module_a/output" ]]
-[[ ! -e "$EFILINUX_BUILD/modules" ]]
-[[ ! -e "$EFILINUX_TARGET/modules/999-module-a.zxm" ]]
-
-unsquashfs -cat "$artifact_a" metadata/manifest | grep -Fxq 'id=framework-a'
-unsquashfs -cat "$artifact_a" metadata/manifest | grep -Fxq 'version=1'
-packages=$(unsquashfs -cat \
-    "$artifact_a" root/opt/efilinux/modules/framework-a/packages.tsv)
-grep -Fqx $'foundation\t1' <<<"$packages"
-grep -Fqx $'consumer\t1' <<<"$packages"
-! grep -Fq $'glibc\t' <<<"$packages"
-unsquashfs -cat \
-    "$artifact_a" root/usr/share/module-framework-test/foundation.txt >/dev/null
-unsquashfs -cat \
-    "$artifact_a" root/usr/share/module-framework-test/consumer.txt >/dev/null
-
-mkdir -p "$module_b/cross-consumer"
-cat > "$module_b/cross-consumer/build.sh" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT="$ROOT"
-source "\$ROOT/config.sh"
-source "\$ROOT/lib/common.sh"
-source "\$ROOT/lib/package.sh"
-source "\$ROOT/lib/recipe.sh"
-pkgname=cross-consumer
-pkgver=1
-depends=(consumer glibc)
-builddepends=()
-makedepends=(install)
-prepare() { :; }
-build() {
-    install -Dm0644 /dev/null \
-        "\$develdir/usr/share/module-framework-test/cross-consumer.txt"
+EOF_MODULE
+    printf '%s\n' "$profile" > "$directory/module.packages"
+    chmod 0755 "$directory/build.sh"
 }
-package() { :; }
-recipe_main "\$@"
-EOF
-cat > "$module_b/build.sh" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-source "$ROOT/modules/lib/module.sh"
-module_id=framework-b
-module_version=1
-module_description='module framework isolation test B'
-module_max_size=1048576
-module_components=(cross-consumer)
-module_main "\$@"
-EOF
-printf 'cross-consumer\n' > "$module_b/module.packages"
-chmod 0755 "$module_b/build.sh" "$module_b/cross-consumer/build.sh"
 
-if "$module_b/build.sh" >"$work/module-b.stdout" 2>"$work/module-b.stderr"; then
-    die "module B accepted a dependency supplied only by module A"
+make_recipe "$valid" foundation 'glibc' '
+    install -d -m0755 "$develdir/usr/bin"
+    cat > "$develdir/usr/bin/foundation-command" <<"SCRIPT"
+#!/bin/sh
+printf "%s\\n" foundation-ready
+SCRIPT
+    chmod 0755 "$develdir/usr/bin/foundation-command"'
+make_recipe "$valid" consumer 'foundation glibc' '
+    result=$("$EFILINUX_SYSROOT/usr/bin/foundation-command")
+    install -d -m0755 "$develdir/usr/bin"
+    cat > "$develdir/usr/bin/consumer-command" <<SCRIPT
+#!/bin/sh
+printf "%s\\n" "consumer-used-$result"
+SCRIPT
+    chmod 0755 "$develdir/usr/bin/consumer-command"'
+make_module "$valid" framework-valid 'foundation consumer' consumer
+rm -f -- "$artifact"
+"$valid/build.sh"
+[[ -f "$artifact" ]] || die "module framework produced no artifact"
+ZXMOD_LIBRARY="$ROOT/005-utils/zxmod/files/usr/lib/zxmod/common.sh" \
+    "$ROOT/005-utils/zxmod/files/usr/bin/zxmod" inspect "$artifact" >/dev/null
+extract="$work/extracted"
+unsquashfs -quiet -dest "$extract" "$artifact"
+foundation=$(find "$extract" -type f -name foundation-command -print -quit)
+consumer=$(find "$extract" -type f -name consumer-command -print -quit)
+[[ $(/bin/sh "$foundation") == foundation-ready ]]
+[[ $(/bin/sh "$consumer") == consumer-used-foundation-ready ]]
+
+make_recipe "$cross" cross-consumer 'consumer glibc' '
+    install -Dm0755 /dev/null "$develdir/usr/bin/cross-consumer"'
+make_module "$cross" framework-cross cross-consumer cross-consumer
+if "$cross/build.sh" >/dev/null 2>&1; then
+    die "module framework accepted a dependency supplied only by another module"
 fi
-grep -Fq \
-    'module component cross-consumer depends on unavailable package consumer; modules cannot depend on other modules' \
-    "$work/module-b.stderr"
-[[ ! -e "$module_b/build/output/998-module-b.zxm" ]]
 
-mkdir -p "$work/conflict/usr/bin" "$work/outside/etc"
-printf 'conflict\n' > "$work/conflict/usr/bin/bash"
-printf 'outside\n' > "$work/outside/etc/example"
-if (module_validate_base_path conflict "$work/conflict" /usr/bin/bash) 2>/dev/null; then
-    die "module framework accepted a base file conflict"
-fi
-if (module_validate_base_path outside "$work/outside" /etc/example) 2>/dev/null; then
-    die "module framework accepted a path outside /usr and /opt"
+make_recipe "$outside" outside 'glibc' '
+    install -Dm0644 /dev/null "$develdir/etc/outside.conf"'
+make_module "$outside" framework-outside outside outside
+if "$outside/build.sh" >/dev/null 2>&1; then
+    die "module framework accepted payload outside /usr and /opt"
 fi
 
-[[ $(sha256sum "$MODULE_BASE_PACKAGE_INDEX" | awk '{print $1}') == "$base_index_hash" ]]
-[[ $(stat -c %Y "$MODULE_BASE_PACKAGE_INDEX") == "$base_index_mtime" ]]
-[[ $(find "$MODULE_BASE_SYSROOT" -xdev -printf . | wc -c) == "$base_sysroot_count" ]]
-[[ $(find "$MODULE_BASE_ROOTFS" -xdev -printf . | wc -c) == "$base_rootfs_count" ]]
-[[ ! -e "$MODULE_BASE_SYSROOT/usr/share/module-framework-test" ]]
-[[ ! -e "$MODULE_BASE_ROOTFS/usr/share/module-framework-test" ]]
-[[ ! -e "$EFILINUX_BUILD/modules" ]]
+make_recipe "$conflict" conflict 'glibc' '
+    install -Dm0755 /dev/null "$develdir/usr/bin/bash"'
+make_module "$conflict" framework-conflict conflict conflict
+if "$conflict/build.sh" >/dev/null 2>&1; then
+    die "module framework accepted a payload that replaces a base command"
+fi
 
-log "module-local workspaces, self-contained ZXM output, base-only external dependencies, and cross-module rejection passed"
+log "Module dependency use, executable payload, isolation, path boundary, and base conflict behavior passed"

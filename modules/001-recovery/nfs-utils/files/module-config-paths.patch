@@ -5,7 +5,7 @@
  
  #define QUIT_ON_ERROR 1
 -#define PATH_IDMAPDCONF "/etc/idmapd.conf"
-+#define PATH_IDMAPDCONF "/opt/efilinux/modules/recovery/etc/idmapd.conf"
++#define PATH_IDMAPDCONF "/opt/recovery/etc/idmapd.conf"
  char *conf_path = PATH_IDMAPDCONF;
  
  main(int ac, char **av)
@@ -16,7 +16,7 @@
  
  #ifndef PATH_IDMAPDCONF
 -#define PATH_IDMAPDCONF "/etc/idmapd.conf"
-+#define PATH_IDMAPDCONF "/opt/efilinux/modules/recovery/etc/idmapd.conf"
++#define PATH_IDMAPDCONF "/opt/recovery/etc/idmapd.conf"
  #endif
  
  #ifndef IDMAPD_DEFAULT_DOMAIN
@@ -27,7 +27,7 @@
  #endif
  #ifndef _PATH_IDMAPDCONF
 -#define _PATH_IDMAPDCONF	"/etc/idmapd.conf"
-+#define _PATH_IDMAPDCONF	"/opt/efilinux/modules/recovery/etc/idmapd.conf"
++#define _PATH_IDMAPDCONF	"/opt/recovery/etc/idmapd.conf"
  #endif
  #ifndef _PATH_PROC_EXPORTS
  #define	_PATH_PROC_EXPORTS	"/proc/fs/nfs/exports"
@@ -38,7 +38,7 @@
  
  #ifndef PATH_IDMAPDCONF
 -#define PATH_IDMAPDCONF "/etc/idmapd.conf"
-+#define PATH_IDMAPDCONF "/opt/efilinux/modules/recovery/etc/idmapd.conf"
++#define PATH_IDMAPDCONF "/opt/recovery/etc/idmapd.conf"
  #endif
  
  #define UIDKEYS 0x1

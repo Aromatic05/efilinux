@@ -40,8 +40,8 @@ prepare() {
 }
 
 build() {
-    local config_root=/opt/efilinux/modules/recovery/etc/wget
-    local ca_root=/opt/efilinux/modules/recovery/share/ca-certificates
+    local config_root=/opt/recovery/etc/wget
+    local ca_root=/opt/recovery/share/ca-certificates
     local mapped_source=/usr/src/wget-$pkgver
 
     CFLAGS+=" -ffile-prefix-map=$srcdir/source=$mapped_source"
@@ -79,8 +79,8 @@ devel() {
 package() {
     package_keep \
         /usr/bin/wget \
-        /opt/efilinux/modules/recovery/etc/wget/wgetrc \
-        /opt/efilinux/modules/recovery/share/ca-certificates/cacert.pem
+        /opt/recovery/etc/wget/wgetrc \
+        /opt/recovery/share/ca-certificates/cacert.pem
 }
 
 recipe_main "$@"

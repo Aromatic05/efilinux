@@ -39,6 +39,16 @@ module_index_record() {
     ' "$index"
 }
 
+module_base_has_package() {
+    local name=$1
+
+    [[ -f "$MODULE_BASE_ROOTFS_OWNERS" ]] || return 1
+    awk -F '\t' -v name="$name" '
+        NR > 1 && $3 == name { found=1; exit }
+        END { exit(found ? 0 : 1) }
+    ' "$MODULE_BASE_ROOTFS_OWNERS"
+}
+
 module_record_archive() {
     local packages=$1
     local record=$2
@@ -62,6 +72,8 @@ module_lookup_package() {
         return
     fi
     if record=$(module_index_record "$MODULE_BASE_PACKAGE_INDEX" "$name"); then
+        module_base_has_package "$name" ||
+            die "module dependency $name exists in the package repository but is not installed in the base EFI"
         MODULE_LOOKUP_ORIGIN=base
         MODULE_LOOKUP_ARCHIVE=$(module_record_archive "$MODULE_BASE_PACKAGES" "$record")
         return
@@ -235,10 +247,75 @@ module_build_components() {
     done
 }
 
+module_relocate_usr_files() {
+    local stage=$1
+    local destination=$2
+    local source relative target
+
+    [[ -d "$stage/usr" ]] || return 0
+    while IFS= read -r -d '' source; do
+        relative=${source#"$stage/usr/"}
+        target="$stage/opt/$destination/$relative"
+        [[ ! -e "$target" && ! -L "$target" ]] ||
+            die "module relocation conflicts at /opt/$destination/$relative"
+        mkdir -p "$(dirname -- "$target")"
+        mv -- "$source" "$target"
+        ln -s "/opt/$destination/$relative" "$source"
+    done < <(find "$stage/usr" \( -type f -o -type l \) -print0 | LC_ALL=C sort -z)
+}
+
+
+module_resolve_desktop_icons() {
+    local stage=$1
+
+    python3 - "$stage" <<'PYICON'
+from pathlib import Path
+import sys
+
+stage = Path(sys.argv[1])
+applications = stage / "usr/share/applications"
+icons = stage / "usr/share/icons"
+if not applications.is_dir() or not icons.is_dir():
+    raise SystemExit(0)
+
+sizes = ["scalable", "256x256", "128x128", "64x64", "48x48", "32x32", "24x24", "22x22", "16x16"]
+contexts = ["apps", "mimetypes", "status", "devices", "places", "actions"]
+extensions = ["svg", "png", "xpm"]
+
+def find_icon(name: str):
+    for theme in sorted(path for path in icons.iterdir() if path.is_dir()):
+        for size in sizes:
+            for context in contexts:
+                for extension in extensions:
+                    candidate = theme / size / context / f"{name}.{extension}"
+                    if candidate.exists() or candidate.is_symlink():
+                        return "/" + candidate.relative_to(stage).as_posix()
+    return None
+
+for desktop in sorted(applications.glob("*.desktop")):
+    lines = desktop.read_text().splitlines()
+    changed = False
+    for index, line in enumerate(lines):
+        if not line.startswith("Icon="):
+            continue
+        name = line[5:].strip()
+        if not name or name.startswith("/") or "/" in name:
+            break
+        resolved = find_icon(name)
+        if resolved:
+            lines[index] = f"Icon={resolved}"
+            changed = True
+        break
+    if changed:
+        desktop.write_text("\n".join(lines) + "\n")
+PYICON
+}
+
 module_compose() {
     local module_directory=$1
-    local module_name work stage owners package archive subset list
+    local module_name work stage owners package archive subset list packages_file
     local package_version output temporary size included=0
+    local -a zxmod_args
 
     module_name=$(basename -- "$module_directory")
     module_validate_name "$module_name"
@@ -272,7 +349,13 @@ module_compose() {
     done
     (( included > 0 )) || die "module $module_name contains no packages outside the base EFI"
 
-    install -d -m0755 "$stage/opt/efilinux/modules/$module_id"
+    module_resolve_desktop_icons "$stage"
+
+    if [[ ${module_relocate_usr:-false} == true ]]; then
+        module_relocate_usr_files "$stage" "$module_id"
+    fi
+
+    packages_file="$work/packages.tsv"
     {
         printf 'package\tversion\n'
         for package in "${MODULE_ORDER[@]}"; do
@@ -280,17 +363,24 @@ module_compose() {
             package_version=$(module_archive_version "${MODULE_ARCHIVES[$package]}")
             printf '%s\t%s\n' "$package" "$package_version"
         done
-    } > "$stage/opt/efilinux/modules/$module_id/packages.tsv"
+    } > "$packages_file"
 
     output="$MODULE_OUTPUT_DIR/$module_name.zxm"
     temporary="$MODULE_OUTPUT_DIR/$module_name.tmp.$$.zxm"
     rm -f -- "$temporary"
+    zxmod_args=(
+        --id "$module_id"
+        --version "$module_version"
+        --arch "$EFILINUX_ARCH"
+        --description "$module_description"
+        --packages-file "$packages_file"
+    )
+    [[ -z ${module_post_load:-} ]] ||
+        zxmod_args+=(--post-load "$module_directory/$module_post_load")
+    [[ -z ${module_pre_unload:-} ]] ||
+        zxmod_args+=(--pre-unload "$module_directory/$module_pre_unload")
     "$EFILINUX_ROOT/005-utils/zxmod/files/usr/bin/zxmod-build" \
-        --id "$module_id" \
-        --version "$module_version" \
-        --arch "$EFILINUX_ARCH" \
-        --description "$module_description" \
-        "$stage" "$temporary"
+        "${zxmod_args[@]}" "$stage" "$temporary"
     mv -f -- "$temporary" "$output"
 
     size=$(stat -c %s "$output")

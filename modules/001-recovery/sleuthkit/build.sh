@@ -36,7 +36,7 @@ build() {
     target_make_install "$builddir" "$develdir"
 }
 devel() {
-    local private_perl=/opt/efilinux/modules/recovery/perl/bin/perl
+    local private_perl=/opt/recovery/perl/bin/perl
     local script
 
     for script in sorter mactime; do

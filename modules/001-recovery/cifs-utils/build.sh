@@ -35,7 +35,7 @@ build() {
             --enable-cifscreds \
             --disable-cifsidmap \
             --enable-cifsacl \
-            --enable-smbinfo \
+            --disable-smbinfo \
             --disable-pythontools \
             --disable-pam \
             --disable-systemd \
@@ -56,8 +56,7 @@ package() {
         /usr/bin/cifs.upcall \
         /usr/bin/cifscreds \
         /usr/bin/getcifsacl \
-        /usr/bin/setcifsacl \
-        /usr/bin/smbinfo
+        /usr/bin/setcifsacl
 }
 
 recipe_main "$@"

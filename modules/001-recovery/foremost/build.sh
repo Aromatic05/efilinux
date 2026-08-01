@@ -18,7 +18,7 @@ prepare() {
     input_file "$recipedir/files/safety.patch" "$srcdir/safety.patch"
     [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
     patch -d "$srcdir/source" -Np1 < "$srcdir/safety.patch"
-    sed -i 's#"/usr/local/etc/foremost.conf"#"/opt/efilinux/modules/recovery/foremost.conf"#' \
+    sed -i 's#"/usr/local/etc/foremost.conf"#"/opt/recovery/foremost.conf"#' \
         "$srcdir/source/config.c"
     sed -i "/#define AUTHOR/a #define VERSION \"$pkgver\"" "$srcdir/source/main.h"
 }
@@ -29,10 +29,10 @@ build() {
         LINK_OPT="$LDFLAGS"
     install -Dm0755 "$srcdir/source/foremost" "$develdir/usr/bin/foremost"
     install -Dm0644 "$srcdir/source/foremost.conf" \
-        "$develdir/opt/efilinux/modules/recovery/foremost.conf"
+        "$develdir/opt/recovery/foremost.conf"
 }
 devel() { strip_all "$develdir/usr/bin/foremost"; }
 package() {
-    package_keep /usr/bin/foremost /opt/efilinux/modules/recovery/foremost.conf
+    package_keep /usr/bin/foremost /opt/recovery/foremost.conf
 }
 recipe_main "$@"

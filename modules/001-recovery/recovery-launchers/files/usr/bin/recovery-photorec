@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/bin/xfce4-terminal --title=PhotoRec --command='/usr/bin/doas /usr/bin/photorec'

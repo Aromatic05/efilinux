@@ -35,7 +35,7 @@ build() {
         --disable-authdes
     target_make_install "$builddir" "$develdir"
     install -Dm0644 "$srcdir/source/doc/netconfig" \
-        "$develdir/opt/efilinux/modules/recovery/etc/netconfig"
+        "$develdir/opt/recovery/etc/netconfig"
 }
 
 devel() {
@@ -46,7 +46,7 @@ devel() {
 package() {
     local -a keep=()
     package_add_library_family keep 'libtirpc.so.*'
-    keep+=(/opt/efilinux/modules/recovery/etc/netconfig)
+    keep+=(/opt/recovery/etc/netconfig)
     package_keep "${keep[@]}"
 }
 
