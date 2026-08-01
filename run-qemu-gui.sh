@@ -52,8 +52,9 @@ efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
 module_output_dir="$ROOT/modules/output"
 qemu_efi_dir="$EFILINUX_TEST/qemu-gui-efi"
 qemu_module_dir="$qemu_efi_dir/modules"
+qemu_efi_image="$EFILINUX_TEST/qemu-gui-efi.img"
 
-require_command "$qemu_binary" cp grep id install mkdir
+require_command "$qemu_binary" cp du grep id install mcopy mkfs.fat mkdir truncate
 ensure_directories
 
 [[ -f "$efi_binary" ]] || die "EFI binary is missing; run ./build.sh first: $efi_binary"
@@ -83,6 +84,18 @@ for module_artifact in "${module_artifacts[@]}"; do
     cp -a --reflink=auto "$module_artifact" "$qemu_module_dir/"
 done
 
+mebibyte=$((1024 * 1024))
+payload_bytes=$(du -sb -- "$qemu_efi_dir")
+payload_bytes=${payload_bytes%%$'\t'*}
+image_bytes=$((payload_bytes + payload_bytes / 4 + 64 * mebibyte))
+image_bytes=$(((image_bytes + mebibyte - 1) / mebibyte * mebibyte))
+image_mib=$((image_bytes / mebibyte))
+
+rm -f -- "$qemu_efi_image"
+truncate -s "$image_bytes" "$qemu_efi_image"
+mkfs.fat -F 32 -n EFILINUX "$qemu_efi_image" >/dev/null
+mcopy -s -i "$qemu_efi_image" "$qemu_efi_dir"/* ::/
+
 if ((reset_nvram)) || [[ ! -f "$ovmf_vars" ]]; then
     cp -- "$ovmf_vars_template" "$ovmf_vars"
 fi
@@ -100,7 +113,7 @@ qemu_command=(
     -m "$qemu_memory"
     -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code"
     -drive "if=pflash,format=raw,file=$ovmf_vars"
-    -drive "format=raw,file=fat:rw:$qemu_efi_dir"
+    -drive "format=raw,file=$qemu_efi_image"
     -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$qemu_ssh_port-:22"
     -device "e1000e,netdev=net0"
     -device "qemu-xhci,id=xhci"
@@ -114,7 +127,7 @@ qemu_command=(
 )
 
 printf 'EFI image:  %s\n' "$efi_binary"
-printf 'EFI drive:  %s\n' "$qemu_efi_dir"
+printf 'EFI disk:   %s (%s MiB, FAT32)\n' "$qemu_efi_image" "$image_mib"
 printf 'Modules:    %s packaged under /modules\n' "${#module_artifacts[@]}"
 for module_artifact in "${module_artifacts[@]}"; do
     printf '            %s\n' "${module_artifact##*/}"
