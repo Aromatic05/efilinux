@@ -109,8 +109,6 @@ timeout 20 env -u LD_PRELOAD \
     "$browser" \
     --no-sandbox \
     --headless=new \
-    --disable-gpu \
-    --disable-dev-shm-usage \
     --disable-background-networking \
     --user-data-dir="$work/profile" \
     --dump-dom 'data:text/html,<html><body>efilinux-browser-smoke</body></html>' \

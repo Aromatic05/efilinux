@@ -64,12 +64,7 @@ build() {
         "$develdir/opt/ungoogled-chromium/chrome_sandbox" \
         "$develdir/opt/ungoogled-chromium/chrome_200_percent.pak" \
         "$develdir/opt/ungoogled-chromium/xdg-mime" \
-        "$develdir/opt/ungoogled-chromium/xdg-settings" \
-        "$develdir/opt/ungoogled-chromium/libEGL.so" \
-        "$develdir/opt/ungoogled-chromium/libGLESv2.so" \
-        "$develdir/opt/ungoogled-chromium/libvulkan.so.1" \
-        "$develdir/opt/ungoogled-chromium/libvk_swiftshader.so" \
-        "$develdir/opt/ungoogled-chromium/vk_swiftshader_icd.json"
+        "$develdir/opt/ungoogled-chromium/xdg-settings"
 
     find "$develdir/opt/ungoogled-chromium/locales" -type f -name '*.pak.info' -delete
     while IFS= read -r -d '' locale; do
