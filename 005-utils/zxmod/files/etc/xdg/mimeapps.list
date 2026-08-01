@@ -1,0 +1,5 @@
+[Default Applications]
+application/vnd.efilinux.zxm=zxmod-load.desktop
+
+[Added Associations]
+application/vnd.efilinux.zxm=zxmod-load.desktop;

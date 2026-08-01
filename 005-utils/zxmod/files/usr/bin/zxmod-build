@@ -4,9 +4,11 @@ set -eu
 
 usage() {
     cat >&2 <<'USAGE'
-usage: zxmod-build --id ID --version VERSION [--arch ARCH] [--description TEXT] ROOT OUTPUT.zxm
+usage: zxmod-build --id ID --version VERSION [--arch ARCH] [--description TEXT]
+                   [--packages-file FILE] [--post-load FILE] [--pre-unload FILE]
+                   ROOT OUTPUT.zxm
 
-ROOT may contain only usr/ and opt/. Metadata is written as metadata/manifest.
+ROOT may contain only usr/ and opt/. Supplemental files are stored under metadata/.
 USAGE
     exit 2
 }
@@ -15,6 +17,9 @@ id=
 version=
 arch=$(uname -m)
 description=
+packages_file=
+post_load=
+pre_unload=
 newline='
 '
 
@@ -24,6 +29,9 @@ while [ $# -gt 0 ]; do
         --version) [ $# -ge 2 ] || usage; version=$2; shift 2 ;;
         --arch) [ $# -ge 2 ] || usage; arch=$2; shift 2 ;;
         --description) [ $# -ge 2 ] || usage; description=$2; shift 2 ;;
+        --packages-file) [ $# -ge 2 ] || usage; packages_file=$2; shift 2 ;;
+        --post-load) [ $# -ge 2 ] || usage; post_load=$2; shift 2 ;;
+        --pre-unload) [ $# -ge 2 ] || usage; pre_unload=$2; shift 2 ;;
         --) shift; break ;;
         -*) usage ;;
         *) break ;;
@@ -36,6 +44,12 @@ case $id in ''|[!a-z0-9]*|*[!a-z0-9._-]*) usage ;; esac
 case $version in ''|*[!A-Za-z0-9._+:-]*) usage ;; esac
 case $arch in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) usage ;; esac
 case $description in *"$newline"*) usage ;; esac
+for metadata_file in "$packages_file" "$post_load" "$pre_unload"; do
+    [ -z "$metadata_file" ] || { [ -f "$metadata_file" ] && [ ! -L "$metadata_file" ]; } || {
+        printf 'zxmod-build: metadata input is not a regular file: %s\n' "$metadata_file" >&2
+        exit 1
+    }
+done
 
 root=$1
 output=$2
@@ -100,5 +114,20 @@ cp -a "$root/." "$work/root/"
     printf 'version=%s\n' "$version"
     [ -n "$description" ] && printf 'description=%s\n' "$description"
 } > "$work/metadata/manifest"
+if [ -n "$packages_file" ]; then
+    cp "$packages_file" "$work/metadata/packages.tsv"
+    chmod 0644 "$work/metadata/packages.tsv"
+fi
+if [ -n "$post_load" ] || [ -n "$pre_unload" ]; then
+    mkdir -p "$work/metadata/hooks"
+fi
+if [ -n "$post_load" ]; then
+    cp "$post_load" "$work/metadata/hooks/post-load"
+    chmod 0755 "$work/metadata/hooks/post-load"
+fi
+if [ -n "$pre_unload" ]; then
+    cp "$pre_unload" "$work/metadata/hooks/pre-unload"
+    chmod 0755 "$work/metadata/hooks/pre-unload"
+fi
 mksquashfs "$work" "$output" -noappend -comp zstd -Xcompression-level 19 \
     -all-root -no-xattrs -no-exports -mkfs-time 0 -all-time 0 >/dev/null

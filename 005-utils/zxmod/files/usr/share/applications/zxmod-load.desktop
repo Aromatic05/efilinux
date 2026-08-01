@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Load EFI Linux Module
+Comment=Load a ZXM module into the running system
+Exec=/usr/bin/zxmod-open %f
+Icon=package-x-generic
+Terminal=false
+NoDisplay=true
+MimeType=application/vnd.efilinux.zxm;
+StartupNotify=false

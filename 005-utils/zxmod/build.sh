@@ -12,7 +12,7 @@ pkgname=zxmod
 pkgver=1
 sysroot=false
 
-depends=(kmod openssl squashfs-tools util-linux)
+depends=(doas kmod openssl shared-mime-info squashfs-tools util-linux)
 builddepends=()
 makedepends=(install)
 
@@ -23,14 +23,15 @@ prepare() {
 build() {
     install -Dm0755 "$srcdir/files/usr/bin/zxmod" "$develdir/usr/bin/zxmod"
     install -Dm0755 "$srcdir/files/usr/bin/zxmod-build" "$develdir/usr/bin/zxmod-build"
+    install -Dm0755 "$srcdir/files/usr/bin/zxmod-open" "$develdir/usr/bin/zxmod-open"
     install -Dm0644 "$srcdir/files/usr/lib/zxmod/common.sh" \
         "$develdir/usr/lib/zxmod/common.sh"
-    install -Dm0755 "$srcdir/files/etc/rc.d/init.d/zxmod" \
-        "$develdir/etc/rc.d/init.d/zxmod"
-    for runlevel in 2 3 4 5; do
-        install -d -m0755 "$develdir/etc/rc.d/rc${runlevel}.d"
-        ln -s ../init.d/zxmod "$develdir/etc/rc.d/rc${runlevel}.d/S65zxmod"
-    done
+    install -Dm0644 "$srcdir/files/usr/share/applications/zxmod-load.desktop" \
+        "$develdir/usr/share/applications/zxmod-load.desktop"
+    install -Dm0644 "$srcdir/files/usr/share/mime/packages/application-vnd.efilinux.zxm.xml" \
+        "$develdir/usr/share/mime/packages/application-vnd.efilinux.zxm.xml"
+    install -Dm0644 "$srcdir/files/etc/xdg/mimeapps.list" \
+        "$develdir/etc/xdg/mimeapps.list"
     install -d -m0755 "$develdir/opt"
 }
 

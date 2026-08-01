@@ -1,7 +1,7 @@
 # zxmod local modules
 
-`zxmod` adds local utility or application payloads to the immutable EFI Linux base only
-after boot. A `.zxm` is a Zstd-compressed SquashFS image with this layout:
+`zxmod` adds local utility or application payloads to the immutable EFI Linux
+base after boot. A `.zxm` is a Zstd-compressed SquashFS image with this layout:
 
 ```
 metadata/manifest
@@ -9,70 +9,48 @@ root/usr/...
 root/opt/...
 ```
 
-The manifest is newline-delimited `key=value` data. Version 1 requires exactly
+The manifest is newline-delimited `key=value` data. Format 1 requires exactly
 one each of `format=1`, `id`, `arch`, and `version`; `description` is optional.
-There are no package-manager hooks or install/post-install scripts.
+Modules may also contain controlled load and unload hooks under `metadata/hooks`.
 
 ```
 zxmod-build --id hello --version 1.0 --description 'Example' stage hello.zxm
-zxmod inspect hello.zxm
-sudo zxmod load hello.zxm
-sudo zxmod unload hello
-zxmod list
+zxmod load hello.zxm
+zxmod unload hello
 ```
 
+These are the only runtime commands. Module state is volatile and lasts until
+unload or reboot. EFI Linux does not provide enable, disable, startup, list, or
+inspection commands.
+
 `zxmod-build` accepts a staging tree containing only `usr/` and/or `opt/`. It
-uses `mksquashfs -comp zstd`, normalizes ownership and timestamps, and refuses
-to replace its output. Artifact names are not trusted: `inspect` and `load`
-validate SquashFS compression, manifest, architecture, payload layout, and the
-regular-file source identity.
+uses Zstd-compressed SquashFS, normalizes ownership and timestamps, and refuses
+to replace its output. `zxmod load` validates the compression, manifest,
+architecture, payload layout, source identity, and path conflicts before
+switching the live system view.
 
 ## Lifecycle and safety
 
 At first load zxmod bind-mounts the original `/usr` and `/opt` under
-`/run/zxmod/base`. Every load or unload constructs a fresh OverlayFS generation
-in `/run/zxmod/generations`, using read-only mounted module images and the saved
-base directories as lower layers, then switches the `/usr` and `/opt` views.
-OverlayFS cannot gain lower layers in place. Processes holding old files may
-therefore continue using their old generation. Module mounts are
-`ro,nodev,nosuid`; `noexec` is intentionally absent so applications can run.
-An unloaded module's read-only mount is retained under `/run/zxmod/retired`
-until reboot so older OverlayFS generations remain valid.
+`/run/zxmod/base`. Every load or unload constructs a fresh read-only OverlayFS
+generation, then atomically switches the live `/usr` and `/opt` mount views.
+Module mounts are `ro,nodev,nosuid`; execution remains enabled so applications
+can run.
 
 Only `root/usr` and `root/opt` are accepted. A load rejects every non-directory
 payload path already present in the base image or another active module, and
-also rejects a module directory over a base non-directory. v1 has no override
-mode. The source's device, inode, size, and mtime are recorded; a changed active
-source prevents a later generation switch.
+also rejects a module directory over a base non-directory. Format 1 has no
+override mode.
 
-State is deliberately volatile in `/run/zxmod`. Modules may come from an
-already mounted data partition, USB storage, or network filesystem. zxmod does
-not mount media, download, update, resolve dependencies, or use a repository.
-
-## Optional persistent enablement
-
-Persistence is opt-in and never uses `/var` in the built-in initramfs. Mount
-writable external media first, then configure its absolute mount point in the
-immutable base system:
-
-```
-# /etc/zxmod.conf
-persist_root=/media/zxmod-state
-```
-
-The directory must itself be a mounted non-tmpfs filesystem. `zxmod enable
-/mounted/media/hello.zxm` saves only its canonical path and identity below
-`persist_root/zxmod/enabled`; `zxmod disable hello` removes that record.
-`zxmod startup` loads records after the deployment's boot mounts have made the
-store and module media available. Missing or changed media is reported and left
-inactive; state is never silently recreated in RAM. v1 provides no boot service
-because mount ordering is deployment-specific.
+After a successful load or unload, zxmod restarts active Xfce panels so Garcon
+and Whisker reload application entries from the new `/usr` view. Module-owned
+menu entries use directly resolvable icons. EFI Linux registers
+`application/vnd.efilinux.zxm`, so opening a `.zxm` in the file manager invokes
+the privileged `zxmod load` action.
 
 ## Test scope
 
-`test/zxmod.sh` creates real `.zxm` images and inspects real SquashFS metadata.
-Its runtime section explicitly skips only when unprivileged SquashFS mounting
-is unavailable. `test/boot-zxmod-qemu.sh` is the independent full integration
-test: after the main repository rebuilds packages and the EFI image, it boots
-that image with a separate read-only FAT module disk and checks load, conflict
-rejection, a read-only `/usr` view, unload, and retained open descriptors.
+`test/zxmod.sh` creates real module images and verifies builder validation,
+load/unload behavior, simultaneous non-conflicting modules, conflict rejection,
+standalone Bash completion, and the XDG MIME association. The mount namespace
+section skips only when unprivileged SquashFS mounts are unavailable.

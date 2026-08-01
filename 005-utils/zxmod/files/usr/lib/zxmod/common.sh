@@ -3,7 +3,6 @@
 ZXMOD_RUN_ROOT=${ZXMOD_RUN_ROOT:-/run/zxmod}
 ZXMOD_USR_TARGET=${ZXMOD_USR_TARGET:-/usr}
 ZXMOD_OPT_TARGET=${ZXMOD_OPT_TARGET:-/opt}
-ZXMOD_CONFIG=${ZXMOD_CONFIG:-/etc/zxmod.conf}
 ZXMOD_TAB=$(printf '\t')
 ZXMOD_NEWLINE='
 '
@@ -293,13 +292,33 @@ zxmod_validate_one_path() {
         return
     fi
 
-    zxmod_path_exists "$zxmod_base" &&
+    if zxmod_path_exists "$zxmod_base"; then
         zxmod_die "module path conflicts with base system: /$zxmod_relative"
+    fi
     while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
         [ -n "$zxmod_active_id" ] || continue
-        zxmod_path_exists "$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_relative" &&
+        if zxmod_path_exists "$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_relative"; then
             zxmod_die "module path conflicts with active module $zxmod_active_id: /$zxmod_relative"
+        fi
     done < "$zxmod_active_file"
+    return 0
+}
+
+zxmod_run_hook() {
+    zxmod_hook_root=$1
+    zxmod_hook_name=$2
+    zxmod_hook="$zxmod_hook_root/metadata/hooks/$zxmod_hook_name"
+    zxmod_path_exists "$zxmod_hook" || return 0
+    if [ ! -f "$zxmod_hook" ] || [ -L "$zxmod_hook" ] || [ ! -x "$zxmod_hook" ]; then
+        printf 'zxmod: ignoring invalid %s hook for %s\n' \
+            "$zxmod_hook_name" "${zxmod_hook_root##*/}" >&2
+        return 0
+    fi
+    if ! "$zxmod_hook"; then
+        printf 'zxmod: %s hook failed for %s\n' \
+            "$zxmod_hook_name" "${zxmod_hook_root##*/}" >&2
+    fi
+    return 0
 }
 
 zxmod_validate_path_tree() (
@@ -532,20 +551,34 @@ zxmod_switch_generation() {
     zxmod_remove_generation_directory "$zxmod_old_generation"
 }
 
-zxmod_persist_root() {
-    [ -f "$ZXMOD_CONFIG" ] ||
-        zxmod_die "persistent store is not configured; set persist_root in $ZXMOD_CONFIG"
-    zxmod_persist_count=$(awk -F= '$1 == "persist_root" { count++ } END { print count + 0 }' "$ZXMOD_CONFIG")
-    [ "$zxmod_persist_count" -eq 1 ] || zxmod_die 'persistent store configuration is invalid'
-    zxmod_persist_root=$(awk -F= '$1 == "persist_root" { sub(/^[^=]*=/, ""); print; exit }' "$ZXMOD_CONFIG")
-    case $zxmod_persist_root in /*) ;; *) zxmod_die 'persistent store must be an absolute path' ;; esac
-    [ -d "$zxmod_persist_root" ] && [ -w "$zxmod_persist_root" ] ||
-        zxmod_die "persistent store is unavailable: $zxmod_persist_root"
-    mountpoint -q "$zxmod_persist_root" ||
-        zxmod_die "persistent store is not a mount point: $zxmod_persist_root"
-    case $(findmnt -no FSTYPE --target "$zxmod_persist_root") in
-        tmpfs|ramfs|rootfs|'')
-            zxmod_die "persistent store is not external writable media: $zxmod_persist_root"
-            ;;
-    esac
+zxmod_refresh_desktop_sessions() {
+    zxmod_session=
+    for zxmod_session in /proc/[0-9]*; do
+        [ -r "$zxmod_session/comm" ] && [ -r "$zxmod_session/status" ] && \
+            [ -r "$zxmod_session/environ" ] || continue
+        IFS= read -r zxmod_session_command < "$zxmod_session/comm" || continue
+        [ "$zxmod_session_command" = xfce4-session ] || continue
+
+        zxmod_session_uid=$(awk '/^Uid:/ { print $2; exit }' "$zxmod_session/status")
+        case $zxmod_session_uid in ''|0|*[!0-9]*) continue ;; esac
+        zxmod_session_user=$(awk -F: -v uid="$zxmod_session_uid" '$3 == uid { print $1; exit }' /etc/passwd)
+        zxmod_session_home=$(awk -F: -v uid="$zxmod_session_uid" '$3 == uid { print $6; exit }' /etc/passwd)
+        [ -n "$zxmod_session_user" ] && [ -n "$zxmod_session_home" ] || continue
+
+        zxmod_session_display=$(tr '\0' '\n' < "$zxmod_session/environ" | sed -n 's/^DISPLAY=//p' | sed -n '1p')
+        zxmod_session_dbus=$(tr '\0' '\n' < "$zxmod_session/environ" | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p' | sed -n '1p')
+        zxmod_session_runtime=$(tr '\0' '\n' < "$zxmod_session/environ" | sed -n 's/^XDG_RUNTIME_DIR=//p' | sed -n '1p')
+        zxmod_session_xauthority=$(tr '\0' '\n' < "$zxmod_session/environ" | sed -n 's/^XAUTHORITY=//p' | sed -n '1p')
+        [ -n "$zxmod_session_display" ] && [ -n "$zxmod_session_dbus" ] && \
+            [ -n "$zxmod_session_runtime" ] || continue
+
+        DISPLAY="$zxmod_session_display" \
+        DBUS_SESSION_BUS_ADDRESS="$zxmod_session_dbus" \
+        XDG_RUNTIME_DIR="$zxmod_session_runtime" \
+        XAUTHORITY="${zxmod_session_xauthority:-$zxmod_session_home/.Xauthority}" \
+        HOME="$zxmod_session_home" USER="$zxmod_session_user" LOGNAME="$zxmod_session_user" \
+            /usr/bin/su -p -s /usr/bin/sh "$zxmod_session_user" -c \
+            '/usr/bin/xfce4-panel --restart >/dev/null 2>&1' >/dev/null 2>&1 || :
+    done
+    return 0
 }

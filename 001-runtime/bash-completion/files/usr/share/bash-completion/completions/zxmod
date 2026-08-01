@@ -1,19 +1,32 @@
 _zxmod() {
     local current=${COMP_WORDS[COMP_CWORD]}
     local command=${COMP_WORDS[1]-}
+    local candidate
 
     if (( COMP_CWORD == 1 )); then
-        COMPREPLY=($(compgen -W 'inspect list load unload enable disable startup' -- "$current"))
+        mapfile -t COMPREPLY < <(compgen -W 'load unload' -- "$current")
         return
     fi
 
     case $command in
-        inspect|load|enable)
-            _filedir zxm
+        load)
+            COMPREPLY=()
+            while IFS= read -r candidate; do
+                if [[ -d $candidate || $candidate == *.zxm ]]; then
+                    COMPREPLY+=("$candidate")
+                fi
+            done < <(compgen -f -- "$current")
+            compopt -o filenames 2>/dev/null || true
             ;;
-        unload|disable)
-            if command -v zxmod >/dev/null 2>&1; then
-                COMPREPLY=($(compgen -W "$(zxmod list 2>/dev/null | awk 'NR > 1 { print $1 }')" -- "$current"))
+        unload)
+            COMPREPLY=()
+            local active_file=${ZXMOD_RUN_ROOT:-/run/zxmod}/active
+            if [[ -r $active_file ]]; then
+                mapfile -t COMPREPLY < <(
+                    awk -F '\t' -v prefix="$current" '
+                        $1 ~ ("^" prefix) { print $1 }
+                    ' "$active_file"
+                )
             fi
             ;;
     esac

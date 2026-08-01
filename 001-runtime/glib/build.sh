@@ -83,6 +83,7 @@ package() {
         /usr/bin/gdbus
         /usr/bin/gio
         /usr/bin/gio-querymodules
+        /usr/libexec/gio-launch-desktop
         /usr/bin/glib-compile-schemas
         /usr/bin/gsettings
     )

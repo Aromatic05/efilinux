@@ -11,11 +11,8 @@ ZXMOD_PENDING_LOOP_RECORD=
 
 usage() {
     cat >&2 <<'USAGE'
-usage: zxmod inspect FILE.zxm
-       zxmod load FILE.zxm
+usage: zxmod load FILE.zxm
        zxmod unload ID
-       zxmod list
-       zxmod enable FILE.zxm | disable ID | startup
 USAGE
     exit 2
 }
@@ -44,16 +41,6 @@ cleanup() {
     exit "$zxmod_status"
 }
 trap cleanup 0 1 2 15
-
-inspect() {
-    [ $# -eq 1 ] || usage
-    zxmod_source=$(zxmod_require_module_file "$1")
-    zxmod_manifest="${TMPDIR:-/tmp}/zxmod-manifest.$$"
-    zxmod_track_temp "$zxmod_manifest"
-    zxmod_read_manifest "$zxmod_source" "$zxmod_manifest"
-    printf 'id=%s\narch=%s\nversion=%s\nsource=%s\n' \
-        "$zxmod_id" "$zxmod_arch" "$zxmod_version" "$zxmod_source"
-}
 
 load() {
     [ $# -eq 1 ] || usage
@@ -94,6 +81,8 @@ load() {
     ZXMOD_PENDING_MOUNT=
     ZXMOD_PENDING_LOOP=
     ZXMOD_PENDING_LOOP_RECORD=
+    zxmod_run_hook "$zxmod_mount" post-load
+    zxmod_refresh_desktop_sessions
 }
 
 unload() {
@@ -115,6 +104,7 @@ unload() {
         *) zxmod_die "module loop record is invalid: $1" ;;
     esac
 
+    zxmod_run_hook "$ZXMOD_RUN_ROOT/modules/$1" pre-unload
     zxmod_switch_generation "$zxmod_candidate"
 
     umount -l "$ZXMOD_RUN_ROOT/modules/$1" ||
@@ -123,66 +113,11 @@ unload() {
         zxmod_die "module is inactive but its loop device could not be detached: $1"
     rm -f -- "$zxmod_loop_record"
     rmdir "$ZXMOD_RUN_ROOT/modules/$1"
-}
-
-list() {
-    [ $# -eq 0 ] || usage
-    [ -f "$ZXMOD_RUN_ROOT/active" ] || exit 0
-    printf 'id\tsource\n'
-    while IFS="$ZXMOD_TAB" read -r zxmod_id zxmod_source zxmod_identity; do
-        [ -n "$zxmod_id" ] && printf '%s\t%s\n' "$zxmod_id" "$zxmod_source"
-    done < "$ZXMOD_RUN_ROOT/active"
-}
-
-enable() {
-    [ $# -eq 1 ] || usage
-    zxmod_require_root
-    zxmod_persist_root
-    zxmod_source=$(zxmod_require_module_file "$1")
-    mkdir -p "$ZXMOD_RUN_ROOT"
-    zxmod_manifest="$ZXMOD_RUN_ROOT/enable-manifest.$$"
-    zxmod_track_temp "$zxmod_manifest"
-    zxmod_read_manifest "$zxmod_source" "$zxmod_manifest"
-    mkdir -p "$zxmod_persist_root/zxmod/enabled"
-    zxmod_record="$zxmod_persist_root/zxmod/enabled/$zxmod_id"
-    zxmod_record_next="$zxmod_record.next.$$"
-    zxmod_track_temp "$zxmod_record_next"
-    printf '%s\t%s\n' "$zxmod_source" "$(zxmod_source_identity "$zxmod_source")" > "$zxmod_record_next"
-    mv -- "$zxmod_record_next" "$zxmod_record"
-}
-
-disable() {
-    [ $# -eq 1 ] || usage
-    zxmod_require_root
-    zxmod_validate_id "$1"
-    zxmod_persist_root
-    rm -f -- "$zxmod_persist_root/zxmod/enabled/$1"
-}
-
-startup() {
-    [ $# -eq 0 ] || usage
-    zxmod_require_root
-    zxmod_persist_root
-    [ -d "$zxmod_persist_root/zxmod/enabled" ] || exit 0
-    for zxmod_entry in "$zxmod_persist_root/zxmod/enabled"/*; do
-        [ -f "$zxmod_entry" ] || continue
-        IFS="$ZXMOD_TAB" read -r zxmod_source zxmod_identity < "$zxmod_entry"
-        if [ -f "$zxmod_source" ] && [ "$(zxmod_source_identity "$zxmod_source")" = "$zxmod_identity" ]; then
-            load "$zxmod_source"
-        else
-            printf 'zxmod: enabled module unavailable or changed: %s\n' \
-                "$(basename -- "$zxmod_entry")" >&2
-        fi
-    done
+    zxmod_refresh_desktop_sessions
 }
 
 case ${1:-} in
-    inspect|list)
-        zxmod_command=$1
-        shift
-        "$zxmod_command" "$@"
-        ;;
-    load|unload|enable|disable|startup)
+    load|unload)
         zxmod_command=$1
         shift
         zxmod_acquire_lock

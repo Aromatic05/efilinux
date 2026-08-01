@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+[ "$#" -eq 1 ] || exit 2
+case $1 in
+    *.zxm) ;;
+    *) exit 2 ;;
+esac
+module=$(/usr/bin/realpath -- "$1")
+exec /usr/bin/doas -n /usr/bin/zxmod load "$module"
