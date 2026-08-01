@@ -183,28 +183,35 @@ zxmod_normalize_link() {
         if (substr(link, 1, 1) == "/") {
             candidate = substr(link, 2)
         } else {
-            base = relative
-            sub(/\/[^/]*$/, "", base)
+            slash = 0
+            for (i = 1; i <= length(relative); i++) {
+                if (substr(relative, i, 1) == "/")
+                    slash = i
+            }
+            if (slash == 0)
+                base = ""
+            else
+                base = substr(relative, 1, slash - 1)
             candidate = base "/" link
         }
         count = split(candidate, part, "/")
         depth = 0
-        for (index = 1; index <= count; index++) {
-            if (part[index] == "" || part[index] == ".")
+        for (i = 1; i <= count; i++) {
+            if (part[i] == "" || part[i] == ".")
                 continue
-            if (part[index] == "..") {
+            if (part[i] == "..") {
                 if (depth == 0)
                     exit 1
                 depth--
                 continue
             }
-            stack[++depth] = part[index]
+            stack[++depth] = part[i]
         }
         if (depth == 0)
             exit 1
         output = stack[1]
-        for (index = 2; index <= depth; index++)
-            output = output "/" stack[index]
+        for (i = 2; i <= depth; i++)
+            output = output "/" stack[i]
         print output
     }'
 }

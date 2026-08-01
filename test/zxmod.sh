@@ -26,12 +26,19 @@ require_command() {
     }
 }
 
-for command_name in mksquashfs unsquashfs unshare mount umount; do
+for command_name in busybox mksquashfs unsquashfs unshare mount umount; do
     require_command "$command_name"
 done
 
-mkdir -p "$work/module/usr/bin" "$work/conflict/usr"
+mkdir -p \
+    "$work/module/usr/bin" \
+    "$work/module/opt/efilinux/modules/recovery/share/drbl/lang/bash" \
+    "$work/conflict/usr"
 printf 'module command\n' > "$work/module/usr/bin/module-command"
+printf 'Catalan language payload\n' > \
+    "$work/module/opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES"
+ln -s ca_ES \
+    "$work/module/opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES.UTF-8"
 printf 'conflict\n' > "$work/conflict/usr/base-file"
 chmod 0755 "$work/module/usr/bin/module-command"
 
@@ -46,6 +53,28 @@ grep -Fxq "arch=$(uname -m)" <<<"$inspection"
 grep -Fxq 'version=1.0' <<<"$inspection"
 unsquashfs -s "$work/sample.zxm" | grep -Eq '^Compression[[:space:]]+zstd$'
 unsquashfs -cat "$work/sample.zxm" metadata/manifest | grep -Fxq 'format=1'
+
+normalize_link() {
+    bash -c '. "$1"; zxmod_normalize_link "$2" "$3"' \
+        bash "$library" "$1" "$2"
+}
+
+[[ $(normalize_link \
+    opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES.UTF-8 \
+    ca_ES) == \
+    opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES ]]
+[[ $(normalize_link usr/lib/libfoo.so ../libfoo.so.1) == usr/libfoo.so.1 ]]
+[[ $(normalize_link usr/bin/tool /usr/lib/tool) == usr/lib/tool ]]
+if normalize_link usr/bin/tool ../../../etc/passwd >/dev/null 2>&1; then
+    printf 'zxmod accepted a link that escapes the payload root\n' >&2
+    exit 1
+fi
+mkdir -p "$work/busybox-bin"
+ln -s "$(command -v busybox)" "$work/busybox-bin/awk"
+[[ $(PATH="$work/busybox-bin:$PATH" normalize_link \
+    opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES.UTF-8 \
+    ca_ES) == \
+    opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES ]]
 
 mkdir -p "$work/valid-hidden/usr/share"
 printf 'hidden payload\n' > "$work/valid-hidden/usr/share/.zxmod-hidden"
@@ -125,6 +154,8 @@ runtime_output=$(unshare --user --map-root-user --mount --fork bash -ceu '
     ZXMOD_LIBRARY="$library" ZXMOD_RUN_ROOT="$root/run" ZXMOD_USR_TARGET="$root/base/usr" ZXMOD_OPT_TARGET="$root/base/opt" \
         "$command" load "$root/sample.zxm"
     test "$(cat "$root/base/usr/bin/module-command")" = "module command"
+    test "$(readlink "$root/base/opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES.UTF-8")" = ca_ES
+    test "$(cat "$root/base/opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES.UTF-8")" = "Catalan language payload"
     if ZXMOD_LIBRARY="$library" ZXMOD_RUN_ROOT="$root/run" ZXMOD_USR_TARGET="$root/base/usr" ZXMOD_OPT_TARGET="$root/base/opt" \
         "$command" load "$root/conflict.zxm"; then
         printf "conflicting module loaded\n" >&2
@@ -133,6 +164,7 @@ runtime_output=$(unshare --user --map-root-user --mount --fork bash -ceu '
     ZXMOD_LIBRARY="$library" ZXMOD_RUN_ROOT="$root/run" ZXMOD_USR_TARGET="$root/base/usr" ZXMOD_OPT_TARGET="$root/base/opt" \
         "$command" unload sample
     test ! -e "$root/base/usr/bin/module-command"
+    test ! -e "$root/base/opt/efilinux/modules/recovery/share/drbl/lang/bash/ca_ES.UTF-8"
 ' bash "$work" "$command" "$library" 2>&1)
 runtime_status=$?
 set -e
