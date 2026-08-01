@@ -29,7 +29,9 @@ cat > "$work/expected-packages" <<'PACKAGES'
 bzip2	1.0.8
 chntpw	140201
 cifs-utils	7.7
+clonezilla	5.16.25
 dislocker	0.7.3
+drbl-runtime	5.9.11
 foremost	1.5.7
 fsarchiver	0.8.9
 fuse2	2.9.9
@@ -64,7 +66,8 @@ for command in \
     kinit klist qemu-img qemu-nbd nbd-client \
     mount.nfs mount.nfs4 umount.nfs umount.nfs4 showmount nfsstat \
     rpc.statd sm-notify start-statd rpc.gssd rpc.idmapd nfsidmap \
-    rpcbind rpcinfo; do
+    rpcbind rpcinfo \
+    clonezilla ocs-sr ocs-onthefly ocs-chkimg ocs-live-ver; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
 done
@@ -76,6 +79,20 @@ done
 grep -aFq '/opt/efilinux/modules/recovery/etc/netconfig' \
     "$module_root/usr/lib/libtirpc.so.3"
 
+for config in drbl.conf drbl-ocs.conf; do
+    [[ -f "$module_root/opt/efilinux/modules/recovery/etc/drbl/$config" ]] ||
+        die "Clonezilla module configuration is missing: $config"
+done
+for library in drbl-conf-functions drbl-functions ocs-functions; do
+    [[ -f "$module_root/opt/efilinux/modules/recovery/share/drbl/sbin/$library" ]] ||
+        die "Clonezilla runtime function library is missing: $library"
+done
+if grep -RIlE '/usr/share/drbl|/etc/drbl|/etc/ocs' \
+        "$module_root/usr/bin" \
+        "$module_root/opt/efilinux/modules/recovery/share/drbl" \
+        | grep -q .; then
+    die "Clonezilla payload still references host-global DRBL paths"
+fi
 if find "$module_root" \
         \( -path '*/include/*' -o -path '*/lib/pkgconfig/*' \
            -o -path '*/share/man/*' -o -path '*/share/doc/*' \
@@ -88,6 +105,24 @@ run_target() {
     env -u LD_PRELOAD -u LD_LIBRARY_PATH \
         "$loader" --library-path "$library_path" "$@"
 }
+
+while IFS= read -r script; do
+    run_target "$EFILINUX_ROOTFS/usr/bin/bash" -n "$script"
+done < <(find \
+    "$module_root/usr/bin" \
+    "$module_root/opt/efilinux/modules/recovery/share/drbl" \
+    -type f -exec grep -Il '^#!.*bash' {} +)
+
+MODULE_ROOT="$module_root" \
+DRBL_SCRIPT_PATH="$module_root/opt/efilinux/modules/recovery/share/drbl" \
+DRBL_CONFIG_DIR="$module_root/opt/efilinux/modules/recovery/etc/drbl" \
+    run_target "$EFILINUX_ROOTFS/usr/bin/bash" -c '
+        set -e
+        . "$DRBL_SCRIPT_PATH/sbin/drbl-conf-functions"
+        . "$DRBL_SCRIPT_PATH/sbin/ocs-functions"
+        type check_if_root >/dev/null
+        type USAGE_common_save >/dev/null
+    '
 
 run_target "$module_root/usr/bin/testdisk" /version 2>&1 |
     grep -Fq 'Version: 7.2'

@@ -33,6 +33,8 @@ module_components=(
     libtirpc
     rpcbind
     nfs-utils
+    drbl-runtime
+    clonezilla
 )
 
 module_main "$@"
