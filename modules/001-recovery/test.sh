@@ -36,9 +36,11 @@ foremost	1.5.7
 fsarchiver	0.8.9
 fuse2	2.9.9
 krb5	1.22.2
+libaio	0.3.113
 libevent	2.1.12-stable
 libldm	0.2.5
 libtirpc	1.3.7
+lvm2	2.03.41
 lz4	1.10.0
 mbedtls2	2.28.10
 nbd	3.24
@@ -67,6 +69,7 @@ for command in \
     mount.nfs mount.nfs4 umount.nfs umount.nfs4 showmount nfsstat \
     rpc.statd sm-notify start-statd rpc.gssd rpc.idmapd nfsidmap \
     rpcbind rpcinfo \
+    lvm lvs pvs vgs vgchange lvchange lvcreate pvcreate \
     clonezilla ocs-sr ocs-onthefly ocs-chkimg ocs-live-ver; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
@@ -152,6 +155,8 @@ run_target "$module_root/usr/bin/qemu-img" --version 2>&1 |
     grep -Fq 'qemu-img version 11.0.3'
 run_target "$module_root/usr/bin/nbd-client" --version 2>&1 |
     grep -Fq 'This is nbd-client, from nbd 3.24'
+run_target "$module_root/usr/bin/lvm" version 2>&1 |
+    grep -Fq 'LVM version:     2.03.41'
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path

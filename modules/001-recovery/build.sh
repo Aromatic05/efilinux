@@ -33,6 +33,8 @@ module_components=(
     libtirpc
     rpcbind
     nfs-utils
+    libaio
+    lvm2
     drbl-runtime
     clonezilla
 )
