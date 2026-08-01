@@ -29,6 +29,10 @@ module_components=(
     cifs-utils
     qemu-img
     nbd
+    libevent
+    libtirpc
+    rpcbind
+    nfs-utils
 )
 
 module_main "$@"

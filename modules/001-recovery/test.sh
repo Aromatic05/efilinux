@@ -34,12 +34,16 @@ foremost	1.5.7
 fsarchiver	0.8.9
 fuse2	2.9.9
 krb5	1.22.2
+libevent	2.1.12-stable
 libldm	0.2.5
+libtirpc	1.3.7
 lz4	1.10.0
 mbedtls2	2.28.10
 nbd	3.24
+nfs-utils	2.9.1
 partclone	0.3.47
 qemu-img	11.0.3
+rpcbind	1.2.9
 sleuthkit	4.15.0
 sshfs	3.7.6
 talloc	2.4.4
@@ -57,10 +61,20 @@ for command in \
     wimlib-imagex ldmtool dislocker dislocker-fuse sshfs mount.sshfs \
     chntpw reged samusrgrp sampasswd samunlock \
     mount.cifs mount.smb3 cifs.upcall cifscreds getcifsacl setcifsacl smbinfo \
-    kinit klist qemu-img qemu-nbd nbd-client; do
+    kinit klist qemu-img qemu-nbd nbd-client \
+    mount.nfs mount.nfs4 umount.nfs umount.nfs4 showmount nfsstat \
+    rpc.statd sm-notify start-statd rpc.gssd rpc.idmapd nfsidmap \
+    rpcbind rpcinfo; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
 done
+
+for config in netconfig nfs.conf nfsmount.conf idmapd.conf; do
+    [[ -f "$module_root/opt/efilinux/modules/recovery/etc/$config" ]] ||
+        die "recovery module NFS configuration is missing: $config"
+done
+grep -aFq '/opt/efilinux/modules/recovery/etc/netconfig' \
+    "$module_root/usr/lib/libtirpc.so.3"
 
 if find "$module_root" \
         \( -path '*/include/*' -o -path '*/lib/pkgconfig/*' \

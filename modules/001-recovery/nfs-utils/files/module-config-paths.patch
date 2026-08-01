@@ -1,0 +1,44 @@
+--- a/support/nfsidmap/libtest.c
++++ b/support/nfsidmap/libtest.c
+@@ -50,7 +50,7 @@
+ #include <nfsidmap.h>
+ 
+ #define QUIT_ON_ERROR 1
+-#define PATH_IDMAPDCONF "/etc/idmapd.conf"
++#define PATH_IDMAPDCONF "/opt/efilinux/modules/recovery/etc/idmapd.conf"
+ char *conf_path = PATH_IDMAPDCONF;
+ 
+ main(int ac, char **av)
+--- a/support/nfsidmap/libnfsidmap.c
++++ b/support/nfsidmap/libnfsidmap.c
+@@ -78,7 +78,7 @@
+ 
+ 
+ #ifndef PATH_IDMAPDCONF
+-#define PATH_IDMAPDCONF "/etc/idmapd.conf"
++#define PATH_IDMAPDCONF "/opt/efilinux/modules/recovery/etc/idmapd.conf"
+ #endif
+ 
+ #ifndef IDMAPD_DEFAULT_DOMAIN
+--- a/support/include/nfslib.h
++++ b/support/include/nfslib.h
+@@ -35,7 +35,7 @@
+ #define _EXT_EXPORT             ".exports"
+ #endif
+ #ifndef _PATH_IDMAPDCONF
+-#define _PATH_IDMAPDCONF	"/etc/idmapd.conf"
++#define _PATH_IDMAPDCONF	"/opt/efilinux/modules/recovery/etc/idmapd.conf"
+ #endif
+ #ifndef _PATH_PROC_EXPORTS
+ #define	_PATH_PROC_EXPORTS	"/proc/fs/nfs/exports"
+--- a/utils/nfsidmap/nfsidmap.c
++++ b/utils/nfsidmap/nfsidmap.c
+@@ -31,7 +31,7 @@
+ #endif
+ 
+ #ifndef PATH_IDMAPDCONF
+-#define PATH_IDMAPDCONF "/etc/idmapd.conf"
++#define PATH_IDMAPDCONF "/opt/efilinux/modules/recovery/etc/idmapd.conf"
+ #endif
+ 
+ #define UIDKEYS 0x1
