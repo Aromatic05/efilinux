@@ -13,8 +13,9 @@ pkgver=1
 sysroot=false
 
 depends=(
-    efilinux-system-config libnma linux-pam network-manager-applet qogir-desktop-theme
-    qogir-icon-theme xfce xorg-server
+    breeze-cursor-theme efilinux-system-config libnma linux-pam catos-icon-theme
+    matcha-gtk-theme network-manager-applet papirus-icon-theme
+    papirus-maia-icon-theme xfce xorg-server
 )
 builddepends=()
 makedepends=(find install)

@@ -12,7 +12,10 @@ pkgname=efilinux-graphical-config
 pkgver=1
 sysroot=false
 
-depends=(efilinux-system-config gtk3 qogir-desktop-theme qogir-icon-theme xorg-server)
+depends=(
+    breeze-cursor-theme efilinux-system-config gtk3 catos-icon-theme matcha-gtk-theme
+    papirus-icon-theme papirus-maia-icon-theme xorg-server
+)
 builddepends=()
 makedepends=(find install)
 

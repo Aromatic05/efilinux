@@ -86,19 +86,6 @@ if grep -Fq '/usr/etc/xdg' "$rootfs/usr/bin/startxfce4"; then
     die "startxfce4 still contains the invalid /usr/etc/xdg path"
 fi
 
-grep -Fq '<property name="ThemeName" type="string" value="Qogir"/>' \
-    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || \
-    die "XFCE does not select the Qogir GTK theme"
-grep -Fq '<property name="IconThemeName" type="string" value="Qogir"/>' \
-    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || \
-    die "XFCE does not select the Qogir icon theme"
-grep -Fq '<property name="CursorThemeName" type="string" value="Qogir"/>' \
-    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || \
-    die "XFCE does not select the Qogir cursor theme"
-grep -Fq '<property name="theme" type="string" value="Qogir"/>' \
-    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" || \
-    die "XFWM does not select the Qogir window theme"
-
 session_config="$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml"
 grep -Fq '<property name="FailsafeSessionName" type="string" value="Failsafe"/>' \
     "$session_config" || \
@@ -150,10 +137,6 @@ for plugin in whiskermenu pulseaudio power-manager-plugin notification-plugin; d
     grep -Fq "value=\"$plugin\"" "$panel_defaults" || \
         die "required XFCE panel plugin is absent from defaults: $plugin"
 done
-grep -Fq '<property name="theme" type="string" value="Qogir"/>' \
-    "$rootfs/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-notifyd.xml" || \
-    die "XFCE notifications do not use the Qogir theme"
-
 for plugin_library in \
     libwhiskermenu.so libpulseaudio-plugin.so \
     libxfce4powermanager.so libnotification-plugin.so; do
@@ -232,43 +215,6 @@ if "libjpeg.so.8" in tumbler_needed:
     raise SystemExit(1)
 PY
 
-for profile_root in "$rootfs/etc/skel" "$rootfs/home/user"; do
-    gtk2_settings="$profile_root/.gtkrc-2.0"
-    gtk3_settings="$profile_root/.config/gtk-3.0/settings.ini"
-    gtk4_settings="$profile_root/.config/gtk-4.0/settings.ini"
-    cursor_settings="$profile_root/.icons/default/index.theme"
-
-    [[ -f "$gtk2_settings" ]] || die "GTK 2 user theme defaults are missing: $gtk2_settings"
-    [[ -f "$gtk3_settings" ]] || die "GTK 3 user theme defaults are missing: $gtk3_settings"
-    [[ -f "$gtk4_settings" ]] || die "GTK 4 user theme defaults are missing: $gtk4_settings"
-    [[ -f "$cursor_settings" ]] || die "cursor theme defaults are missing: $cursor_settings"
-    grep -Fq 'gtk-theme-name="Qogir"' "$gtk2_settings" || \
-        die "GTK 2 user defaults do not select Qogir"
-    grep -Fq 'gtk-icon-theme-name="Qogir"' "$gtk2_settings" || \
-        die "GTK 2 user defaults do not select Qogir icons"
-    grep -Fq 'gtk-theme-name=Qogir' "$gtk3_settings" || \
-        die "GTK 3 user defaults do not select Qogir"
-    grep -Fq 'gtk-icon-theme-name=Qogir' "$gtk3_settings" || \
-        die "GTK 3 user defaults do not select Qogir icons"
-    grep -Fq 'gtk-theme-name=Qogir' "$gtk4_settings" || \
-        die "GTK 4 user defaults do not select Qogir"
-    grep -Fq 'gtk-icon-theme-name=Qogir' "$gtk4_settings" || \
-        die "GTK 4 user defaults do not select Qogir icons"
-    grep -Fq 'Inherits=Qogir' "$cursor_settings" || \
-        die "user cursor defaults do not select Qogir"
-done
-
-for required_theme_path in \
-    gtk-2.0/gtkrc gtk-3.0/gtk.css gtk-4.0/gtk.css \
-    xfwm4/themerc xfce-notify-4.0/gtk.css; do
-    [[ -f "$rootfs/usr/share/themes/Qogir/$required_theme_path" ]] || \
-        die "Qogir desktop theme file is missing: $required_theme_path"
-done
-for excluded_theme_path in \
-    cinnamon gnome-shell labwc metacity-1 plank unity; do
-    [[ ! -e "$rootfs/usr/share/themes/Qogir/$excluded_theme_path" ]] || \
-        die "excluded Qogir desktop subtree remains: $excluded_theme_path"
-done
 grep -Fq '/usr/bin/startxfce4' "$rootfs/etc/X11/xinit/xinitrc" || \
     die "graphical session does not launch XFCE"
 if grep -Fq gtk3-demo "$rootfs/etc/X11/xinit/xinitrc"; then

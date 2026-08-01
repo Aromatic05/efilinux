@@ -3,6 +3,6 @@
   <property name="primary-monitor" type="uint" value="0"/>
   <property name="notify-location" type="uint" value="2"/>
   <property name="log-level" type="uint" value="0"/>
-  <property name="theme" type="string" value="Qogir"/>
+  <property name="theme" type="string" value="Default"/>
   <property name="expire-timeout" type="int" value="6"/>
 </channel>

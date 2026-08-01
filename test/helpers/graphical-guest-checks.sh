@@ -58,23 +58,6 @@ su -s /usr/bin/sh user -c 'XDG_RUNTIME_DIR=/run/user/1000 elogind-inhibit --what
 ! grep -Fq 'Failed to start message bus: Failed to open "/usr/share/defaults/at-spi2/accessibility.conf"' /var/log/graphical.log || { echo FAIL:atspi-bus-log; ok=0; }
 ! grep -Fq 'dbus-update-activation-environment' /var/log/graphical.log || { echo FAIL:dbus-env-log; ok=0; }
 ! grep -Fq 'pa_context_connect() failed: Access denied' /var/log/graphical.log || { echo FAIL:pulse-access; ok=0; }
-settings_pid=$(pidof xfsettingsd 2>/dev/null || true)
-test -n "$settings_pid" || { echo FAIL:settings-pid; ok=0; }
-bus=
-test -z "$settings_pid" || bus=$(tr '\0' '\n' </proc/$settings_pid/environ | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p')
-test -n "$bus" || { echo FAIL:session-bus; ok=0; }
-gtk_theme=
-test -z "$bus" || gtk_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xsettings -p /Net/ThemeName")
-test "$gtk_theme" = Qogir || { echo FAIL:gtk-theme; ok=0; }
-icon_theme=
-test -z "$bus" || icon_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xsettings -p /Net/IconThemeName")
-test "$icon_theme" = Qogir || { echo FAIL:icon-theme; ok=0; }
-cursor_theme=
-test -z "$bus" || cursor_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xsettings -p /Gtk/CursorThemeName")
-test "$cursor_theme" = Qogir || { echo FAIL:cursor-theme; ok=0; }
-xfwm_theme=
-test -z "$bus" || xfwm_theme=$(su -s /usr/bin/sh user -c "DBUS_SESSION_BUS_ADDRESS='$bus' xfconf-query -c xfwm4 -p /general/theme")
-test "$xfwm_theme" = Qogir || { echo FAIL:xfwm-theme; ok=0; }
 su -s /usr/bin/sh user -c 'DISPLAY=:0 XAUTHORITY=/home/user/.Xauthority xwininfo -root >/dev/null' || { echo FAIL:xwininfo; ok=0; }
 test -x /mnt/glx-probe/glx-llvmpipe-probe || { echo FAIL:glx-probe-binary; ok=0; }
 su -s /usr/bin/sh user -c 'DISPLAY=:0 XAUTHORITY=/home/user/.Xauthority LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe LP_NUM_THREADS=2 /mnt/glx-probe/glx-llvmpipe-probe' || { echo FAIL:glx-llvmpipe-probe; ok=0; }

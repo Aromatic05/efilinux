@@ -41,5 +41,8 @@ dbus-glib
 vte
 
 noto-sans-cjk-sc
-qogir-icon-theme
-qogir-desktop-theme
+papirus-icon-theme
+papirus-maia-icon-theme
+catos-icon-theme
+breeze-cursor-theme
+matcha-gtk-theme

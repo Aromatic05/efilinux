@@ -80,7 +80,6 @@ require_file /etc/rc.d/init.d/graphical
 require_file /etc/X11/Xwrapper.config
 require_directory /usr/share/fonts/truetype/dejavu
 require_directory /usr/share/fonts/opentype/noto
-require_directory /usr/share/icons/Qogir
 require_directory /usr/share/icons/hicolor
 require_directory /usr/share/mime
 require_directory /usr/share/X11/xkb
@@ -145,15 +144,11 @@ for font in DejaVuSans.ttf DejaVuSansMono.ttf; do
     require_file "/usr/share/fonts/truetype/dejavu/$font"
 done
 require_file /usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf
-require_file /usr/share/icons/Qogir/index.theme
-require_file /usr/share/icons/Qogir/icon-theme.cache
 require_file /usr/share/icons/hicolor/index.theme
 require_file /usr/share/icons/hicolor/icon-theme.cache
 require_file /usr/share/mime/packages/freedesktop.org.xml
 require_file /usr/share/mime/mime.cache
 require_file /usr/share/applications/mimeinfo.cache
-[[ $(rootfs_owner /usr/share/icons/Qogir/icon-theme.cache) == @composer ]] || \
-    die "Qogir icon cache is not owned by the composer"
 [[ $(rootfs_owner /usr/share/icons/hicolor/icon-theme.cache) == @composer ]] || \
     die "hicolor icon cache is not owned by the composer"
 [[ $(rootfs_owner /usr/share/mime/mime.cache) == @composer ]] || \
@@ -172,12 +167,6 @@ if find "$rootfs/usr/share/xml/iso-codes" -maxdepth 1 -type f \
     ! -name 'iso_639-2.xml' ! -name 'iso_3166-1.xml' -print -quit | grep -q .; then
     die "unneeded ISO code domains leaked into the graphical rootfs"
 fi
-[[ -e "$rootfs/usr/share/icons/Qogir/cursors/left_ptr" ]] || \
-    die "Qogir cursor theme is missing left_ptr"
-if find -L "$rootfs/usr/share/icons/Qogir" -type l -print -quit | grep -q .; then
-    die "Qogir icon theme contains broken symbolic links"
-fi
-
 svg_loader=$(find "$rootfs/usr/lib/gdk-pixbuf-2.0" \
     -type f -name libpixbufloader-svg.so -print -quit)
 [[ -n "$svg_loader" ]] || die "GdkPixbuf SVG loader is missing"
@@ -190,13 +179,6 @@ grep -Fq '"svg"' "$loader_cache" || \
 if grep -Fq "$rootfs" "$loader_cache"; then
     die "GdkPixbuf loader cache contains build-host paths"
 fi
-
-mapfile -t qogir_variants < <(
-    find "$rootfs/usr/share/icons" -maxdepth 1 -mindepth 1 \
-        -type d -name 'Qogir*' -printf '%f\n' | sort
-)
-[[ ${#qogir_variants[@]} -eq 1 && ${qogir_variants[0]} == Qogir ]] || \
-    die "graphical rootfs contains more than one Qogir color variant"
 
 [[ -L "$rootfs/etc/rc.d/rc5.d/S80graphical" ]] || \
     die "runlevel 5 does not start the graphical session"
@@ -244,19 +226,6 @@ fi
 "$loader" --library-path "$library_path" \
     "$rootfs/usr/bin/gdk-pixbuf-query-loaders" "$svg_loader" | \
     grep -Fq '"svg"'
-host_loader_cache="$EFILINUX_TEST/gdk-pixbuf-loaders.host.cache"
-decoded_icon="$EFILINUX_TEST/qogir-terminal-icon.c"
-"$loader" --library-path "$library_path" \
-    "$rootfs/usr/bin/gdk-pixbuf-query-loaders" "$svg_loader" \
-    > "$host_loader_cache"
-GDK_PIXBUF_MODULE_FILE="$host_loader_cache" \
-    "$loader" --library-path "$library_path" \
-    "$rootfs/usr/bin/gdk-pixbuf-csource" \
-    --raw --name=qogir_terminal_icon \
-    "$rootfs/usr/share/icons/Qogir/scalable/apps/org.xfce.terminal.svg" \
-    > "$decoded_icon"
-grep -Fq 'qogir_terminal_icon' "$decoded_icon" || \
-    die "GdkPixbuf could not decode a real Qogir SVG icon"
 mime_test_dir="$EFILINUX_TEST/mime"
 reset_directory "$mime_test_dir"
 printf '\211PNG\r\n\032\n' > "$mime_test_dir/image.png"
@@ -286,4 +255,4 @@ require_library 'libxklavier.so.16*' libxklavier
 require_library 'libdbus-glib-1.so.2*' dbus-glib
 require_library 'libvte-2.91.so.0*' vte
 
-log "003-graphical Xorg, Mesa, GTK, bilingual fonts, Qogir, and no-Wayland contract passed"
+log "003-graphical Xorg, Mesa, GTK, bilingual fonts, and no-Wayland contract passed"

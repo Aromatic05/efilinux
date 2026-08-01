@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfwm4" version="1.0">
   <property name="general" type="empty">
-    <property name="theme" type="string" value="Qogir"/>
-    <property name="title_font" type="string" value="Noto Sans CJK SC Bold 9"/>
+    <property name="theme" type="string" value="Matcha-dark-sea"/>
+    <property name="title_font" type="string" value="Noto Sans CJK SC 10"/>
+    <property name="title_alignment" type="string" value="center"/>
+    <property name="button_layout" type="string" value="O|SHMC"/>
+    <property name="placement_mode" type="string" value="center"/>
+    <property name="workspace_count" type="int" value="2"/>
     <property name="use_compositing" type="bool" value="true"/>
+    <property name="show_app_icon" type="bool" value="false"/>
+    <property name="sync_to_vblank" type="bool" value="true"/>
   </property>
 </channel>

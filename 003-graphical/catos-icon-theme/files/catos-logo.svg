@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Gravit.io -->
+
+<svg
+   style="isolation:isolate"
+   viewBox="0 0 256 256"
+   width="256pt"
+   height="256pt"
+   version="1.1"
+   id="svg19"
+   sodipodi:docname="catos-logo.svg"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   inkscape:export-filename="catos-logo.png"
+   inkscape:export-xdpi="72"
+   inkscape:export-ydpi="72"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview21"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="pt"
+     showgrid="false"
+     inkscape:zoom="1.29"
+     inkscape:cx="124.4186"
+     inkscape:cy="169.76744"
+     inkscape:window-width="1440"
+     inkscape:window-height="808"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg19"
+     inkscape:showpageshadow="2"
+     inkscape:deskcolor="#d1d1d1" />
+  <defs
+     id="defs5">
+    <clipPath
+       id="_clipPath_ZEBBDq6ZtbLgkRXocTHUWTcRbcURZIva">
+      <rect
+         width="128"
+         height="128"
+         id="rect2"
+         x="0"
+         y="0" />
+    </clipPath>
+  </defs>
+  <g
+     id="g2"
+     transform="matrix(5.3333333,0,0,5.3333333,-5.9300124,-5.0412943)">
+    <circle
+       style="fill:#338ec1;fill-opacity:1;stroke-width:41.4291"
+       id="path5"
+       cx="25.232349"
+       cy="24.763044"
+       r="22.5" />
+    <path
+       class="cls-1"
+       d="m 36.729895,10.420164 -5.804988,5.805301 H 20.124924 l -5.804989,-5.805301 a 1.3499979,1.35007 0 0 0 -2.294996,0.97205 v 14.283739 a 13.499979,13.5007 0 0 0 26.999953,0 V 11.392214 a 1.3499979,1.35007 0 0 0 -2.294997,-0.97205 z m -16.604971,17.95593 a 2.6999959,2.70014 0 1 1 2.699996,-2.700141 2.6999959,2.70014 0 0 1 -2.699996,2.700141 z m 10.799983,0 a 2.6999959,2.70014 0 1 1 2.699994,-2.700141 2.6999959,2.70014 0 0 1 -2.699994,2.700141 z"
+       id="path1"
+       style="fill:#f5f5f5;fill-opacity:1;stroke-width:2.70006" />
+  </g>
+</svg>

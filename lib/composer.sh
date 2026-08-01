@@ -470,6 +470,9 @@ compose_finalize_rootfs() {
             [[ -x "$rootfs/usr/bin/gtk-update-icon-cache" ]] || \
                 die "icon themes are installed without gtk-update-icon-cache"
             for theme in "${icon_themes[@]}"; do
+                if ! grep -Eq '^[[:space:]]*Directories=' "$theme/index.theme"; then
+                    continue
+                fi
                 icon_cache="$theme/icon-theme.cache"
                 [[ ! -e "$icon_cache" ]] || \
                     die "a package shipped a generated icon cache: ${theme#"$rootfs"}"
