@@ -1,0 +1,47 @@
+--- a/src/cookies.c
++++ b/src/cookies.c
+@@ -1062,7 +1062,7 @@
+   struct weighed_cookie *outgoing;
+   size_t count, i, ocnt;
+   char *result = NULL;
+-  int result_size, pos;
++  size_t result_size, pos;
+   char pathbuf[1024];
+ 
+   /* First, find the cookie chains whose domains match HOST. */
+@@ -1145,22 +1145,31 @@
+   for (i = 0; i < count; i++)
+     {
+       struct cookie *c = outgoing[i].cookie;
++      size_t attr_len = strlen (c->attr);
++      size_t value_len = strlen (c->value);
++
+       /* name=value */
+-      result_size += strlen (c->attr) + 1 + strlen (c->value);
++      if (attr_len > SIZE_MAX - result_size
++          || value_len > SIZE_MAX - result_size - attr_len - 1)
++        goto out;
++      result_size += attr_len + 1 + value_len;
+     }
+ 
+   /* Allocate output buffer:
+      name=value pairs -- result_size
+      "; " separators  -- (count - 1) * 2
+      \0 terminator    -- 1 */
+-  result_size = result_size + (count - 1) * 2 + 1;
++  if (result_size == SIZE_MAX
++      || count - 1 > (SIZE_MAX - result_size - 1) / 2)
++    goto out;
++  result_size += (count - 1) * 2 + 1;
+   result = xmalloc (result_size);
+   pos = 0;
+   for (i = 0; i < count; i++)
+     {
+       struct cookie *c = outgoing[i].cookie;
+-      int namlen = strlen (c->attr);
+-      int vallen = strlen (c->value);
++      size_t namlen = strlen (c->attr);
++      size_t vallen = strlen (c->value);
+ 
+       memcpy (result + pos, c->attr, namlen);
+       pos += namlen;

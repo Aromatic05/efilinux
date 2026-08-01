@@ -1,0 +1,32 @@
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -125,11 +125,8 @@
+ 	echo '' >> $@
+ 	echo '#include "version.h"' >> $@
+ 	echo 'const char *version_string = "@VERSION@";' >> $@
+-	echo 'const char *compilation_string = "'$(COMPILE)'";' \
+-	    | $(ESCAPEQUOTE) >> $@
+-	echo 'const char *link_string = "'$(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+-	$(AM_LDFLAGS) $(LDFLAGS) $(LIBS) $(wget_LDADD)'";' \
+-	    | $(ESCAPEQUOTE) >> $@
++	echo 'const char *compilation_string = 0;' >> $@
++	echo 'const char *link_string = 0;' >> $@
+ 
+ css.c: $(srcdir)/css.l
+ 	$(LEX) $(LFLAGS) -o$@ $^
+--- a/src/Makefile.in
++++ b/src/Makefile.in
+@@ -3396,11 +3396,8 @@
+ 	echo '' >> $@
+ 	echo '#include "version.h"' >> $@
+ 	echo 'const char *version_string = "@VERSION@";' >> $@
+-	echo 'const char *compilation_string = "'$(COMPILE)'";' \
+-	    | $(ESCAPEQUOTE) >> $@
+-	echo 'const char *link_string = "'$(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+-	$(AM_LDFLAGS) $(LDFLAGS) $(LIBS) $(wget_LDADD)'";' \
+-	    | $(ESCAPEQUOTE) >> $@
++	echo 'const char *compilation_string = 0;' >> $@
++	echo 'const char *link_string = 0;' >> $@
+ 
+ css.c: $(srcdir)/css.l
+ 	$(LEX) $(LFLAGS) -o$@ $^

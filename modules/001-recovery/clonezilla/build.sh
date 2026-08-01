@@ -14,7 +14,7 @@ depends=(
     bash bc bzip2 cifs-utils coreutils curl dialog dosfstools drbl-runtime e2fsprogs
     findutils gawk gptfdisk grep gzip jq lvm2 mdadm nbd nfs-utils ntfs-3g parted
     netcat-traditional partclone perl-runtime procps-ng qemu-img sed smartmontools sshfs tar util-linux xfsprogs
-    xz zstd
+    wget xz zstd
 )
 builddepends=()
 makedepends=(make)

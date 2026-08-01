@@ -7,7 +7,7 @@ ROOT=$(cd -- "$MODULE_DIR/../.." && pwd)
 source "$ROOT/config.sh"
 source "$ROOT/lib/common.sh"
 
-require_command bwrap python3 readelf sha256sum timeout unsquashfs
+require_command bwrap openssl python3 readelf sha256sum timeout unsquashfs
 
 artifact="$MODULE_DIR/build/output/001-recovery.zxm"
 work="$MODULE_DIR/build/test/artifact"
@@ -57,6 +57,7 @@ sleuthkit	4.15.0
 sshfs	3.7.6
 talloc	2.4.4
 testdisk	7.2
+wget	1.25.0
 wimlib	1.14.5
 PACKAGES
 
@@ -75,7 +76,7 @@ for command in \
     rpc.statd sm-notify start-statd rpc.gssd rpc.idmapd nfsidmap \
     rpcbind rpcinfo \
     lvm lvs pvs vgs vgchange lvchange lvcreate pvcreate \
-    bc dc dialog jq nc.traditional \
+    bc dc dialog jq nc.traditional wget \
     clonezilla ocs-sr ocs-onthefly ocs-chkimg ocs-live-ver; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
@@ -145,6 +146,7 @@ run_sandbox() {
         --dir /opt \
         --ro-bind "$module_root/opt" /opt \
         --ro-bind "$module_root" /module \
+        --ro-bind "$work" /test-work \
         --dev /dev \
         --proc /proc \
         --tmpfs /tmp \
@@ -249,6 +251,123 @@ run_target "$module_root/usr/bin/jq" --version 2>&1 |
     grep -Fxq 'jq-1.8.2'
 run_target "$module_root/usr/bin/nc.traditional" -h 2>&1 |
     grep -Fq '[v1.10-50]'
+run_target "$module_root/usr/bin/wget" --version 2>&1 |
+    grep -Fq 'GNU Wget 1.25.0'
+if run_target "$module_root/usr/bin/wget" --version 2>&1 |
+        grep -Eq '^(Compile|Link):'; then
+    die "Wget exposes non-reproducible compiler or linker command lines"
+fi
+if grep -aFq "$ROOT" "$module_root/usr/bin/wget"; then
+    die "Wget contains the host repository path"
+fi
+
+wget_config="$module_root/opt/efilinux/modules/recovery/etc/wget/wgetrc"
+wget_ca="$module_root/opt/efilinux/modules/recovery/share/ca-certificates/cacert.pem"
+[[ -f "$wget_config" && -f "$wget_ca" ]] ||
+    die "Wget configuration or CA bundle is missing"
+grep -Fxq \
+    'ca_certificate = /opt/efilinux/modules/recovery/share/ca-certificates/cacert.pem' \
+    "$wget_config"
+grep -Fxq 'check_certificate = on' "$wget_config"
+[[ $(grep -c '^-----BEGIN CERTIFICATE-----$' "$wget_ca") == 119 ]] ||
+    die "Wget CA bundle certificate count changed"
+printf '%s  %s\n' \
+    3ff344e30b9b1ed2971044eabb438a08f2e2245ddb5f8ab1a3ad8b63ab4eaf91 \
+    "$wget_ca" |
+    sha256sum --check --status
+openssl crl2pkcs7 -nocrl -certfile "$wget_ca" |
+    openssl pkcs7 -print_certs -noout >/dev/null
+grep -aFq '/opt/efilinux/modules/recovery/etc/wget/wgetrc' \
+    "$module_root/usr/bin/wget"
+
+tls_dir="$work/tls"
+mkdir -p "$tls_dir"
+printf '%s\n' 'efilinux-wget-tls-ok' > "$tls_dir/index.html"
+openssl req \
+    -x509 \
+    -newkey rsa:2048 \
+    -nodes \
+    -days 1 \
+    -subj '/CN=EFILinux Recovery Test CA' \
+    -keyout "$tls_dir/ca.key" \
+    -out "$tls_dir/ca.pem" \
+    >/dev/null 2>&1
+openssl req \
+    -newkey rsa:2048 \
+    -nodes \
+    -subj '/CN=localhost' \
+    -keyout "$tls_dir/server.key" \
+    -out "$tls_dir/server.csr" \
+    >/dev/null 2>&1
+cat > "$tls_dir/server.ext" <<'TLS_EXT'
+subjectAltName=DNS:localhost,IP:127.0.0.1
+extendedKeyUsage=serverAuth
+TLS_EXT
+openssl x509 \
+    -req \
+    -days 1 \
+    -in "$tls_dir/server.csr" \
+    -CA "$tls_dir/ca.pem" \
+    -CAkey "$tls_dir/ca.key" \
+    -CAcreateserial \
+    -extfile "$tls_dir/server.ext" \
+    -out "$tls_dir/server.pem" \
+    >/dev/null 2>&1
+tls_port=$(python3 - <<'PY'
+import socket
+
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)
+(
+    cd "$tls_dir"
+    exec openssl s_server \
+        -accept "127.0.0.1:$tls_port" \
+        -cert server.pem \
+        -key server.key \
+        -WWW \
+        -quiet
+) > "$tls_dir/server.log" 2>&1 &
+tls_server=$!
+cleanup_tls_server() {
+    kill "$tls_server" 2>/dev/null || true
+    wait "$tls_server" 2>/dev/null || true
+}
+trap cleanup_tls_server EXIT
+tls_ready=false
+for _ in {1..50}; do
+    if (echo > "/dev/tcp/127.0.0.1/$tls_port") 2>/dev/null; then
+        tls_ready=true
+        break
+    fi
+    sleep 0.05
+done
+[[ $tls_ready == true ]] || die "local Wget TLS test server did not start"
+
+if run_sandbox \
+        /module/usr/bin/wget \
+        --quiet \
+        --timeout=3 \
+        --tries=1 \
+        --output-document=- \
+        "https://127.0.0.1:$tls_port/index.html" \
+        > "$tls_dir/untrusted.out" \
+        2> "$tls_dir/untrusted.err"; then
+    die "Wget accepted a certificate outside the configured trust store"
+fi
+run_sandbox \
+    /module/usr/bin/wget \
+    --quiet \
+    --timeout=5 \
+    --tries=1 \
+    --ca-certificate=/test-work/tls/ca.pem \
+    --output-document=- \
+    "https://127.0.0.1:$tls_port/index.html" |
+    grep -Fxq 'efilinux-wget-tls-ok'
+cleanup_tls_server
+trap - EXIT
 
 netcat_port=$(python3 - <<'PY'
 import socket

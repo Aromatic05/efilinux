@@ -40,6 +40,7 @@ module_components=(
     dialog
     jq
     netcat-traditional
+    wget
     drbl-runtime
     clonezilla
 )
