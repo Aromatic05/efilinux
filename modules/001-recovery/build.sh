@@ -35,6 +35,9 @@ module_components=(
     nfs-utils
     libaio
     lvm2
+    bc
+    dialog
+    jq
     drbl-runtime
     clonezilla
 )

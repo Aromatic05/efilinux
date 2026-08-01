@@ -26,15 +26,18 @@ grep -Fxq 'arch=x86_64' "$image/metadata/manifest"
 grep -Fxq 'version=1' "$image/metadata/manifest"
 
 cat > "$work/expected-packages" <<'PACKAGES'
+bc	1.08.2
 bzip2	1.0.8
 chntpw	140201
 cifs-utils	7.7
 clonezilla	5.16.25
+dialog	1.3-20260721
 dislocker	0.7.3
 drbl-runtime	5.9.11
 foremost	1.5.7
 fsarchiver	0.8.9
 fuse2	2.9.9
+jq	1.8.2
 krb5	1.22.2
 libaio	0.3.113
 libevent	2.1.12-stable
@@ -70,6 +73,7 @@ for command in \
     rpc.statd sm-notify start-statd rpc.gssd rpc.idmapd nfsidmap \
     rpcbind rpcinfo \
     lvm lvs pvs vgs vgchange lvchange lvcreate pvcreate \
+    bc dc dialog jq \
     clonezilla ocs-sr ocs-onthefly ocs-chkimg ocs-live-ver; do
     [[ -x "$module_root/usr/bin/$command" ]] ||
         die "recovery module command is missing: $command"
@@ -157,6 +161,12 @@ run_target "$module_root/usr/bin/nbd-client" --version 2>&1 |
     grep -Fq 'This is nbd-client, from nbd 3.24'
 run_target "$module_root/usr/bin/lvm" version 2>&1 |
     grep -Fq 'LVM version:     2.03.41'
+run_target "$module_root/usr/bin/bc" --version 2>&1 |
+    grep -Fq 'bc 1.08.2'
+run_target "$module_root/usr/bin/dialog" --version 2>&1 |
+    grep -Fxq 'Version: 1.3-20260721'
+run_target "$module_root/usr/bin/jq" --version 2>&1 |
+    grep -Fxq 'jq-1.8.2'
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path

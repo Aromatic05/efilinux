@@ -11,8 +11,8 @@ source "$ROOT/lib/recipe.sh"
 pkgname=clonezilla
 pkgver=5.16.25
 depends=(
-    bash bzip2 cifs-utils coreutils curl dosfstools drbl-runtime e2fsprogs
-    findutils gawk gptfdisk grep gzip lvm2 mdadm nbd nfs-utils ntfs-3g parted
+    bash bc bzip2 cifs-utils coreutils curl dialog dosfstools drbl-runtime e2fsprogs
+    findutils gawk gptfdisk grep gzip jq lvm2 mdadm nbd nfs-utils ntfs-3g parted
     partclone procps-ng qemu-img sed smartmontools sshfs tar util-linux xfsprogs
     xz zstd
 )
