@@ -12,8 +12,8 @@ case ${1:-} in
         mountpoint -q /dev/shm || mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /dev/shm
         chmod 1777 /dev/shm
         mountpoint -q /run || mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run
-        mkdir -p /run/lock /run/efilinux /run/dbus /run/sshd
-        chmod 0755 /run/lock /run/efilinux /run/dbus /run/sshd
+        mkdir -p /run/lock /run/efilinux /run/dbus /run/sshd /run/user
+        chmod 0755 /run/lock /run/efilinux /run/dbus /run/sshd /run/user
         : > /run/utmp
         ;;
     stop) ;;

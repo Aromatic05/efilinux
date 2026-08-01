@@ -55,7 +55,12 @@ prepare() {
     xfce_input 'thunar-volman' '4.18.0' '93b75c7ffbe246a21f4190295acc148e184be8df397e431b258d0d676e87fc65' 'https://archive.xfce.org/src/xfce/thunar-volman/4.18/thunar-volman-4.18.0.tar.bz2'
     xfce_input 'xfce4-whiskermenu-plugin' '2.8.4' 'ed918950e01dc97fe831e01c698b44247f1537992999b1262ab61c799272b3b7' 'https://archive.xfce.org/src/panel-plugins/xfce4-whiskermenu-plugin/2.8/xfce4-whiskermenu-plugin-2.8.4.tar.bz2'
     xfce_input 'xfce-polkit' '0.3.0' 'a26f1ad54d310246e63ed5d0deffdcea36abe49cc8603470e401d46084f093ce' 'https://github.com/ncopa/xfce-polkit/archive/b8aa9564db5267bbe161bac3a3df52c1c53231d6.tar.gz'
+    input_file "$recipedir/files/xfce4-settings-logical-scale.patch" \
+        "$srcdir/xfce4-settings-logical-scale.patch"
     input_shared_file "$ROOT/lib/target-build.sh" "$srcdir/target-build.sh"
+    [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
+    patch -d "$srcdir/xfce4-settings" -Np1 \
+        -i "$srcdir/xfce4-settings-logical-scale.patch"
 }
 
 

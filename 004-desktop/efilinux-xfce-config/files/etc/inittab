@@ -11,3 +11,4 @@ ca::ctrlaltdel:/usr/bin/shutdown -r now
 pf::powerwait:/usr/bin/shutdown -h now
 s0:2345:respawn:/usr/bin/agetty --autologin root --noclear 115200 ttyS0 linux
 c1:2345:respawn:/usr/bin/agetty --noclear 38400 tty1 linux
+x7:5:respawn:/usr/bin/agetty --autologin user --noclear 38400 tty7 linux

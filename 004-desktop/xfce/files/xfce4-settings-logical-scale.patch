@@ -1,0 +1,38 @@
+--- a/dialogs/display-settings/main.c
++++ b/dialogs/display-settings/main.c
+@@ -414,0 +415,18 @@
++static gdouble
++display_setting_scale_to_transform (gdouble scale)
++{
++    if (scale <= 0.0)
++        return scale;
++
++    return 1.0 / scale;
++}
++
++static gdouble
++display_setting_transform_to_scale (gdouble transform)
++{
++    if (transform <= 0.0)
++        return transform;
++
++    return 1.0 / transform;
++}
++
+@@ -421 +439 @@
+-    scale = gtk_spin_button_get_value (spinbutton);
++    scale = display_setting_scale_to_transform (gtk_spin_button_get_value (spinbutton));
+@@ -472,0 +491 @@
++    gdouble   configured_scale;
+@@ -476,0 +496 @@
++    configured_scale = display_setting_transform_to_scale (xfce_randr->scalex[active_output]);
+@@ -478 +498 @@
+-    if (g_value_get_double (&prop) == xfce_randr->scalex[active_output])
++    if (fabs (g_value_get_double (&prop) - configured_scale) < 0.0001)
+@@ -521,2 +541,4 @@
+-    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scalex), xfce_randr->scalex[active_output]);
+-    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scaley), xfce_randr->scaley[active_output]);
++    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scalex),
++                               display_setting_transform_to_scale (xfce_randr->scalex[active_output]));
++    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scaley),
++                               display_setting_transform_to_scale (xfce_randr->scaley[active_output]));
