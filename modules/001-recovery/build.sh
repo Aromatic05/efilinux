@@ -45,6 +45,20 @@ module_components=(
     wget
     drbl-runtime
     clonezilla
+    grub
+    ms-sys
+    libburn
+    libisofs
+    libisoburn
+    udftools
+    flashrom
+    xcb-util-image
+    xcb-util-keysyms
+    xcb-util-renderutil
+    xcb-util-wm
+    xcb-util-cursor
+    qt6-base
+    uefitool
     recovery-launchers
 )
 

@@ -1,0 +1,7 @@
+--- a/test/poll.c
++++ b/test/poll.c
+@@ -17 +17 @@
+-static void catch_int ()
++static void catch_int(int signal_number)
+@@ -19,0 +20 @@
++	(void) signal_number;

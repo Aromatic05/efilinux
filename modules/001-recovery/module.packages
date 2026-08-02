@@ -13,5 +13,12 @@ qemu-img
 nbd
 nfs-utils
 clonezilla
+grub
+ms-sys
+libisoburn
+udftools
+flashrom
+qt6-base
+uefitool
 
 recovery-launchers

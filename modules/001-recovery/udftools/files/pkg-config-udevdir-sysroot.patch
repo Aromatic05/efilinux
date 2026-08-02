@@ -1,0 +1,8 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -34 +34,4 @@
+-PKG_CHECK_MODULES(UDEV, [udev], [ac_cv_udevdir=`$PKG_CONFIG --variable=udevdir udev`], [ac_cv_udevdir=""])
++PKG_CHECK_MODULES(UDEV, [udev], [
++  ac_cv_udevdir=`$PKG_CONFIG --variable=udevdir udev`
++  ac_cv_udevdir=${ac_cv_udevdir#${PKG_CONFIG_SYSROOT_DIR}}
++], [ac_cv_udevdir=""])
