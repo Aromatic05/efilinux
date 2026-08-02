@@ -24,10 +24,14 @@ ovmf_vars_template=${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}
 efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
 work="$EFILINUX_TEST/live-persistence"
 module_stage="$work/module-stage"
+unmarked_module_stage="$work/unmarked-module-stage"
 media_stage="$work/media-stage"
+unmarked_stage="$work/unmarked-stage"
 iso_stage="$work/iso-stage"
 module_image="$media_stage/efilinux/modules/live-sample.zxm"
+unmarked_module_image="$unmarked_stage/efilinux/modules/unmarked-sample.zxm"
 media_disk="$work/live-media.img"
+unmarked_disk="$work/unmarked-media.img"
 iso_image="$work/live-media.iso"
 udf_image="$work/live-media.udf"
 persistence_copy="$work/persistence.img"
@@ -45,14 +49,22 @@ guest_checks="$ROOT/test/helpers/live-persistence-guest.sh"
 reset_directory "$work"
 mkdir -p \
     "$module_stage/usr/bin" \
+    "$unmarked_module_stage/usr/bin" \
     "$media_stage/efilinux/modules" \
+    "$unmarked_stage/efilinux/modules" \
     "$iso_stage/efilinux"
 cat > "$module_stage/usr/bin/live-module-command" <<'MODULE'
 #!/bin/sh
 printf '%s\n' live-module-autoload-ok
 MODULE
+cat > "$unmarked_module_stage/usr/bin/unmarked-module-command" <<'MODULE'
+#!/bin/sh
+printf '%s\n' unmarked-module-must-not-load
+MODULE
 install -m0755 "$guest_checks" "$module_stage/usr/bin/live-persistence-guest"
-chmod 0755 "$module_stage/usr/bin/live-module-command"
+chmod 0755 \
+    "$module_stage/usr/bin/live-module-command" \
+    "$unmarked_module_stage/usr/bin/unmarked-module-command"
 "$builder" \
     --id live-sample \
     --version 1.0 \
@@ -60,24 +72,36 @@ chmod 0755 "$module_stage/usr/bin/live-module-command"
     "$module_stage" \
     "$module_image"
 
+"$builder" \
+    --id unmarked-sample \
+    --version 1.0 \
+    --arch "$EFILINUX_ARCH" \
+    "$unmarked_module_stage" \
+    "$unmarked_module_image"
+cat > "$unmarked_stage/efilinux/efilinux.conf" <<'CONFIG'
+module modules/unmarked-sample.zxm
+CONFIG
+truncate -s 96M "$unmarked_disk"
+mkfs.ext4 -q -F -L DATA -d "$unmarked_stage" "$unmarked_disk"
+
 "$persistence_helper" "$media_stage" 96 >/dev/null
 cat > "$media_stage/efilinux/efilinux.conf" <<'CONFIG'
 module modules/live-sample.zxm
 persistence persistence.img
 CONFIG
 truncate -s 192M "$media_disk"
-mkfs.ext4 -q -F -L EFILINUX_MEDIA -d "$media_stage" "$media_disk"
+mkfs.ext4 -q -F -L EFILINUX -d "$media_stage" "$media_disk"
 
 printf '%s\n' efilinux-iso9660-ok > "$iso_stage/efilinux/iso-marker.txt"
 printf '%s\n' '# ISO9660 media is enumerated but contributes no modules.' \
     > "$iso_stage/efilinux/efilinux.conf"
-xorriso -as mkisofs -quiet -R -J -V EFILINUX_ISO -o "$iso_image" "$iso_stage"
+xorriso -as mkisofs -quiet -R -J -V EFILINUX -o "$iso_image" "$iso_stage"
 
 mkudffs \
     --new-file \
     --blocksize=2048 \
     --media-type=hd \
-    --label=EFILINUX_UDF \
+    --label=EFILINUX \
     "$udf_image" 16384 >/dev/null
 
 run_boot() {
@@ -104,6 +128,8 @@ run_boot() {
         -drive format=raw,file=fat:rw:"$EFILINUX_EFI_DIR" \
         -drive if=none,id=livemedia,format=raw,file="$media_disk" \
         -device virtio-blk-pci,drive=livemedia \
+        -drive if=none,id=unmarkedmedia,format=raw,file="$unmarked_disk" \
+        -device virtio-blk-pci,drive=unmarkedmedia \
         -drive if=none,id=udfmedia,format=raw,readonly=on,file="$udf_image" \
         -device virtio-blk-pci,drive=udfmedia \
         -drive media=cdrom,format=raw,readonly=on,file="$iso_image" \

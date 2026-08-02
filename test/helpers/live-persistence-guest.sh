@@ -36,6 +36,15 @@ ext_mount=$(/usr/bin/awk -F '\t' '$4 == "ext4" { print $2; exit }' "$media_file"
     /run/zxmod/active || fail module-not-autoloaded
 [ "$(/usr/bin/live-module-command)" = live-module-autoload-ok ] ||
     fail module-command-failed
+[ ! -e /usr/bin/unmarked-module-command ] || fail unmarked-module-loaded
+if /usr/bin/awk -F '\t' '$1 == "unmarked-sample" { found=1 } END { exit !found }' \
+        /run/zxmod/active 2>/dev/null; then
+    fail unmarked-module-active
+fi
+if /usr/bin/awk -F '\t' '$4 == "udf" { found=1 } END { exit !found }' \
+        "$media_file" 2>/dev/null; then
+    fail labeled-media-without-config-accepted
+fi
 /usr/bin/getcap /usr/bin/arping | \
     /usr/bin/grep -Fxq '/usr/bin/arping cap_net_raw=ep' ||
     fail base-capability-not-replayed
@@ -46,7 +55,7 @@ mkdir -p /mnt/efilinux-udf
 /usr/bin/mount -t udf -o ro "$udf_device" /mnt/efilinux-udf || fail udf-mount
 [ "$(/usr/bin/findmnt -rn -T /mnt/efilinux-udf -o FSTYPE)" = udf ] ||
     fail udf-mount-type
-[ "$(/usr/bin/blkid -s LABEL -o value "$udf_device")" = EFILINUX_UDF ] ||
+[ "$(/usr/bin/blkid -s LABEL -o value "$udf_device")" = EFILINUX ] ||
     fail udf-label
 /usr/bin/umount /mnt/efilinux-udf || fail udf-unmount
 

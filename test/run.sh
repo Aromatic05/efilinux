@@ -15,6 +15,7 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 "$ROOT/test/gnu-runtime.sh"
 "$ROOT/test/runtime-tools.sh"
 "$ROOT/test/system.sh"
+"$ROOT/test/live-media-discovery.sh"
 "$ROOT/test/live-persistence.sh"
 "$ROOT/test/live-manager.sh"
 "$ROOT/test/fsmeta-replay.sh"

@@ -216,8 +216,10 @@ in the same rootfs.
 
 ## Live modules and persistence
 
-At early boot, EFI Linux enumerates supported block filesystems and inspects a
-top-level `efilinux` directory on each one.  Configuration is read from
+At early boot, EFI Linux reads block-device metadata from Udev and considers
+only filesystems whose volume label is exactly `EFILINUX`.  Unmarked devices
+are not mounted or probed by the live-media scanner.  A labeled candidate is
+accepted only when it contains a regular, non-symbolic-link
 `efilinux/efilinux.conf`; paths are relative to that directory and may not
 contain whitespace, traverse outside it, or resolve through escaping symbolic
 links.
@@ -232,6 +234,16 @@ device order and duplicate relative module paths are loaded once.  Only the
 first valid `persistence` directive is used.  Its image must contain ext4 and
 is used as the upper/work storage for a whole-root OverlayFS before SysVinit
 starts.  `/run`, `/dev`, `/proc`, and `/sys` remain transient mounts.
+
+Set the filesystem label before enabling automatic discovery.  For example:
+
+```sh
+e2label /dev/sdX1 EFILINUX
+fatlabel /dev/sdX1 EFILINUX
+```
+
+The label is the partition-independent discovery marker and therefore works
+with GPT, MBR, and filesystems placed directly on a whole block device.
 
 Create a container and starter configuration on a writable mounted filesystem
 with:

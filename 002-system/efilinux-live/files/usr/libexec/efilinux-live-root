@@ -49,7 +49,7 @@ modprobe loop 2>/dev/null || :
 modprobe sr_mod 2>/dev/null || :
 modprobe isofs 2>/dev/null || :
 modprobe udf 2>/dev/null || :
-live_log 'scanning block filesystems for efilinux directories'
+live_log 'discovering EFILINUX-labeled filesystems from udev metadata'
 live_scan_media
 live_log 'live media scan completed'
 
