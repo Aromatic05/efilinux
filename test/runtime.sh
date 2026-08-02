@@ -39,7 +39,7 @@ assert_link /lib64 usr/lib
 assert_link /usr/sbin bin
 
 required_applets=(
-    ash cat clear cp cttyhack dmesg hostname killall ls mdev mkdir mount mv
+    ash cat chroot clear cp cttyhack dmesg hostname killall ls mdev mkdir mount mv
     rm sh switch_root sync udhcpc umount vi
 )
 
@@ -58,7 +58,7 @@ for replaced_applet in ip ping; do
     fi
 done
 
-rescue_links=(ash clear cttyhack hostname killall mdev sh switch_root udhcpc vi)
+rescue_links=(ash chroot clear cttyhack hostname killall mdev sh switch_root udhcpc vi)
 for applet in "${rescue_links[@]}"; do
     [[ -L "$rootfs/usr/bin/$applet" ]] || die "BusyBox rescue link is missing: $applet"
     [[ $(readlink -- "$rootfs/usr/bin/$applet") == busybox ]] ||

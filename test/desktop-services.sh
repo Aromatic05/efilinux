@@ -79,6 +79,7 @@ for path in \
     /usr/share/dbus-1/system.d/org.freedesktop.NetworkManager.conf \
     /usr/share/dbus-1/system-services/org.freedesktop.nm_dispatcher.service \
     /usr/share/dbus-1/services/org.gtk.vfs.Daemon.service \
+    /usr/share/polkit-1/actions/org.efilinux.live-manager.policy \
     /usr/share/polkit-1/actions/org.gtk.vfs.file-operations.policy \
     /usr/share/polkit-1/rules.d/org.gtk.vfs.file-operations.rules \
     /usr/share/pipewire/pipewire.conf \

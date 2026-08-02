@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=EFI Linux Live Manager
+Comment=Manage live modules and persistent storage
+Exec=efilinux-live-manager
+Icon=efilinux-live-manager
+Terminal=false
+Categories=System;
+Keywords=Live;Module;Persistence;Recovery;

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>EFI Linux</vendor>
+  <icon_name>efilinux-live-manager</icon_name>
+  <action id="org.efilinux.live-manager.manage">
+    <description>Manage EFI Linux live modules and persistence</description>
+    <description xml:lang="zh-CN">管理 EFI Linux Live 模块和持久化</description>
+    <message>Authentication is required to modify EFI Linux live media</message>
+    <message xml:lang="zh-CN">修改 EFI Linux Live 介质需要身份验证</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_self_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/efilinux-livectl</annotate>
+  </action>
+</policyconfig>

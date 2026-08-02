@@ -1,0 +1,338 @@
+#!/usr/bin/bash
+
+set -eu
+
+. "${EFILINUX_LIVE_LIBRARY:-/usr/lib/efilinux/live-common.sh}"
+
+CTL_ZXMOD=${EFILINUX_LIVE_ZXMOD:-/usr/bin/zxmod}
+CTL_PERSISTENCE_CREATE=${EFILINUX_PERSISTENCE_CREATE:-/usr/bin/efilinux-persistence-create}
+
+ctl_usage() {
+    cat >&2 <<'USAGE'
+usage: efilinux-livectl snapshot
+       efilinux-livectl scan
+       efilinux-livectl module-load DEVICE RELATIVE_PATH
+       efilinux-livectl module-unload ID
+       efilinux-livectl module-autoload DEVICE RELATIVE_PATH on|off
+       efilinux-livectl module-import DEVICE FILE.zxm
+       efilinux-livectl module-remove DEVICE RELATIVE_PATH
+       efilinux-livectl persistence-create DEVICE SIZE_MIB
+       efilinux-livectl persistence-enable DEVICE
+       efilinux-livectl persistence-disable DEVICE
+USAGE
+    exit 2
+}
+
+ctl_die() {
+    printf 'efilinux-livectl: %s\n' "$*" >&2
+    exit 1
+}
+
+ctl_require_root() {
+    [ "${EFILINUX_LIVE_ASSUME_ROOT:-0}" = 1 ] && return 0
+    [ "$(id -u)" -eq 0 ] || ctl_die 'this operation requires root'
+}
+
+ctl_refresh_media() {
+    [ "${EFILINUX_LIVE_SKIP_SCAN:-0}" = 1 ] || live_scan_media
+}
+
+ctl_find_media() {
+    ctl_target_device=$1
+    ctl_media_device=
+    ctl_media_mount=
+    ctl_media_owned=
+    ctl_media_fstype=
+    [ -f "$EFILINUX_LIVE_MEDIA_FILE" ] || return 1
+    while IFS="$EFILINUX_LIVE_TAB" read -r ctl_device ctl_mount ctl_owned ctl_fstype; do
+        [ "$ctl_device" = "$ctl_target_device" ] || continue
+        ctl_media_device=$ctl_device
+        ctl_media_mount=$ctl_mount
+        ctl_media_owned=$ctl_owned
+        ctl_media_fstype=$ctl_fstype
+        return 0
+    done < "$EFILINUX_LIVE_MEDIA_FILE"
+    return 1
+}
+
+ctl_select_media() {
+    ctl_refresh_media
+    ctl_find_media "$1" || ctl_die "media is unavailable: $1"
+    ctl_media_directory="$ctl_media_mount/$EFILINUX_LIVE_DIRECTORY"
+    [ -d "$ctl_media_directory" ] && [ ! -L "$ctl_media_directory" ] ||
+        ctl_die "efilinux directory is invalid on $1"
+    ctl_media_config="$ctl_media_directory/$EFILINUX_LIVE_CONFIG"
+    [ ! -L "$ctl_media_config" ] || ctl_die "configuration is a symbolic link on $1"
+}
+
+ctl_require_writable_media() {
+    if [ "${EFILINUX_LIVE_ASSUME_WRITABLE:-0}" = 1 ]; then
+        return 0
+    fi
+    live_enable_media_writes "$ctl_media_mount" ||
+        ctl_die "media is read-only: $ctl_media_device"
+}
+
+ctl_config_remove() {
+    ctl_directive=$1
+    ctl_value=${2:-}
+    ctl_source=$3
+    ctl_output=$4
+    awk -v directive="$ctl_directive" -v value="$ctl_value" '
+        {
+            raw = $0
+            line = $0
+            sub(/#.*/, "", line)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+            fields = split(line, part, /[[:space:]]+/)
+            if (fields >= 1 && part[1] == directive && (value == "" || (fields == 2 && part[2] == value)))
+                next
+            print raw
+        }
+    ' "$ctl_source" > "$ctl_output"
+}
+
+ctl_config_commit() {
+    ctl_temporary=$1
+    chmod 0644 "$ctl_temporary"
+    mv -f -- "$ctl_temporary" "$ctl_media_config"
+}
+
+ctl_set_module_autoload() {
+    ctl_relative=$1
+    ctl_mode=$2
+    live_validate_relative_path "$ctl_relative" || ctl_die "invalid module path: $ctl_relative"
+    case $ctl_relative in *.zxm) ;; *) ctl_die "module path must end in .zxm: $ctl_relative" ;; esac
+    ctl_module=$(live_resolve_managed_path "$ctl_media_directory" "$ctl_relative") ||
+        ctl_die "module path escapes its efilinux directory: $ctl_relative"
+    [ -f "$ctl_module" ] && [ ! -L "$ctl_media_directory/$ctl_relative" ] ||
+        ctl_die "module is unavailable: $ctl_relative"
+    ctl_require_writable_media
+    ctl_temporary="$ctl_media_config.new.$$"
+    trap 'rm -f -- "$ctl_temporary"' 0 1 2 15
+    [ -f "$ctl_media_config" ] || : > "$ctl_media_config"
+    ctl_config_remove module "$ctl_relative" "$ctl_media_config" "$ctl_temporary"
+    if [ "$ctl_mode" = on ]; then
+        printf 'module %s\n' "$ctl_relative" >> "$ctl_temporary"
+    fi
+    ctl_config_commit "$ctl_temporary"
+    trap - 0 1 2 15
+}
+
+ctl_set_persistence() {
+    ctl_mode=$1
+    ctl_require_writable_media
+    ctl_temporary="$ctl_media_config.new.$$"
+    trap 'rm -f -- "$ctl_temporary"' 0 1 2 15
+    [ -f "$ctl_media_config" ] || : > "$ctl_media_config"
+    ctl_config_remove persistence '' "$ctl_media_config" "$ctl_temporary"
+    if [ "$ctl_mode" = on ]; then
+        ctl_image="$ctl_media_directory/persistence.img"
+        [ -f "$ctl_image" ] && [ ! -L "$ctl_image" ] ||
+            ctl_die "persistence container is unavailable on $ctl_media_device"
+        [ "$(blkid -p -s TYPE -o value "$ctl_image" 2>/dev/null || :)" = ext4 ] ||
+            ctl_die 'persistence container must contain ext4'
+        printf 'persistence persistence.img\n' >> "$ctl_temporary"
+    fi
+    ctl_config_commit "$ctl_temporary"
+    trap - 0 1 2 15
+}
+
+ctl_manifest_value() {
+    ctl_manifest=$1
+    ctl_key=$2
+    awk -F '=' -v key="$ctl_key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$ctl_manifest"
+}
+
+ctl_clean_field() {
+    tr '\t\r\n' '   ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+}
+
+ctl_module_is_autoload() {
+    ctl_config=$1
+    ctl_relative=$2
+    [ -f "$ctl_config" ] || return 1
+    live_parse_config "$ctl_config" 2>/dev/null |
+        awk -F '\t' -v value="$ctl_relative" '$1 == "module" && $2 == value { found=1 } END { exit !found }'
+}
+
+ctl_module_active_source() {
+    ctl_source=$1
+    [ -f /run/zxmod/active ] || return 1
+    awk -F '\t' -v source="$ctl_source" '$2 == source { print $1; exit }' /run/zxmod/active
+}
+
+ctl_persistence_configured() {
+    ctl_config=$1
+    [ -f "$ctl_config" ] || return 1
+    live_parse_config "$ctl_config" 2>/dev/null |
+        awk -F '\t' '$1 == "persistence" && $2 == "persistence.img" { found=1 } END { exit !found }'
+}
+
+ctl_snapshot_modules() {
+    ctl_device=$1
+    ctl_mount=$2
+    ctl_directory="$ctl_mount/$EFILINUX_LIVE_DIRECTORY"
+    ctl_config="$ctl_directory/$EFILINUX_LIVE_CONFIG"
+    [ ! -L "$ctl_config" ] || ctl_config=/dev/null
+    ctl_module_root="$ctl_directory/modules"
+    [ -d "$ctl_module_root" ] && [ ! -L "$ctl_module_root" ] || return 0
+    find "$ctl_module_root" -type f -name '*.zxm' -print | LC_ALL=C sort |
+    while IFS= read -r ctl_module; do
+        ctl_relative=${ctl_module#"$ctl_directory/"}
+        live_validate_relative_path "$ctl_relative" || continue
+        ctl_resolved=$(live_resolve_managed_path "$ctl_directory" "$ctl_relative") || continue
+        [ "$ctl_resolved" = "$ctl_module" ] || continue
+        ctl_manifest="$EFILINUX_LIVE_RUN_ROOT/manifest.$$"
+        if command -v unsquashfs >/dev/null 2>&1 &&
+           unsquashfs -cat "$ctl_module" metadata/manifest > "$ctl_manifest" 2>/dev/null; then
+            ctl_id=$(ctl_manifest_value "$ctl_manifest" id | ctl_clean_field)
+            ctl_version=$(ctl_manifest_value "$ctl_manifest" version | ctl_clean_field)
+            ctl_description=$(ctl_manifest_value "$ctl_manifest" description | ctl_clean_field)
+        else
+            ctl_id=
+            ctl_version=
+            ctl_description='Invalid or unreadable module'
+        fi
+        rm -f -- "$ctl_manifest"
+        ctl_size=$(stat -c %s "$ctl_module" 2>/dev/null || printf 0)
+        ctl_active_id=$(ctl_module_active_source "$ctl_module" || :)
+        ctl_active=0
+        [ -z "$ctl_active_id" ] || ctl_active=1
+        ctl_autoload=0
+        ctl_module_is_autoload "$ctl_config" "$ctl_relative" && ctl_autoload=1
+        printf 'MODULE\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$ctl_device" "$ctl_mount" "$ctl_relative" "$ctl_id" "$ctl_version" \
+            "$ctl_description" "$ctl_size" "$ctl_active" "$ctl_autoload"
+    done
+}
+
+ctl_snapshot() {
+    ctl_refresh_media
+    [ -f "$EFILINUX_LIVE_MEDIA_FILE" ] || exit 0
+    while IFS="$EFILINUX_LIVE_TAB" read -r ctl_device ctl_mount ctl_owned ctl_fstype; do
+        [ -n "$ctl_device" ] || continue
+        ctl_writable=0
+        if [ "${EFILINUX_LIVE_ASSUME_WRITABLE:-0}" = 1 ] ||
+           live_mount_is_read_write "$ctl_mount"; then
+            ctl_writable=1
+        elif [ "$ctl_fstype" != iso9660 ] &&
+             [ "$(lsblk -dnro RO "$ctl_device" 2>/dev/null || printf 1)" = 0 ]; then
+            ctl_writable=1
+        fi
+        printf 'MEDIA\t%s\t%s\t%s\t%s\n' \
+            "$ctl_device" "$ctl_mount" "$ctl_fstype" "$ctl_writable"
+        ctl_config="$ctl_mount/$EFILINUX_LIVE_DIRECTORY/$EFILINUX_LIVE_CONFIG"
+        [ ! -L "$ctl_config" ] || ctl_config=/dev/null
+        ctl_image="$ctl_mount/$EFILINUX_LIVE_DIRECTORY/persistence.img"
+        ctl_configured=0
+        ctl_persistence_configured "$ctl_config" && ctl_configured=1
+        ctl_exists=0
+        ctl_size=0
+        if [ -f "$ctl_image" ] && [ ! -L "$ctl_image" ]; then
+            ctl_exists=1
+            ctl_size=$(stat -c %s "$ctl_image" 2>/dev/null || printf 0)
+        fi
+        ctl_active=0
+        if [ -f "$EFILINUX_LIVE_RUN_ROOT/persistence.config" ] &&
+           [ "$(cat "$EFILINUX_LIVE_RUN_ROOT/persistence.config")" = "$ctl_config" ]; then
+            ctl_active=1
+        fi
+        printf 'PERSISTENCE\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$ctl_device" "$ctl_mount" "$ctl_configured" "$ctl_exists" "$ctl_active" "$ctl_size"
+        ctl_snapshot_modules "$ctl_device" "$ctl_mount"
+    done < "$EFILINUX_LIVE_MEDIA_FILE"
+}
+
+case ${1:-} in
+    scan)
+        [ $# -eq 1 ] || ctl_usage
+        ctl_require_root
+        live_scan_media
+        ;;
+    snapshot)
+        [ $# -eq 1 ] || ctl_usage
+        ctl_snapshot
+        ;;
+    module-load)
+        [ $# -eq 3 ] || ctl_usage
+        ctl_require_root
+        ctl_select_media "$2"
+        ctl_module=$(live_resolve_managed_path "$ctl_media_directory" "$3") ||
+            ctl_die "module path escapes its efilinux directory: $3"
+        [ -f "$ctl_module" ] && [ ! -L "$ctl_media_directory/$3" ] || ctl_die "module is unavailable: $3"
+        exec "$CTL_ZXMOD" load "$ctl_module"
+        ;;
+    module-unload)
+        [ $# -eq 2 ] || ctl_usage
+        ctl_require_root
+        case $2 in ''|[!a-z0-9]*|*[!a-z0-9._-]*) ctl_die "invalid module id: $2" ;; esac
+        exec "$CTL_ZXMOD" unload "$2"
+        ;;
+    module-autoload)
+        [ $# -eq 4 ] || ctl_usage
+        ctl_require_root
+        case $4 in on|off) ;; *) ctl_usage ;; esac
+        ctl_select_media "$2"
+        ctl_set_module_autoload "$3" "$4"
+        ;;
+    module-import)
+        [ $# -eq 3 ] || ctl_usage
+        ctl_require_root
+        ctl_select_media "$2"
+        ctl_source=$(readlink -f -- "$3") || ctl_die "cannot resolve module source: $3"
+        [ -f "$ctl_source" ] && [ ! -L "$3" ] || ctl_die "module source is invalid: $3"
+        case $ctl_source in *.zxm) ;; *) ctl_die 'module filename must end in .zxm' ;; esac
+        command -v unsquashfs >/dev/null 2>&1 || ctl_die 'unsquashfs is unavailable'
+        unsquashfs -s "$ctl_source" 2>/dev/null | grep -Fq 'Compression zstd' ||
+            ctl_die 'module is not Zstd-compressed SquashFS'
+        unsquashfs -cat "$ctl_source" metadata/manifest >/dev/null 2>&1 ||
+            ctl_die 'module manifest is unreadable'
+        ctl_require_writable_media
+        mkdir -p "$ctl_media_directory/modules"
+        [ ! -L "$ctl_media_directory/modules" ] || ctl_die 'module directory is a symbolic link'
+        ctl_name=$(basename -- "$ctl_source")
+        live_validate_relative_path "modules/$ctl_name" || ctl_die "invalid module filename: $ctl_name"
+        ctl_destination="$ctl_media_directory/modules/$ctl_name"
+        [ ! -e "$ctl_destination" ] || ctl_die "module already exists: $ctl_name"
+        ctl_temporary="$ctl_destination.new.$$"
+        trap 'rm -f -- "$ctl_temporary"' 0 1 2 15
+        cp -- "$ctl_source" "$ctl_temporary"
+        chmod 0644 "$ctl_temporary"
+        mv "$ctl_temporary" "$ctl_destination"
+        trap - 0 1 2 15
+        ;;
+    module-remove)
+        [ $# -eq 3 ] || ctl_usage
+        ctl_require_root
+        ctl_select_media "$2"
+        ctl_module=$(live_resolve_managed_path "$ctl_media_directory" "$3") ||
+            ctl_die "module path escapes its efilinux directory: $3"
+        [ -f "$ctl_module" ] && [ ! -L "$ctl_media_directory/$3" ] || ctl_die "module is unavailable: $3"
+        [ -z "$(ctl_module_active_source "$ctl_module" || :)" ] || ctl_die 'active modules must be unloaded before removal'
+        ctl_set_module_autoload "$3" off
+        rm -f -- "$ctl_module"
+        ;;
+    persistence-create)
+        [ $# -eq 3 ] || ctl_usage
+        ctl_require_root
+        case $3 in ''|*[!0-9]*) ctl_usage ;; esac
+        ctl_select_media "$2"
+        ctl_require_writable_media
+        "$CTL_PERSISTENCE_CREATE" "$ctl_media_mount" "$3"
+        ctl_set_persistence on
+        ;;
+    persistence-enable)
+        [ $# -eq 2 ] || ctl_usage
+        ctl_require_root
+        ctl_select_media "$2"
+        ctl_set_persistence on
+        ;;
+    persistence-disable)
+        [ $# -eq 2 ] || ctl_usage
+        ctl_require_root
+        ctl_select_media "$2"
+        ctl_set_persistence off
+        ;;
+    *) ctl_usage ;;
+esac

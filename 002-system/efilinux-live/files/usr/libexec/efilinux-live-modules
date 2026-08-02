@@ -1,0 +1,45 @@
+#!/usr/bin/bash
+
+set -eu
+
+. "${EFILINUX_LIVE_LIBRARY:-/usr/lib/efilinux/live-common.sh}"
+
+if [ "${EFILINUX_LIVE_SKIP_SCAN:-0}" != 1 ]; then
+    live_mount_virtual_filesystems
+    live_scan_media
+fi
+live_loaded="$EFILINUX_LIVE_RUN_ROOT/modules.loaded"
+: > "$live_loaded"
+live_zxmod=${EFILINUX_LIVE_ZXMOD:-/usr/bin/zxmod}
+
+if [ ! -x "$live_zxmod" ]; then
+    live_log 'zxmod is unavailable; automatic module loading skipped'
+    exit 0
+fi
+
+while IFS="$EFILINUX_LIVE_TAB" read -r live_config live_device live_mount live_owned live_fstype; do
+    while IFS="$EFILINUX_LIVE_TAB" read -r live_directive live_value; do
+        [ "$live_directive" = module ] || continue
+        live_module=$(live_resolve_managed_path "$(dirname "$live_config")" "$live_value") || {
+            live_log "module path escapes its efilinux directory: $live_value"
+            continue
+        }
+        if [ ! -f "$live_module" ] || [ -L "$(dirname "$live_config")/$live_value" ]; then
+            live_log "configured module is unavailable: $live_module"
+            continue
+        fi
+        if grep -Fxq "$live_value" "$live_loaded"; then
+            continue
+        fi
+        if "$live_zxmod" load "$live_module"; then
+            printf '%s\n' "$live_value" >> "$live_loaded"
+            live_log "loaded module $live_value from $live_device"
+        else
+            live_log "failed to load module $live_value from $live_device"
+        fi
+    done <<EOF
+$(live_parse_config "$live_config")
+EOF
+done <<EOF
+$(live_config_records)
+EOF

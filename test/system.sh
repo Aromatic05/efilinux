@@ -52,10 +52,6 @@ require_service() {
 [[ -f "$rootfs/init" && -x "$rootfs/init" ]] || \
     die "final /init is not an executable system-init wrapper"
 [[ $(rootfs_owner /init) == system-init ]] || die "/init is not owned by system-init"
-grep -Fq '/usr/bin/fsmeta-replay' "$rootfs/init" || \
-    die "/init does not replay ACL and capability metadata"
-grep -Fq 'exec /usr/bin/init "$@"' "$rootfs/init" || \
-    die "/init does not enter SysVinit after metadata replay"
 
 for file in \
     /etc/inittab /etc/rc.d/rcS /etc/rc.d/rc /etc/rc.d/rc.shutdown \

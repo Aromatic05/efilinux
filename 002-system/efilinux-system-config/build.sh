@@ -12,7 +12,7 @@ pkgname=efilinux-system-config
 pkgver=1
 sysroot=false
 
-depends=(base-files bash bash-completion doas)
+depends=(base-files bash bash-completion doas efilinux-live)
 builddepends=()
 makedepends=(awk install openssl)
 
@@ -55,7 +55,7 @@ build() {
         "$develdir/usr/libexec"
     install -d -m0750 "$develdir/home/user"
     chown 1000:1000 "$develdir/home/user"
-    chmod 0700 "$develdir/root/.ssh"
+    install -d -m0700 "$develdir/root/.ssh"
 
     for runlevel in 0 1 2 3 4 5 6; do
         install -d -m0755 "$develdir/etc/rc.d/rc${runlevel}.d"

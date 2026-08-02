@@ -44,6 +44,7 @@ run_component "$ROOT/002-system/libblockdev"
 run_component "$ROOT/002-system/udisks"
 run_component "$ROOT/002-system/gvfs"
 
+run_component "$ROOT/002-system/efilinux-live"
 run_component "$ROOT/002-system/efilinux-system-config"
 run_component "$ROOT/002-system/efilinux-console-config"
 run_component "$ROOT/002-system/system-init"

@@ -67,4 +67,7 @@ mkdir -p "$(dirname -- "$efi_image")"
 install -m0644 \
     "$kernel_build_directory/arch/x86/boot/bzImage" \
     "$efi_image"
+install -d -m0755 "$EFILINUX_EFI_DIR/efilinux"
+install -m0644 "$ROOT/000-kernel/image/efilinux.conf" \
+    "$EFILINUX_EFI_DIR/efilinux/efilinux.conf"
 log "Created $efi_image with Linux $linux_version"

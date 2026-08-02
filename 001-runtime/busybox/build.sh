@@ -136,6 +136,7 @@ package() {
         /usr/bin/ash \
         /usr/bin/sh \
         /usr/bin/clear \
+        /usr/bin/chroot \
         /usr/bin/cttyhack \
         /usr/bin/hostname \
         /usr/bin/killall \

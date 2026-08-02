@@ -57,6 +57,34 @@ test -S /run/user/1000/pulse/native || { echo FAIL:pulse-socket; ok=0; }
 su -s /usr/bin/sh user -c 'XDG_RUNTIME_DIR=/run/user/1000 pactl info >/dev/null 2>&1' || { echo FAIL:pactl; ok=0; }
 su -s /usr/bin/sh user -c 'XDG_RUNTIME_DIR=/run/user/1000 elogind-inhibit --what=sleep --mode=delay --who=efilinux-test --why=screen-lock-test /usr/bin/true' || { echo FAIL:elogind-sleep-inhibit; ok=0; }
 su -s /usr/bin/sh user -c 'DISPLAY=:0 XAUTHORITY=/home/user/.Xauthority xwininfo -root >/dev/null' || { echo FAIL:xwininfo; ok=0; }
+su -s /usr/bin/sh user -c '
+    DISPLAY=:0 \
+    XAUTHORITY=/home/user/.Xauthority \
+    XDG_RUNTIME_DIR=/run/user/1000 \
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+    EFILINUX_LIVECTL=/mnt/glx-probe/fake-efilinux-livectl \
+    EFILINUX_LIVE_MANAGER_NO_PKEXEC=1 \
+        /usr/bin/efilinux-live-manager >/tmp/efilinux-live-manager.log 2>&1 &
+    echo $! >/tmp/efilinux-live-manager.pid
+' || { echo FAIL:live-manager-start; ok=0; }
+live_manager_wait=0
+while ! su -s /usr/bin/sh user -c \
+    'DISPLAY=:0 XAUTHORITY=/home/user/.Xauthority xwininfo -name "EFI Linux Live Manager" >/dev/null 2>&1'; do
+    live_manager_wait=$((live_manager_wait + 1))
+    if test "$live_manager_wait" -ge 15; then
+        cat /tmp/efilinux-live-manager.log 2>/dev/null || true
+        echo FAIL:live-manager-window
+        ok=0
+        break
+    fi
+    sleep 1
+done
+if test "$live_manager_wait" -lt 15; then
+    echo EFILINUX_LIVE_MANAGER_GUI_OK
+fi
+if test -s /tmp/efilinux-live-manager.pid; then
+    kill "$(cat /tmp/efilinux-live-manager.pid)" 2>/dev/null || true
+fi
 test -x /mnt/glx-probe/glx-llvmpipe-probe || { echo FAIL:glx-probe-binary; ok=0; }
 su -s /usr/bin/sh user -c 'DISPLAY=:0 XAUTHORITY=/home/user/.Xauthority LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe LP_NUM_THREADS=2 /mnt/glx-probe/glx-llvmpipe-probe' || { echo FAIL:glx-llvmpipe-probe; ok=0; }
 test "$ok" = 1 && echo EFILINUX_XFCE_OK

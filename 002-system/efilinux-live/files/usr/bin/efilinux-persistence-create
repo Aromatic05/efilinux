@@ -1,0 +1,45 @@
+#!/usr/bin/bash
+
+set -eu
+
+usage() {
+    printf 'usage: efilinux-persistence-create MEDIA_ROOT [SIZE_MIB]\n' >&2
+    exit 2
+}
+
+[ $# -ge 1 ] && [ $# -le 2 ] || usage
+live_media=$1
+live_size=${2:-1024}
+case $live_size in ''|*[!0-9]*) usage ;; esac
+[ "$live_size" -ge 64 ] || {
+    printf 'persistence container must be at least 64 MiB\n' >&2
+    exit 2
+}
+
+live_directory="$live_media/efilinux"
+live_image="$live_directory/persistence.img"
+live_config="$live_directory/efilinux.conf"
+mkdir -p "$live_directory"
+[ ! -e "$live_image" ] || {
+    printf 'persistence container already exists: %s\n' "$live_image" >&2
+    exit 1
+}
+
+live_temporary="$live_image.new.$$"
+trap 'rm -f -- "$live_temporary"' 0 1 2 15
+truncate -s "${live_size}M" "$live_temporary"
+mkfs.ext4 -q -F -L EFILINUX_PERSIST "$live_temporary"
+mv "$live_temporary" "$live_image"
+trap - 0 1 2 15
+
+if [ ! -e "$live_config" ]; then
+    cat > "$live_config" <<'EOF'
+# One relative module path per line, resolved below this efilinux directory.
+# module modules/001-recovery.zxm
+persistence persistence.img
+EOF
+elif ! awk '$1 == "persistence" { found=1 } END { exit !found }' "$live_config"; then
+    printf '\npersistence persistence.img\n' >> "$live_config"
+fi
+
+printf 'Created %s MiB persistence container: %s\n' "$live_size" "$live_image"

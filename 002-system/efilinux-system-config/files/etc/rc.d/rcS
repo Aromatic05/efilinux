@@ -7,6 +7,7 @@ export TERM="${TERM:-linux}"
 
 /etc/rc.d/init.d/mountvirtfs start
 /etc/rc.d/init.d/udev start
+/usr/libexec/efilinux-live-modules
 /etc/rc.d/init.d/localnet start
 
 printf '\nEFI Linux multi-user system\n\n'

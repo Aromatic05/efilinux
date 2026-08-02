@@ -12,7 +12,7 @@ pkgname=system-init
 pkgver=1
 sysroot=false
 
-depends=(busybox fsmeta-replay sysvinit)
+depends=(busybox efilinux-live fsmeta-replay sysvinit)
 builddepends=()
 makedepends=(install)
 
@@ -25,13 +25,13 @@ build() {
     cat > "$develdir/init" <<'INIT'
 #!/usr/bin/busybox sh
 
-/usr/bin/fsmeta-replay || {
-    status=$?
-    echo "fsmeta-replay failed with status $status" >&2
+exec </dev/console >/dev/console 2>&1
+
+/etc/rc.d/init.d/mountvirtfs start || {
+    echo "early virtual filesystem setup failed" >&2
     exec /usr/bin/busybox sh
 }
-
-exec /usr/bin/init "$@"
+exec /usr/libexec/efilinux-live-root "$@"
 INIT
     chmod 0755 "$develdir/init"
 }

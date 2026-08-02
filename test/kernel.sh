@@ -33,6 +33,8 @@ efi_binary="$EFILINUX_EFI_DIR/EFI/BOOT/BOOTX64.EFI"
 [[ ! -e "$firmware_root/intel-ucode" ]] || die "unused Intel CPU microcode remains in target rootfs"
 [[ ! -e "$firmware_root/amd-ucode" ]] || die "unused AMD CPU microcode remains in target rootfs"
 [[ -f "$efi_binary" ]] || die "EFI executable is missing"
+[[ -f "$EFILINUX_EFI_DIR/efilinux/efilinux.conf" ]] || \
+    die "EFI media starter configuration is missing"
 
 [[ -L "$rootfs/lib" ]] || die "rootfs /lib is not a symbolic link"
 [[ $(readlink "$rootfs/lib") == usr/lib ]] || die "rootfs /lib does not point to usr/lib"
@@ -145,6 +147,10 @@ for option in \
     CONFIG_USB_STORAGE \
     CONFIG_EXT4_FS \
     CONFIG_VFAT_FS \
+    CONFIG_ISO9660_FS \
+    CONFIG_JOLIET \
+    CONFIG_ZISOFS \
+    CONFIG_UDF_FS \
     CONFIG_NLS_CODEPAGE_437 \
     CONFIG_NLS_ISO8859_1 \
     CONFIG_NLS_UTF8 \
@@ -179,6 +185,7 @@ if find "$module_root" -type f -name '*.ko' -print -quit | grep -q .; then
 fi
 
 required_modules=(
+    isofs udf sr_mod
     amdgpu i915 xe nouveau
     e1000e igb igc r8169 tg3 alx
     iwlwifi ath9k ath10k_pci ath11k_pci ath12k brcmfmac

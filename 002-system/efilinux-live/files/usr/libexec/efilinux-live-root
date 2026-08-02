@@ -1,0 +1,170 @@
+#!/usr/bin/bash
+
+set -eu
+
+export EFILINUX_LIVE_SERIAL_LOG=1
+if [ -c /dev/ttyS0 ]; then
+    exec 9>/dev/ttyS0
+    export EFILINUX_LIVE_SERIAL_FD=9
+fi
+. "${EFILINUX_LIVE_LIBRARY:-/usr/lib/efilinux/live-common.sh}"
+
+live_continue_boot() {
+    exec /usr/bin/init "$@"
+}
+
+live_replay_metadata() {
+    local live_output live_status live_line
+
+    set +e
+    live_output=$(/usr/bin/fsmeta-replay 2>&1)
+    live_status=$?
+    set -e
+    if [ "$live_status" -ne 0 ]; then
+        while IFS= read -r live_line; do
+            [ -z "$live_line" ] || live_log "$live_line"
+        done <<< "$live_output"
+        live_log "fsmeta-replay failed with status $live_status"
+        exec /usr/bin/bash
+    fi
+}
+
+live_fallback() {
+    live_log "$1; continuing without persistence"
+    shift
+    live_continue_boot "$@"
+}
+
+[ ! -e "$EFILINUX_LIVE_RUN_ROOT/root-active" ] || live_continue_boot "$@"
+
+live_replay_metadata
+live_log "starting early live root discovery as PID $$"
+live_mount_virtual_filesystems
+live_prepare_runtime
+if ! udevadm control --ping 2>/dev/null; then
+    live_log 'starting early udev discovery'
+    /etc/rc.d/init.d/udev start || live_log 'early udev startup failed'
+fi
+modprobe loop 2>/dev/null || :
+modprobe sr_mod 2>/dev/null || :
+modprobe isofs 2>/dev/null || :
+modprobe udf 2>/dev/null || :
+live_log 'scanning block filesystems for efilinux directories'
+live_scan_media
+live_log 'live media scan completed'
+
+live_selected_config=
+live_selected_image=
+live_selected_mount=
+live_selected_device=
+while IFS="$EFILINUX_LIVE_TAB" read -r live_config live_device live_mount live_owned live_fstype; do
+    while IFS="$EFILINUX_LIVE_TAB" read -r live_directive live_value; do
+        [ "$live_directive" = persistence ] || continue
+        if [ -n "$live_selected_image" ]; then
+            live_log "ignoring additional persistence container in $live_config"
+            continue
+        fi
+        live_image=$(live_resolve_managed_path "$(dirname "$live_config")" "$live_value") || {
+            live_log "persistence path escapes its efilinux directory: $live_value"
+            continue
+        }
+        if [ ! -f "$live_image" ] || [ -L "$(dirname "$live_config")/$live_value" ]; then
+            live_log "persistence container is unavailable: $live_image"
+            continue
+        fi
+        live_selected_config=$live_config
+        live_selected_image=$live_image
+        live_selected_mount=$live_mount
+        live_selected_device=$live_device
+        live_log "selected persistence container $live_selected_image"
+    done <<EOF
+$(live_parse_config "$live_config")
+EOF
+done <<EOF
+$(live_config_records)
+EOF
+
+[ -n "$live_selected_image" ] || live_continue_boot "$@"
+live_log "enabling writes on persistence media $live_selected_mount"
+if ! live_enable_media_writes "$live_selected_mount" "$live_selected_device"; then
+    live_fallback "persistence media is read-only: $live_selected_mount" "$@"
+fi
+
+live_loop=$(losetup --find --show "$live_selected_image") || {
+    live_fallback "cannot allocate loop device for $live_selected_image" "$@"
+}
+live_log "attached persistence container as $live_loop"
+printf '%s\n' "$live_loop" > "$EFILINUX_LIVE_RUN_ROOT/persistence.loop"
+
+live_type=$(blkid -p -s TYPE -o value "$live_loop" 2>/dev/null || :)
+if [ "$live_type" != ext4 ]; then
+    live_log "persistence container must contain ext4, found: ${live_type:-unknown}"
+    losetup --detach "$live_loop" 2>/dev/null || :
+    live_continue_boot "$@"
+fi
+
+set +e
+e2fsck -p "$live_loop" >/dev/null 2>&1
+live_fsck_status=$?
+set -e
+case $live_fsck_status in 0|1) ;; *)
+    live_log "persistence filesystem check failed with status $live_fsck_status"
+    losetup --detach "$live_loop" 2>/dev/null || :
+    live_continue_boot "$@"
+    ;;
+esac
+
+live_persistence="$EFILINUX_LIVE_RUN_ROOT/persistence"
+live_lower="$EFILINUX_LIVE_RUN_ROOT/lower"
+live_newroot=/newroot
+mkdir -p "$live_persistence" "$live_lower" "$live_newroot"
+mount -t ext4 -o rw,noatime,nodev "$live_loop" "$live_persistence" || {
+    live_log 'cannot mount persistence container'
+    losetup --detach "$live_loop" 2>/dev/null || :
+    live_continue_boot "$@"
+}
+live_log 'mounted persistence filesystem'
+mkdir -p "$live_persistence/upper" "$live_persistence/work"
+find "$live_persistence/work" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+
+mount --bind / "$live_lower" || {
+    live_log 'cannot preserve the embedded root filesystem'
+    umount "$live_persistence" 2>/dev/null || :
+    losetup --detach "$live_loop" 2>/dev/null || :
+    live_continue_boot "$@"
+}
+mount -o remount,bind,ro "$live_lower" || {
+    live_log 'cannot make the embedded root filesystem read-only'
+    umount "$live_lower" 2>/dev/null || :
+    umount "$live_persistence" 2>/dev/null || :
+    losetup --detach "$live_loop" 2>/dev/null || :
+    live_continue_boot "$@"
+}
+mount -t overlay overlay \
+    -o "lowerdir=$live_lower,upperdir=$live_persistence/upper,workdir=$live_persistence/work" \
+    "$live_newroot" || {
+        live_log 'cannot construct persistent root overlay'
+        umount "$live_lower" 2>/dev/null || :
+        umount "$live_persistence" 2>/dev/null || :
+        losetup --detach "$live_loop" 2>/dev/null || :
+        live_continue_boot "$@"
+    }
+live_log 'constructed persistent root overlay'
+umount "$live_lower" || live_fallback 'cannot detach the visible lower-root bind mount' "$@"
+
+mkdir -p "$live_newroot/proc" "$live_newroot/sys" "$live_newroot/dev" "$live_newroot/run"
+printf '%s\n' "$live_selected_config" > "$EFILINUX_LIVE_RUN_ROOT/persistence.config"
+: > "$EFILINUX_LIVE_RUN_ROOT/root-active"
+live_log 'moving proc into persistent root'
+mount --move /proc "$live_newroot/proc"
+live_log 'moving sys into persistent root'
+mount --move /sys "$live_newroot/sys"
+live_log 'moving dev into persistent root'
+mount --move /dev "$live_newroot/dev"
+live_log 'moving runtime filesystem into persistent root'
+mount --move /run "$live_newroot/run"
+live_log 'moving persistent root onto /'
+cd "$live_newroot"
+mount --move . /
+live_log 'entering persistent root'
+exec /usr/bin/chroot . /init "$@"

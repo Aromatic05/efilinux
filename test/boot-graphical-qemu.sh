@@ -44,6 +44,14 @@ rm -f -- "$probe_disk"
 mkdir -p "$probe_stage"
 install -m0755 "$probe_binary" "$probe_stage/glx-llvmpipe-probe"
 install -m0755 "$guest_checks" "$probe_stage/graphical-guest-checks.sh"
+cat > "$probe_stage/fake-efilinux-livectl" <<'EOF'
+#!/bin/sh
+case ${1:-} in
+    snapshot) exit 0 ;;
+    *) exit 2 ;;
+esac
+EOF
+chmod 0755 "$probe_stage/fake-efilinux-livectl"
 truncate -s 16M "$probe_disk"
 mke2fs -q -F -t ext2 -L GLXPROBE -d "$probe_stage" "$probe_disk"
 
@@ -106,7 +114,8 @@ fi
 for marker in \
     EFILINUX_GL_RENDERER=llvmpipe \
     EFILINUX_GL_SHADER_OK \
-    EFILINUX_GL_COMPUTE_OK; do
+    EFILINUX_GL_COMPUTE_OK \
+    EFILINUX_LIVE_MANAGER_GUI_OK; do
     grep -Fxq "$marker" "$normalized_log" || {
         tail -n 240 "$boot_log" >&2
         die "graphical guest did not report $marker"

@@ -214,6 +214,43 @@ includes `utils-zxmod.packages`, so local Zstd SquashFS module support, command-
 line recovery tools, lightweight desktop applications, and GParted are present
 in the same rootfs.
 
+## Live modules and persistence
+
+At early boot, EFI Linux enumerates supported block filesystems and inspects a
+top-level `efilinux` directory on each one.  Configuration is read from
+`efilinux/efilinux.conf`; paths are relative to that directory and may not
+contain whitespace, traverse outside it, or resolve through escaping symbolic
+links.
+
+```text
+module modules/001-recovery.zxm
+persistence persistence.img
+```
+
+`module` directives from all discovered filesystems are processed in stable
+device order and duplicate relative module paths are loaded once.  Only the
+first valid `persistence` directive is used.  Its image must contain ext4 and
+is used as the upper/work storage for a whole-root OverlayFS before SysVinit
+starts.  `/run`, `/dev`, `/proc`, and `/sys` remain transient mounts.
+
+Create a container and starter configuration on a writable mounted filesystem
+with:
+
+```sh
+efilinux-persistence-create /path/to/mounted/media 1024
+```
+
+This creates `/path/to/mounted/media/efilinux/persistence.img`; it refuses to
+overwrite an existing container.
+
+The desktop image includes **EFI Linux Live Manager**, a single GTK3 control
+panel for both features.  It can import and remove `.zxm` files, load or unload
+modules in the current session, toggle their boot-time `module` directives,
+create `persistence.img`, and enable or disable persistence for later boots.
+Disabling persistence does not delete the container or alter the current
+session.  The GUI delegates all mutations to `efilinux-livectl`; the same
+validated operations are available from the command line.
+
 The removable-media EFI path is:
 
 ```text
