@@ -25,5 +25,6 @@ ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 "$ROOT/test/command-closure.sh"
 "$ROOT/test/kernel.sh"
 "$ROOT/test/boot-qemu.sh"
+"$ROOT/test/boot-firmware-qemu.sh"
 "$ROOT/test/boot-zxmod-qemu.sh"
 "$ROOT/test/boot-graphical-qemu.sh"

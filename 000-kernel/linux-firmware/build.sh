@@ -30,6 +30,8 @@ prepare() {
     input_file "$recipedir/exclude.list" "$srcdir/exclude.list"
     input_file "$recipedir/select_members.py" "$srcdir/select_members.py"
     input_file "$recipedir/materialize_links.py" "$srcdir/materialize_links.py"
+    input_file "$recipedir/deduplicate_firmware.py" "$srcdir/deduplicate_firmware.py"
+    input_file "$recipedir/verify_firmware_tree.py" "$srcdir/verify_firmware_tree.py"
 }
 
 build() {
@@ -40,9 +42,11 @@ build() {
     local module_firmware_list="$builddir/module-firmware.list"
     local member_list="$builddir/members.list"
     local selection_report="$builddir/selection-report.tsv"
+    local dedup_report="$builddir/dedup-report.tsv"
     local whence_file="$builddir/WHENCE"
     local module_root kernel_version firmware_path module_file
-    local fallback_count unresolved_count
+    local fallback_count unresolved_count deduplicated_count deduplicated_bytes
+    local firmware_compression_level=${EFILINUX_FIRMWARE_COMPRESSION_LEVEL:-19}
     local -a module_roots=()
 
     mapfile -t module_roots < <(
@@ -52,6 +56,8 @@ build() {
         die "linux-firmware requires exactly one kernel module tree in the sysroot"
     module_root=${module_roots[0]}
     kernel_version=$(basename -- "$module_root")
+    [[ $firmware_compression_level =~ ^([1-9]|1[0-9])$ ]] || \
+        die "invalid firmware compression level: $firmware_compression_level"
 
     mkdir -p "$builddir" "$firmware_staging"
     cp "$srcdir/families.list" "$request_manifest"
@@ -109,12 +115,29 @@ build() {
         ! -name 'README*' \
         ! -name 'LICENSE*' \
         -print0 |
-        xargs -0 -r zstd --quiet --threads="${EFILINUX_COMPRESSION_JOBS:-16}" --rm
+        xargs -0 -r zstd \
+            --quiet \
+            "-$firmware_compression_level" \
+            --threads="${EFILINUX_COMPRESSION_JOBS:-16}" \
+            --rm
     find "$firmware_staging" -type f \
         \( -name 'README*' -o -name 'LICENSE*' \) -delete
 
+    python3 "$srcdir/deduplicate_firmware.py" "$firmware_staging" "$dedup_report"
     python3 "$srcdir/materialize_links.py" "$whence_file" "$firmware_staging"
     rm -f "$firmware_staging/WHENCE"
+    python3 "$srcdir/verify_firmware_tree.py" \
+        "$firmware_staging" \
+        "$selection_report" \
+        "$dedup_report"
+    read -r deduplicated_count deduplicated_bytes < <(
+        awk -F '\t' '
+            NF == 4 { count++; bytes += $4 }
+            END { printf "%d %d\n", count, bytes }
+        ' "$dedup_report"
+    )
+    log "Firmware compression level: $firmware_compression_level"
+    log "Firmware deduplication: $deduplicated_count paths, $deduplicated_bytes bytes"
 }
 
 check() {
@@ -129,6 +152,12 @@ check() {
         [[ -e "$path" || -L "$path" ]] || \
             die "selected firmware is absent from the package tree: $request -> $selected"
     done < "$builddir/selection-report.tsv"
+    python3 "$srcdir/verify_firmware_tree.py" \
+        "$develdir/usr/lib/firmware" \
+        "$builddir/selection-report.tsv" \
+        "$builddir/dedup-report.tsv"
+    find "$develdir/usr/lib/firmware" -type f -name '*.zst' -print0 |
+        xargs -0 -r zstd --quiet --test
 }
 
 package() {
