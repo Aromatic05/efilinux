@@ -29,6 +29,7 @@ prepare() {
     input_file "$recipedir/families.list" "$srcdir/families.list"
     input_file "$recipedir/exclude.list" "$srcdir/exclude.list"
     input_file "$recipedir/select_members.py" "$srcdir/select_members.py"
+    input_file "$recipedir/materialize_links.py" "$srcdir/materialize_links.py"
 }
 
 build() {
@@ -38,8 +39,10 @@ build() {
     local request_manifest="$builddir/requests.list"
     local module_firmware_list="$builddir/module-firmware.list"
     local member_list="$builddir/members.list"
+    local selection_report="$builddir/selection-report.tsv"
     local whence_file="$builddir/WHENCE"
-    local module_root kernel_version firmware_path module_file link_path target_path
+    local module_root kernel_version firmware_path module_file
+    local fallback_count unresolved_count
     local -a module_roots=()
 
     mapfile -t module_roots < <(
@@ -79,8 +82,17 @@ build() {
             "$request_manifest" \
             "$srcdir/exclude.list" \
             "$archive_prefix" \
-            "$whence_file" > "$member_list"
+            "$whence_file" \
+            "$selection_report" > "$member_list"
     [[ -s "$member_list" ]] || die "firmware selection produced an empty member list"
+    read -r fallback_count unresolved_count < <(
+        awk -F '\t' '
+            $1 == "fallback" { fallback++ }
+            $1 == "unresolved" { unresolved++ }
+            END { printf "%d %d\n", fallback, unresolved }
+        ' "$selection_report"
+    )
+    log "Firmware selection: $fallback_count compatible fallbacks, $unresolved_count unresolved declarations"
 
     tar --extract \
         --file "$archive" \
@@ -101,21 +113,22 @@ build() {
     find "$firmware_staging" -type f \
         \( -name 'README*' -o -name 'LICENSE*' \) -delete
 
-    while IFS=$'\t' read -r link_path target_path; do
-        [[ -n "$link_path" && -f "$firmware_staging/$target_path.zst" ]] || continue
-        mkdir -p "$firmware_staging/$(dirname -- "$link_path")"
-        ln -s "/usr/lib/firmware/$target_path.zst" "$firmware_staging/$link_path.zst"
-    done < <(
-        awk '
-            /^Link: / {
-                sub(/^Link: /, "")
-                split($0, parts, " -> ")
-                if (length(parts[1]) && length(parts[2]))
-                    printf "%s\t%s\n", parts[1], parts[2]
-            }
-        ' "$whence_file"
-    )
+    python3 "$srcdir/materialize_links.py" "$whence_file" "$firmware_staging"
     rm -f "$firmware_staging/WHENCE"
+}
+
+check() {
+    local status request selected path
+
+    while IFS=$'\t' read -r status request selected; do
+        case $status in
+            exact|fallback) ;;
+            *) continue ;;
+        esac
+        path="$develdir/usr/lib/firmware/$selected.zst"
+        [[ -e "$path" || -L "$path" ]] || \
+            die "selected firmware is absent from the package tree: $request -> $selected"
+    done < "$builddir/selection-report.tsv"
 }
 
 package() {

@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
 
 "$ROOT/test/recipe.sh"
+"$ROOT/test/firmware-selection.sh"
 "$ROOT/test/composer-cache.sh"
 "$ROOT/test/linker-optimizations.sh"
 "$ROOT/test/modules.sh"

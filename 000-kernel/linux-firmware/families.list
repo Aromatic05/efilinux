@@ -2,6 +2,11 @@
 # not describe completely. Exact firmware declarations are collected from the
 # built 000-kernel module tree. The default image is consumer-PC focused;
 # exclusions are applied separately after module metadata is collected.
+# iwlwifi derives some names from the MAC/RF combination at runtime. When the
+# module advertises a newer API that is absent from linux-firmware, select the
+# highest available API from the same firmware family instead.
+
+versioned-fallback iwlwifi-
 
 directory ath10k/QCA6174
 directory ath10k/QCA9377
