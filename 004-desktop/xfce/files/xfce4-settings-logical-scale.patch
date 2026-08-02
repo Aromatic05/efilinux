@@ -1,6 +1,9 @@
 --- a/dialogs/display-settings/main.c
 +++ b/dialogs/display-settings/main.c
-@@ -414,0 +415,18 @@
+@@ -412,13 +412,31 @@
+     }
+ }
+
 +static gdouble
 +display_setting_scale_to_transform (gdouble scale)
 +{
@@ -19,20 +22,58 @@
 +    return 1.0 / transform;
 +}
 +
-@@ -421 +439 @@
+ static void
+ display_setting_custom_scale_changed (GtkSpinButton *spinbutton,
+                                       gpointer       user_data)
+ {
+     gdouble scale;
+
 -    scale = gtk_spin_button_get_value (spinbutton);
 +    scale = display_setting_scale_to_transform (gtk_spin_button_get_value (spinbutton));
-@@ -472,0 +491 @@
+     xfce_randr->scalex[active_output] = scale;
+     xfce_randr->scaley[active_output] = scale;
+
+@@ -470,12 +488,14 @@
+                                   gpointer      data)
+ {
+     GValue    prop = { 0, };
 +    gdouble   configured_scale;
-@@ -476,0 +496 @@
+     GObject  *combobox = data;
+     gboolean  found = FALSE;
+
+     gtk_tree_model_get_value (model, iter, COLUMN_COMBO_VALUE, &prop);
 +    configured_scale = display_setting_transform_to_scale (xfce_randr->scalex[active_output]);
-@@ -478 +498 @@
+
 -    if (g_value_get_double (&prop) == xfce_randr->scalex[active_output])
 +    if (fabs (g_value_get_double (&prop) - configured_scale) < 0.0001)
-@@ -521,2 +541,4 @@
+     {
+         gtk_combo_box_set_active_iter (GTK_COMBO_BOX (combobox), iter);
+         found = TRUE;
+@@ -518,8 +538,10 @@
+     /* Sync the current scale value to the spinbuttons */
+     spin_scalex = gtk_builder_get_object (builder, "spin-scale-x");
+     spin_scaley = gtk_builder_get_object (builder, "spin-scale-y");
 -    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scalex), xfce_randr->scalex[active_output]);
 -    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scaley), xfce_randr->scaley[active_output]);
 +    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scalex),
 +                               display_setting_transform_to_scale (xfce_randr->scalex[active_output]));
 +    gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin_scaley),
 +                               display_setting_transform_to_scale (xfce_randr->scaley[active_output]));
+
+     /* Block the "changed" signal while determining the active item */
+     g_signal_handlers_block_by_func (combobox, display_setting_scale_changed,
+--- a/common/xfce-randr.c
++++ b/common/xfce-randr.c
+@@ -503,10 +503,10 @@
+     /* save the scale */
+     g_snprintf (property, sizeof (property), "/%s/%s/Scale/X", scheme,
+                 randr->priv->output_info[output]->name);
+-    xfconf_channel_set_double (channel, property, roundf (randr->scalex[output] * 10) / 10);
++    xfconf_channel_set_double (channel, property, roundf (randr->scalex[output] * 1000000) / 1000000);
+     g_snprintf (property, sizeof (property), "/%s/%s/Scale/Y", scheme,
+                 randr->priv->output_info[output]->name);
+-    xfconf_channel_set_double (channel, property, roundf (randr->scaley[output] * 10) / 10);
++    xfconf_channel_set_double (channel, property, roundf (randr->scaley[output] * 1000000) / 1000000);
+ #endif
+
+     /* save the position */

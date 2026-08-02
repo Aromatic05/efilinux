@@ -8,6 +8,5 @@ export QT_IM_MODULE=xim
 export XMODIFIERS=@im=fcitx
 export SDL_IM_MODULE=fcitx
 export NO_AT_BRIDGE=0
-export XDG_RUNTIME_DIR=/run/user/0
 
 exec /usr/bin/dbus-run-session -- /usr/bin/sh -c 'while :; do /usr/bin/sleep 3600; done'

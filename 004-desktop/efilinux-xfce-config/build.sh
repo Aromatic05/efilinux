@@ -13,7 +13,7 @@ pkgver=1
 sysroot=false
 
 depends=(
-    breeze-cursor-theme efilinux-system-config libnma linux-pam catos-icon-theme
+    breeze-cursor-theme efilinux-system-config elogind libnma linux-pam catos-icon-theme
     matcha-gtk-theme network-manager-applet papirus-icon-theme
     papirus-maia-icon-theme xfce xorg-server
 )

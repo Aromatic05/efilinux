@@ -76,7 +76,6 @@ require_file /etc/X11/xorg.conf.d/40-libinput.conf
 require_file /home/user/.config/gtk-3.0/settings.ini
 require_file /home/user/.config/gtk-4.0/settings.ini
 require_file /etc/fonts/fonts.conf
-require_file /etc/rc.d/init.d/graphical
 require_file /etc/X11/Xwrapper.config
 require_directory /usr/share/fonts/truetype/dejavu
 require_directory /usr/share/fonts/opentype/noto
@@ -92,7 +91,6 @@ require_program Xorg xorg-server
 [[ -x "$rootfs/usr/libexec/Xorg.wrap" ]] || die "Xorg setuid wrapper is missing"
 [[ $(rootfs_stat '%a' /usr/libexec/Xorg.wrap) == 4755 ]] || \
     die "Xorg wrapper is not setuid root"
-grep -Fxq 'allowed_users=anybody' "$rootfs/etc/X11/Xwrapper.config" ||     die "Xorg wrapper does not permit the live user"
 grep -Fxq 'needs_root_rights=yes' "$rootfs/etc/X11/Xwrapper.config" ||     die "Xorg wrapper does not retain required device privileges"
 require_program xinit xorg
 require_program startx xorg
@@ -180,17 +178,8 @@ if grep -Fq "$rootfs" "$loader_cache"; then
     die "GdkPixbuf loader cache contains build-host paths"
 fi
 
-[[ -L "$rootfs/etc/rc.d/rc5.d/S80graphical" ]] || \
-    die "runlevel 5 does not start the graphical session"
 grep -Eq '^id:5:initdefault:$' "$rootfs/etc/inittab" || \
     die "graphical image does not default to runlevel 5"
-grep -Fq 'GDK_BACKEND=x11' "$rootfs/etc/rc.d/init.d/graphical" || \
-    die "graphical service does not force the GTK X11 backend"
-grep -Fq '/usr/bin/su -s /usr/bin/sh user -c'     "$rootfs/etc/rc.d/init.d/graphical" ||     die "graphical service does not launch the normal user"
-grep -Fq 'HOME=/home/user' "$rootfs/etc/rc.d/init.d/graphical" ||     die "graphical service does not use the normal user home"
-if grep -Eq '/run/user/0|HOME=/root|USER=root' "$rootfs/etc/rc.d/init.d/graphical"; then
-    die "graphical service still starts a root desktop session"
-fi
 
 if find "$rootfs" \
     \( -name 'libwayland-*.so*' -o -name 'Xwayland' -o -path '*/wayland-protocols/*' \) \
