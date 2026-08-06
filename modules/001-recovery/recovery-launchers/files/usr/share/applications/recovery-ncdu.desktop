@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Disk Usage (ncdu)
+Comment=Interactively inspect directory space usage
+Exec=/opt/recovery/bin/ncdu /
+Icon=drive-harddisk
+Categories=System;FileTools;
+Terminal=true
+StartupNotify=false

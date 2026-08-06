@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>EFI Linux</vendor>
+  <action id="org.efilinux.recovery.launch-privileged">
+    <description>Launch a privileged EFI Linux recovery application</description>
+    <description xml:lang="zh-CN">启动需要管理员权限的 EFI Linux 恢复程序</description>
+    <message>Authorization is required to access disks or EFI variables</message>
+    <message xml:lang="zh-CN">访问磁盘或 EFI 变量需要管理员权限</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/opt/recovery/libexec/recovery-privileged-launch</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

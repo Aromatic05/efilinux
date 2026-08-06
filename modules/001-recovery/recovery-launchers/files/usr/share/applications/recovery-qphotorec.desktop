@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=QPhotoRec
+Comment=Recover files with a graphical interface
+Exec=/opt/recovery/bin/recovery-qphotorec
+Icon=drive-harddisk
+Categories=System;
+Terminal=false
+StartupNotify=true

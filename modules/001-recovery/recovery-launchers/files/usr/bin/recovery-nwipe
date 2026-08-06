@@ -1,0 +1,5 @@
+#!/bin/sh
+exec /usr/bin/xfce4-terminal \
+    --title='Disk Erase - nwipe' \
+    --hold \
+    --command='/opt/recovery/bin/recovery-nwipe-session'

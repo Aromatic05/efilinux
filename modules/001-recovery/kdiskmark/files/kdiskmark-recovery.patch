@@ -1,0 +1,171 @@
+diff -urN a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt	2026-08-06 11:15:43.257184696 +0800
++++ b/CMakeLists.txt	2026-08-06 11:44:16.462163198 +0800
+@@ -17,14 +17,10 @@
+ 
+ if(USE_QT5)
+     find_package(Qt5 COMPONENTS Widgets LinguistTools DBus REQUIRED)
+-    find_package(PolkitQt5-1 REQUIRED)
+     set(QT_LIBS Qt5::Widgets Qt5::DBus)
+-    set(POLKIT_LIB PolkitQt5-1::Core)
+ else()
+-    find_package(Qt6 COMPONENTS Widgets LinguistTools DBus REQUIRED)
+-    find_package(PolkitQt6-1 REQUIRED)
++    find_package(Qt6 COMPONENTS Widgets DBus REQUIRED)
+     set(QT_LIBS Qt6::Widgets Qt6::DBus)
+-    set(POLKIT_LIB PolkitQt6-1::Core)
+ endif()
+ 
+ set(CMAKE_AUTOUIC ON)
+@@ -82,38 +78,7 @@
+     qt6_add_dbus_interface(HelperInterface_SRCS ${CMAKE_CURRENT_BINARY_DIR}/${helper_interface_xml} helper_interface)
+ endif()
+ 
+-set(TS_FILES
+-    data/translations/${PROJECT_NAME}_cs_CZ.ts
+-    data/translations/${PROJECT_NAME}_de_DE.ts
+-    data/translations/${PROJECT_NAME}_es_ES.ts
+-    data/translations/${PROJECT_NAME}_es_MX.ts
+-    data/translations/${PROJECT_NAME}_fi_FI.ts
+-    data/translations/${PROJECT_NAME}_fr_FR.ts
+-    data/translations/${PROJECT_NAME}_hi_IN.ts
+-    data/translations/${PROJECT_NAME}_hu_HU.ts
+-    data/translations/${PROJECT_NAME}_it_IT.ts
+-    data/translations/${PROJECT_NAME}_ja_JP.ts
+-    data/translations/${PROJECT_NAME}_ko_KR.ts
+-    data/translations/${PROJECT_NAME}_nl_NL.ts
+-    data/translations/${PROJECT_NAME}_pl_PL.ts
+-    data/translations/${PROJECT_NAME}_pt_BR.ts
+-    data/translations/${PROJECT_NAME}_ru_RU.ts
+-    data/translations/${PROJECT_NAME}_sk_SK.ts
+-    data/translations/${PROJECT_NAME}_sv_SE.ts
+-    data/translations/${PROJECT_NAME}_tr_TR.ts
+-    data/translations/${PROJECT_NAME}_uk_UA.ts
+-    data/translations/${PROJECT_NAME}_zh_CN.ts
+-    data/translations/${PROJECT_NAME}_zh_TW.ts
+-)
+-
+-if(USE_QT5)
+-    qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
+-else()
+-    qt6_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
+-endif()
+-
+ add_executable(${PROJECT_NAME}
+-    ${QM_FILES}
+     ${HelperInterface_SRCS}
+     src/main.cpp
+     src/mainwindow.h
+@@ -156,7 +121,6 @@
+ )
+ 
+ install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+-install(FILES ${QM_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME}/${PROJECT_NAME}/translations)
+ install(FILES data/${DESKTOP_FILE} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+ 
+ ecm_install_icons(ICONS ${APP_ICONS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons)
+@@ -169,13 +133,11 @@
+ 
+ target_link_libraries(${PROJECT_NAME}_helper
+     ${QT_LIBS}
+-    ${POLKIT_LIB}
+ )
+ 
+ install(TARGETS ${PROJECT_NAME}_helper DESTINATION ${KDE_INSTALL_LIBEXECDIR})
+ install(FILES data/dev.jonmagon.kdiskmark.helperinterface.conf DESTINATION ${KDE_INSTALL_DBUSDIR}/system.d)
+ 
+-install(FILES data/dev.jonmagon.kdiskmark.helper.policy DESTINATION ${POLKITQT-1_POLICY_FILES_INSTALL_DIR})
+ ecm_install_configured_files(
+     INPUT data/dev.jonmagon.kdiskmark.helperinterface.service.in
+     DESTINATION ${KDE_INSTALL_DBUSDIR}/system-services
+diff -urN a/src/appsettings.cpp b/src/appsettings.cpp
+--- a/src/appsettings.cpp	2026-08-06 11:15:43.259583615 +0800
++++ b/src/appsettings.cpp	2026-08-06 12:07:08.573164437 +0800
+@@ -115,7 +115,9 @@
+ 
+ Global::BenchmarkMode AppSettings::defaultBenchmarkMode()
+ {
+-    return Global::BenchmarkMode::ReadWriteMix;
++    // Recovery media defaults to non-destructive read benchmarks. Write and
++    // mixed tests remain available only after an explicit user selection.
++    return Global::BenchmarkMode::ReadMix;
+ }
+ 
+ Global::BenchmarkTestData AppSettings::getBenchmarkTestData() const
+diff -urN a/src/helper.cpp b/src/helper.cpp
+--- a/src/helper.cpp	2026-08-06 11:15:43.259583615 +0800
++++ b/src/helper.cpp	2026-08-06 11:44:16.462240213 +0800
+@@ -3,8 +3,6 @@
+ #include <QCoreApplication>
+ #include <QtDBus>
+ #include <QFile>
+-#include <PolkitQt1/Authority>
+-#include <PolkitQt1/Subject>
+ 
+ #include <signal.h>
+ 
+@@ -104,35 +102,19 @@
+         return {{"success", false}, {"error", "There are already registered DBus connection."}};
+     }
+ 
+-    PolkitQt1::SystemBusNameSubject subject(message().service());
+-    PolkitQt1::Authority *authority = PolkitQt1::Authority::instance();
+-
+-    PolkitQt1::Authority::Result result = PolkitQt1::Authority::No;
+-    QEventLoop e;
+-    connect(authority, &PolkitQt1::Authority::checkAuthorizationFinished, &e, [&e, &result](PolkitQt1::Authority::Result _result) {
+-        result = _result;
+-        e.quit();
+-    });
+-
+-    authority->checkAuthorization(QStringLiteral("dev.jonmagon.kdiskmark.helper.init"), subject, PolkitQt1::Authority::AllowUserInteraction);
+-    e.exec();
+-
+-    if (authority->hasError()) {
+-        qDebug() << "Encountered error while checking authorization, error code: " << authority->lastError() << authority->errorDetails();
+-        authority->clearError();
+-    }
+-
+-    switch (result) {
+-    case PolkitQt1::Authority::Yes:
+-        // track who called into us so we can close when all callers have gone away
+-        m_serviceWatcher->addWatchedService(message().service());
+-        return {{"success", true}};
+-    default:
++    const QDBusReply<uint> callerUid =
++        QDBusConnection::systemBus().interface()->serviceUid(message().service());
++    if (!callerUid.isValid() || callerUid.value() != 0) {
+         sendErrorReply(QDBusError::AccessDenied);
+         if (m_serviceWatcher->watchedServices().isEmpty())
+             qApp->quit();
+         return {};
+     }
++
++    // The recovery launcher starts both the GUI and helper as root. Only that
++    // dedicated root client may use this private helper service.
++    m_serviceWatcher->addWatchedService(message().service());
++    return {{"success", true}};
+ }
+ 
+ QVariantMap Helper::endSession()
+diff -urN a/src/mainwindow.cpp b/src/mainwindow.cpp
+--- a/src/mainwindow.cpp	2026-08-06 11:15:43.259583615 +0800
++++ b/src/mainwindow.cpp	2026-08-06 12:07:47.486844526 +0800
+@@ -953,6 +953,17 @@
+             QMessageBox::critical(this, tr("Not available"), tr("Directory is not specified."));
+         }
+         else {
++            if (settings.getBenchmarkMode() != Global::BenchmarkMode::ReadMix) {
++                const auto answer = QMessageBox::warning(
++                    this,
++                    tr("Write benchmark confirmation"),
++                    tr("The selected benchmark mode writes temporary data to the target directory. "
++                       "Do not continue on a failing or read-only recovery source. Continue?"),
++                    QMessageBox::Yes | QMessageBox::No,
++                    QMessageBox::No);
++                if (answer != QMessageBox::Yes)
++                    return;
++            }
+             bodyFunc();
+         }
+     }

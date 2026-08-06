@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GSmartControl
+Comment=Inspect disk SMART health and run self-tests
+Exec=/opt/recovery/bin/recovery-gsmartcontrol
+Icon=drive-harddisk
+Categories=System;Monitor;
+Terminal=false
+StartupNotify=true

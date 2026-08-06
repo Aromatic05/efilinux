@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+
+[ "$#" -ge 1 ] || {
+    echo "usage: recovery-privileged-launch APPLICATION [ARGUMENT ...]" >&2
+    exit 2
+}
+
+application=$1
+shift
+case $application in
+    efibooteditor) command=/opt/recovery/bin/recovery-efibooteditor-session ;;
+    gsmartcontrol) command=/opt/recovery/bin/gsmartcontrol ;;
+    kdiskmark) command=/opt/recovery/bin/recovery-kdiskmark-session ;;
+    qphotorec) command=/opt/recovery/bin/qphotorec ;;
+    *)
+        echo "unsupported privileged recovery application: $application" >&2
+        exit 2
+        ;;
+esac
+
+runtime=/run/efilinux-recovery-root
+umask 077
+mkdir -p "$runtime"
+chmod 0700 "$runtime"
+
+export HOME=/root
+export USER=root
+export LOGNAME=root
+export XDG_RUNTIME_DIR="$runtime"
+export PATH=/opt/recovery/bin:/usr/bin:/bin
+export LD_LIBRARY_PATH=/opt/recovery/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export QT_PLUGIN_PATH=/opt/recovery/lib/qt6/plugins
+export XDG_DATA_DIRS=/opt/recovery/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
+export DISPLAY=${DISPLAY:-:0}
+export XAUTHORITY=${XAUTHORITY:-/home/user/.Xauthority}
+
+exec "$command" "$@"

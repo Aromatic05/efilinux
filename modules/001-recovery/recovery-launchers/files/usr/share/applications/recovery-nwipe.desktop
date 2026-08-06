@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Erase Disk (nwipe)
+Comment=Permanently erase an entire disk
+Exec=/opt/recovery/bin/recovery-nwipe
+Icon=edit-delete
+Categories=System;Security;
+Terminal=false
+StartupNotify=false

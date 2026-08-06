@@ -1,0 +1,64 @@
+#!/bin/sh
+set -eu
+
+address_file=$(mktemp /run/kdiskmark-bus-address.XXXXXX)
+pid_file=$(mktemp /run/kdiskmark-bus-pid.XXXXXX)
+helper_pid=
+bus_pid=
+application_pid=
+cleanup() {
+    trap - EXIT HUP INT TERM
+    [ -z "$application_pid" ] || kill "$application_pid" 2>/dev/null || true
+    [ -z "$helper_pid" ] || kill "$helper_pid" 2>/dev/null || true
+    [ -z "$bus_pid" ] || kill "$bus_pid" 2>/dev/null || true
+    [ -z "$application_pid" ] || wait "$application_pid" 2>/dev/null || true
+    [ -z "$helper_pid" ] || wait "$helper_pid" 2>/dev/null || true
+    [ -z "$bus_pid" ] || wait "$bus_pid" 2>/dev/null || true
+    rm -f -- "$address_file" "$pid_file"
+}
+trap cleanup EXIT
+trap 'exit 143' HUP INT TERM
+
+/usr/bin/dbus-daemon --session --fork \
+    --print-address=3 --print-pid=4 \
+    3>"$address_file" 4>"$pid_file"
+DBUS_SYSTEM_BUS_ADDRESS=$(cat "$address_file")
+DBUS_SESSION_BUS_ADDRESS=$DBUS_SYSTEM_BUS_ADDRESS
+export DBUS_SYSTEM_BUS_ADDRESS DBUS_SESSION_BUS_ADDRESS
+bus_pid=$(cat "$pid_file")
+
+/opt/recovery/libexec/kdiskmark_helper &
+helper_pid=$!
+helper_ready=no
+attempt=0
+while [ "$attempt" -lt 5 ]; do
+    kill -0 "$helper_pid" 2>/dev/null || break
+    if /usr/bin/dbus-send \
+        --system \
+        --print-reply \
+        --dest=org.freedesktop.DBus \
+        /org/freedesktop/DBus \
+        org.freedesktop.DBus.NameHasOwner \
+        string:dev.jonmagon.kdiskmark.helperinterface \
+        2>/dev/null | /usr/bin/grep -q 'boolean true'; then
+        helper_ready=yes
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+done
+[ "$helper_ready" = yes ] || {
+    echo 'KDiskMark helper did not register on its private D-Bus.' >&2
+    exit 1
+}
+
+exec_status=0
+/opt/recovery/bin/kdiskmark &
+application_pid=$!
+if wait "$application_pid"; then
+    exec_status=0
+else
+    exec_status=$?
+fi
+application_pid=
+exit "$exec_status"

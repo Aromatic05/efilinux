@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+printf '%s\n' \
+    'WARNING: nwipe permanently destroys data on selected disks.' \
+    'Verify device model, serial number and capacity inside nwipe.' \
+    '' \
+    'Type ERASE to continue:'
+IFS= read -r confirmation
+[ "$confirmation" = ERASE ] || {
+    echo 'Cancelled.'
+    exit 1
+}
+exec /usr/bin/doas /usr/bin/env \
+    PATH=/opt/recovery/bin:/usr/bin:/bin \
+    LD_LIBRARY_PATH=/opt/recovery/lib \
+    /opt/recovery/bin/nwipe

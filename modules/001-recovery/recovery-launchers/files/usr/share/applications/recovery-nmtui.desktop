@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=NetworkManager TUI
+Name[zh_CN]=网络连接配置
+Comment=Configure network connections in a terminal interface
+Comment[zh_CN]=在终端界面中配置网络连接
+Exec=/opt/recovery/bin/recovery-nmtui
+Icon=network-wired
+Categories=System;
+Terminal=false
+StartupNotify=true

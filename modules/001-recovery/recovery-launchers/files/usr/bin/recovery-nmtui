@@ -1,0 +1,4 @@
+#!/bin/sh
+exec /usr/bin/xfce4-terminal \
+    --title='NetworkManager TUI' \
+    --command='/opt/recovery/bin/nmtui'

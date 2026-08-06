@@ -2,7 +2,7 @@
 Type=Application
 Name=Clonezilla
 Comment=Create and restore disk images
-Exec=/usr/bin/recovery-clonezilla
+Exec=/opt/recovery/bin/recovery-clonezilla
 Icon=drive-harddisk
 Categories=System;
 Terminal=false

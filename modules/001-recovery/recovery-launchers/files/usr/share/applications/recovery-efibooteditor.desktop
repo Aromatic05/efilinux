@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=EFI Boot Editor
+Comment=Inspect and edit UEFI boot entries
+Exec=/opt/recovery/bin/recovery-efibooteditor
+Icon=preferences-system
+Categories=System;
+Terminal=false
+StartupNotify=true

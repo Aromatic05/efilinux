@@ -59,7 +59,8 @@ package() {
         'libkdb5.so.*' \
         'libkrad.so.*' \
         'libkrb5.so.*' \
-        'libkrb5support.so.*'; do
+        'libkrb5support.so.*' \
+        'libverto.so.*'; do
         package_add_library_family keep "$family"
     done
     [[ ! -d "$pkgdir/usr/lib/krb5" ]] || keep+=(/usr/lib/krb5/)

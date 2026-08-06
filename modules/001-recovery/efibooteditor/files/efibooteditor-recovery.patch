@@ -1,0 +1,89 @@
+diff -urN a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt	2026-04-26 05:54:30.000000000 +0800
++++ b/CMakeLists.txt	2026-08-06 13:06:41.876560492 +0800
+@@ -65,9 +65,7 @@
+         Core
+         Gui
+         Network
+-        Svg
+         Widgets
+-        LinguistTools
+     REQUIRED)
+ 
+ find_package(ZLIB REQUIRED)
+@@ -81,31 +79,10 @@
+     Qt${QT_VERSION_MAJOR}::Core
+     Qt${QT_VERSION_MAJOR}::Gui
+     Qt${QT_VERSION_MAJOR}::Network
+-    Qt${QT_VERSION_MAJOR}::Svg
+     Qt${QT_VERSION_MAJOR}::Widgets
+     ZLIB::ZLIB
+ )
+ 
+-if(${QT_VERSION_MAJOR} LESS_EQUAL 5)
+-    if(NOT COMMAND qt_add_translations)
+-        function(qt_add_translations TARGET)
+-            cmake_parse_arguments(arg "" "" "TS_FILES;RESOURCE_PREFIX;INCLUDE_DIRECTORIES;LUPDATE_OPTIONS" ${ARGN})
+-            qt5_add_translation(QM_FILES ${arg_TS_FILES})
+-
+-            get_target_property(BINARY_DIR ${TARGET} BINARY_DIR)
+-            set(QRC ${BINARY_DIR}/translations.qrc)
+-            file(WRITE ${QRC} "<RCC><qresource prefix=\"${arg_RESOURCE_PREFIX}\">\n")
+-            foreach (QM_PATH ${QM_FILES})
+-                file(RELATIVE_PATH QM_FILE ${BINARY_DIR} ${QM_PATH})
+-                file(APPEND ${QRC} "<file>${QM_FILE}</file>\n")
+-            endforeach ()
+-            file(APPEND ${QRC} "</qresource></RCC>")
+-            qt_add_resources(RESOURCES ${QRC})
+-            target_sources(${PROJECT_NAME} PRIVATE ${RESOURCES})
+-        endfunction()
+-    endif()
+-endif()
+-
+ add_compile_definitions(
+     APPLICATION_NAME="${APPLICATION_NAME}"
+     VERSION="${FULL_VERSION}"
+@@ -312,21 +289,6 @@
+     )
+ endif()
+ 
+-# Translations
+-FILE(GLOB TRANSLATIONS
+-    ${CMAKE_SOURCE_DIR}/translations/${PROJECT_NAME}_*.ts
+-)
+-
+-set_source_files_properties(${TRANSLATIONS}
+-    PROPERTIES OUTPUT_LOCATION "${CMAKE_BINARY_DIR}/translations"
+-)
+-
+-qt_add_translations(${PROJECT_NAME}
+-    TS_FILES ${TRANSLATIONS}
+-    RESOURCE_PREFIX "/"
+-    INCLUDE_DIRECTORIES "include"
+-    LUPDATE_OPTIONS "-no-obsolete")
+-
+ # Libraries
+ if(APPLE)
+     target_link_libraries(${PROJECT_NAME}-core PUBLIC
+@@ -352,10 +314,6 @@
+     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS_RELEASE -s)
+ endif()
+ 
+-# Testing
+-enable_testing()
+-add_subdirectory(tests)
+-
+ # Packaging
+ if(WIN32)
+     install(TARGETS ${PROJECT_NAME}
+diff -urN a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp	2026-04-26 05:54:30.000000000 +0800
++++ b/src/main.cpp	2026-08-06 13:06:41.876619432 +0800
+@@ -35,6 +35,7 @@
+         auto &translator = translators.emplace_back();
+         if(!translator.load(QLocale::system(), module, "_", "translations/")
+             && !translator.load(QLocale::system(), module, "_", ":/translations/")
++            && !translator.load(QLocale::system(), module, "_", "/opt/recovery/share/efibooteditor/translations")
+             && !translator.load(QLocale::system(), module, "_", translations_path))
+         {
+             translators.pop_back();

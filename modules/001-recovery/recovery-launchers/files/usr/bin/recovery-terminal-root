@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+[ "$#" -eq 2 ] || {
+    echo "usage: recovery-terminal-root TITLE COMMAND" >&2
+    exit 2
+}
+
+title=$1
+command=$2
+case $command in
+    /opt/recovery/bin/*) ;;
+    *) echo "refusing unexpected recovery command: $command" >&2; exit 2 ;;
+esac
+
+exec /usr/bin/xfce4-terminal \
+    --title="$title" \
+    --hold \
+    --command="/usr/bin/doas /usr/bin/env PATH=/opt/recovery/bin:/usr/bin:/bin LD_LIBRARY_PATH=/opt/recovery/lib XDG_DATA_DIRS=/opt/recovery/share:/usr/local/share:/usr/share $command"

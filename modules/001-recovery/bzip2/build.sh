@@ -19,20 +19,24 @@ prepare() {
 build() {
     local objects=(blocksort huffman crctable randtable compress decompress bzlib)
     local object
-    mkdir -p "$builddir"
+    mkdir -p "$builddir" "$develdir/usr/bin"
     for object in "${objects[@]}"; do
         "$CC" $CPPFLAGS $CFLAGS -fPIC -c "$srcdir/source/$object.c" -o "$builddir/$object.o"
     done
     "$CC" $LDFLAGS -shared -Wl,-soname,libbz2.so.1.0 \
         -o "$builddir/libbz2.so.1.0.8" "$builddir"/*.o
+    "$CC" $CPPFLAGS $CFLAGS "$srcdir/source/bzip2.c" "$builddir"/*.o \
+        $LDFLAGS -o "$develdir/usr/bin/bzip2"
+    ln -s bzip2 "$develdir/usr/bin/bunzip2"
+    ln -s bzip2 "$develdir/usr/bin/bzcat"
     install -Dm0644 "$srcdir/source/bzlib.h" "$develdir/usr/include/bzlib.h"
     install -Dm0755 "$builddir/libbz2.so.1.0.8" "$develdir/usr/lib/libbz2.so.1.0.8"
     ln -s libbz2.so.1.0.8 "$develdir/usr/lib/libbz2.so.1.0"
     ln -s libbz2.so.1.0 "$develdir/usr/lib/libbz2.so"
 }
-devel() { strip_all "$develdir/usr/lib/libbz2.so.1.0.8"; }
+devel() { strip_all "$develdir/usr/bin/bzip2" "$develdir/usr/lib/libbz2.so.1.0.8"; }
 package() {
-    local -a keep=()
+    local -a keep=(/usr/bin/bzip2 /usr/bin/bunzip2 /usr/bin/bzcat)
     package_add_library_family keep 'libbz2.so.1.0*'
     package_keep "${keep[@]}"
 }

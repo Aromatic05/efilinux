@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/bin/xfce4-terminal --title=Clonezilla --command='/usr/bin/doas /usr/bin/clonezilla'
+exec /opt/recovery/bin/recovery-terminal-root Clonezilla /opt/recovery/bin/recovery-clonezilla-session

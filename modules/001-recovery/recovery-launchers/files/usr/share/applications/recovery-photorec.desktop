@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=PhotoRec
-Comment=Recover files from disks and memory cards
-Exec=/usr/bin/recovery-photorec
-Icon=media-flash
-Categories=System;
-Terminal=false
-StartupNotify=true

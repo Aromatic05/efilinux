@@ -11,19 +11,22 @@ source "$ROOT/lib/recipe.sh"
 pkgname=clonezilla
 pkgver=5.16.25
 depends=(
-    bash bc bzip2 cifs-utils coreutils curl dialog dosfstools drbl-runtime e2fsprogs
-    findutils gawk gptfdisk grep gzip jq lvm2 mdadm nbd nfs-utils ntfs-3g parted
-    netcat-traditional partclone perl-runtime procps-ng qemu-img sed smartmontools sshfs tar util-linux xfsprogs
-    wget xz zstd
+    bash bc bzip2 cifs-utils coreutils coreutils-sha512sum curl dialog dosfstools drbl-runtime e2fsprogs
+    findutils gawk gptfdisk grep gzip jq lzip lvm2 lz4 lzop mdadm nbd nfs-utils
+    ntfs-3g parted netcat-traditional partclone pbzip2 perl-runtime pigz plzip
+    procps-ng qemu-img sed smartmontools sshfs tar util-linux wget xfsprogs xz zstd
 )
 builddepends=()
-makedepends=(make)
+makedepends=(make patch python3)
 
 prepare() {
     local archive="$downloaddir/clonezilla-$pkgver.tar.gz"
     download "https://free.nchc.org.tw/drbl-core/src/stable/clonezilla-$pkgver.tar.gz" "$archive"
     checksum sha256 f8b6e4a1e31a074fc76a5ff7e66e550371b9f66b06936060a7e0dbf5d37f1684 "$archive"
     extract "$archive" "$srcdir/source"
+    input_file "$recipedir/files/clonezilla-local-only.patch" "$srcdir/clonezilla-local-only.patch"
+    [[ "$RECIPE_INPUT_MODE" == metadata ]] && return
+    patch -d "$srcdir/source" -p1 < "$srcdir/clonezilla-local-only.patch"
 }
 
 build() {
@@ -32,6 +35,29 @@ build() {
     local config_root="$module_root/etc/drbl"
     local ocs_config_root="$module_root/etc/ocs"
     local perl_root="$module_root/perl"
+    local command
+    local -a excluded_commands=(
+        create-debian-live
+        create-drbl-live
+        create-drbl-live-by-pkg
+        create-gparted-live
+        create-ubuntu-live
+        drbl-ocs
+        drbl-ocs-live-prep
+        gen-torrent-from-ptcl
+        get-latest-ocs-live-ver
+        ocs-btsrv
+        ocs-ezio-leecher
+        ocs-ezio-seeder
+        ocs-gen-bt-metainfo
+        ocs-gen-bt-slices
+        ocs-live-feed-img
+        ocs-live-get-img
+        ocs-memtester
+        ocs-related-srv
+        ocs-srv-live
+        ocsmgrd
+    )
 
     make -C "$srcdir/source" all
 
@@ -53,9 +79,57 @@ build() {
     install -m0644 "$srcdir/source/conf/drbl-ocs.conf" \
         "$develdir$config_root/drbl-ocs.conf"
 
-    [[ -f "$develdir/usr/bin/ocsmgrd" ]] ||
-        die "Clonezilla management daemon changed upstream"
-    rm -f "$develdir/usr/bin/ocsmgrd"
+    python3 - \
+        "$develdir$config_root/drbl-ocs.conf" \
+        "$develdir$share_root/sbin/ocs-functions" <<'PYCODE'
+from pathlib import Path
+import sys
+
+config = Path(sys.argv[1])
+functions = Path(sys.argv[2])
+
+config_text = config.read_text()
+config_replacements = {
+    'PARTCLONE_SAVE_OPT_INIT="-a3 -z 10485760"':
+        'PARTCLONE_SAVE_OPT_INIT="-a1 -z 10485760"',
+    'PARTCLONE_D2D_OPT="-a3 -z 10485760"':
+        'PARTCLONE_D2D_OPT="-a1 -z 10485760"',
+}
+for old, new in config_replacements.items():
+    if config_text.count(old) != 1:
+        raise SystemExit(f'Clonezilla Partclone option changed upstream: {old!r}')
+    config_text = config_text.replace(old, new)
+config.write_text(config_text)
+
+functions_text = functions.read_text()
+old_failure = '''    echo "Failed to use partclone program to save or restore an image!" | tee --append ${OCS_LOGFILE}
+    [ "$BOOTUP" = "color" ] && $SETCOLOR_NORMAL
+    echo -n "$msg_press_enter_to_continue..."
+    read
+'''
+new_failure = '''    echo "Failed to use partclone program to save or restore an image!" | tee --append ${OCS_LOGFILE}
+    [ "$BOOTUP" = "color" ] && $SETCOLOR_NORMAL
+    if [ "$ocs_batch_mode" != "on" ]; then
+      echo -n "$msg_press_enter_to_continue..."
+      read
+    fi
+'''
+if functions_text.count(old_failure) != 1:
+    raise SystemExit('Clonezilla Partclone failure prompt changed upstream')
+functions_text = functions_text.replace(old_failure, new_failure)
+
+old_gunzip = 'unzip_stdin_cmd="gunzip -c"'
+new_gunzip = 'unzip_stdin_cmd="unpigz -c"'
+if functions_text.count(old_gunzip) != 2:
+    raise SystemExit('Clonezilla gzip decompression command set changed upstream')
+functions.write_text(functions_text.replace(old_gunzip, new_gunzip))
+PYCODE
+
+    for command in "${excluded_commands[@]}"; do
+        [[ -f "$develdir/usr/bin/$command" ]] ||
+            die "Clonezilla local-only exclusion changed upstream: $command"
+        rm -f "$develdir/usr/bin/$command"
+    done
 
     find "$develdir/usr/bin" "$develdir$module_root" -type f -exec sed -i \
         -e "s#/usr/share/drbl#$share_root#g" \

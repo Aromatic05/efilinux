@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+mkdir -p /var/log/clonezilla
+exec /opt/recovery/bin/clonezilla

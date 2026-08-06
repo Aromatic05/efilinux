@@ -46,7 +46,7 @@ set +e
     printf '%s\n' 'mkdir -p /mnt'
     printf '%s\n' 'mount -t vfat -o rw /dev/vda /mnt || { echo EFILINUX_RECOVERY_FAIL:module-disk-mount; poweroff -f; exit; }'
     printf '%s\n' 'exec /usr/bin/sh /mnt/recovery-guest.sh'
-} | timeout --signal=TERM 210s qemu-system-x86_64 \
+} | timeout --signal=TERM 540s qemu-system-x86_64 \
     -machine q35,accel=tcg \
     -cpu "$qemu_cpu" \
     -m 2G \

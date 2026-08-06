@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /opt/recovery/bin/recovery-gui-root efibooteditor "$@"

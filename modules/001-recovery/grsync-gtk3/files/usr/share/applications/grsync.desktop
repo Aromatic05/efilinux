@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Grsync
+GenericName=File Synchronization
+Comment=Synchronize files and directories with rsync
+Exec=/opt/recovery/bin/grsync
+Icon=folder
+Categories=System;FileTools;
+Terminal=false
+StartupNotify=true

@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /usr/bin/xfce4-terminal --title=TestDisk --command='/usr/bin/doas /usr/bin/testdisk'
+exec /opt/recovery/bin/recovery-terminal-root TestDisk /opt/recovery/bin/testdisk

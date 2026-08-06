@@ -2,7 +2,7 @@
 Type=Application
 Name=TestDisk
 Comment=Recover partitions and repair filesystem structures
-Exec=/usr/bin/recovery-testdisk
+Exec=/opt/recovery/bin/recovery-testdisk
 Icon=drive-harddisk
 Categories=System;
 Terminal=false

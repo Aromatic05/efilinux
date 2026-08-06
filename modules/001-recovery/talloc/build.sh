@@ -9,7 +9,7 @@ source "$ROOT/lib/target-build.sh"
 
 pkgname=talloc
 pkgver=2.4.4
-depends=(glibc)
+depends=(glibc libbsd)
 builddepends=()
 makedepends=(gcc make pkg-config python3)
 

@@ -1,0 +1,183 @@
+diff -urN a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt	2026-08-06 11:15:21.501226853 +0800
++++ b/CMakeLists.txt	2026-08-06 11:36:49.492202950 +0800
+@@ -514,11 +514,6 @@
+     pkg_check_modules(GTK REQUIRED gtk+-2.0>=2.10 gthread-2.0>=2.10 gmodule-export-2.0>=2.10)
+ endif()
+ 
+-if (${HARDINFO2_LIBSOUP3})
+-    pkg_check_modules(LIBSOUP REQUIRED libsoup-3.0>=3.00)
+-else()
+-    pkg_check_modules(LIBSOUP REQUIRED libsoup-2.4>=${PACKAGE_LIBSOUP2_MINVERSION})
+-endif()
+ pkg_check_modules(GLIB2 REQUIRED glib-2.0>=${PACKAGE_LIBGLIB2_MINVERSION})
+ pkg_check_modules(JSON_GLIB REQUIRED json-glib-1.0>=0.14.2)
+ pkg_check_modules(X11 REQUIRED x11)
+@@ -543,14 +538,12 @@
+ 	${CMAKE_SOURCE_DIR}/deps/sysobj_early/gui
+ 	${CMAKE_BINARY_DIR}
+ 	${GTK_INCLUDE_DIRS}
+-	${LIBSOUP_INCLUDE_DIRS}
+ 	${ZLIB_INCLUDE_DIRS}
+ 	${X11_INCLUDE_DIRS}
+ 	${JSON_GLIB_INCLUDE_DIRS}
+ )
+ link_directories(
+ 	${GTK_LIBRARY_DIRS}
+-	${LIBSOUP_LIBRARY_DIRS}
+ 	${X11_LIBRARY_DIRS}
+ 	${JSON_GLIB_LIBRARY_DIRS}
+ )
+@@ -755,14 +748,13 @@
+ 	shell/report.c
+ 	shell/shell.c
+ 	shell/stock.c
+-	shell/syncmanager.c
++	shell/syncmanager-offline.c
+ 	shell/loadgraph-uber.c
+ )
+ target_link_libraries(hardinfo2
+ 	-Wl,-whole-archive sysobj_early -Wl,-no-whole-archive
+ 	uber-graph
+ 	${GTK_LIBRARIES}
+-	${LIBSOUP_LIBRARIES}
+ 	m
+ 	${ZLIB_LIBRARIES}
+ 	${X11_LIBRARIES}
+@@ -796,13 +788,12 @@
+ 	shell/report.c
+ 	shell/shell.c
+ 	shell/stock.c
+-	shell/syncmanager.c
++	shell/syncmanager-offline.c
+ 	shell/loadgraph.c
+ )
+ target_link_libraries(hardinfo2
+ 	-Wl,-whole-archive sysobj_early -Wl,-no-whole-archive
+ 	${GTK_LIBRARIES}
+-	${LIBSOUP_LIBRARIES}
+ 	m
+ 	${ZLIB_LIBRARIES}
+ 	${X11_LIBRARIES}
+diff -urN a/includes/uidefs.h b/includes/uidefs.h
+--- a/includes/uidefs.h	2026-08-06 11:15:21.517115428 +0800
++++ b/includes/uidefs.h	2026-08-06 11:36:49.492697430 +0800
+@@ -10,8 +10,6 @@
+     "		<menuitem name=\"Report\" action=\"ReportAction\" always-show-image=\"true\"/>"
+   /*    "		<menuitem name=\"Copy\" action=\"CopyAction\" always-show-image=\"true\"/>"*/
+     "           <separator/>"                                                             \
+-    "           <menuitem name=\"SyncManager\" action=\"SyncManagerAction\" always-show-image=\"true\"/>"
+-    "           <menuitem name=\"SyncOnStartup\" action=\"SyncOnStartupAction\"/>"
+     "		<separator/>"
+     "		<menuitem name=\"Quit\" action=\"QuitAction\" always-show-image=\"true\"/>"
+     "	</menu>"
+@@ -47,7 +45,6 @@
+     "			<toolitem name=\"Report\" action=\"ReportAction\" always-show-image=\"true\"/>"
+   /*    "			<toolitem name=\"Copy\" action=\"CopyAction\"/>"*/
+     "			<separator/>"
+-    "                   <toolitem name=\"SyncManager\" action=\"SyncManagerAction\" always-show-image=\"true\"/>"
+     "			<separator/>"
+     "                   <toolitem name=\"Update\" action=\"UpdateAction\" always-show-image=\"true\"/>"
+     "	</toolbar>"
+diff -urN a/shell/menu.c b/shell/menu.c
+--- a/shell/menu.c	2026-08-06 11:15:21.532084739 +0800
++++ b/shell/menu.c	2026-08-06 11:36:49.492282610 +0800
+@@ -47,11 +47,6 @@
+      N_("Generates a report with detailed system information"),			/* tooltip */
+      G_CALLBACK(cb_generate_report)},
+ 
+-    {"SyncManagerAction", HI_STOCK_SYNC,
+-     N_("Synchronize"), "<control>S",
+-     N_("Send benchmark results and receive updated data from the network"),
+-     G_CALLBACK(cb_sync_manager)},
+-
+     {"UpdateAction", HI_STOCK_UPDATES,
+      N_("Update Available"), "",
+      N_("Update Available"),
+@@ -108,10 +103,6 @@
+      N_("_Toolbar"), NULL,
+      NULL,
+      G_CALLBACK(cb_toolbar), TRUE},
+-    {"SyncOnStartupAction", NULL,
+-     N_("Synchronize on startup"), NULL,
+-     NULL,
+-     G_CALLBACK(cb_sync_on_startup)},
+ #if GTK_CHECK_VERSION(3, 20, 0)
+     {"DisableThemeAction", NULL,
+      N_("Disable Theme"), NULL,
+diff -urN a/shell/shell.c b/shell/shell.c
+--- a/shell/shell.c	2026-08-06 11:15:21.532084739 +0800
++++ b/shell/shell.c	2026-08-06 11:36:49.492606649 +0800
+@@ -686,7 +686,6 @@
+     shell_action_set_enabled("RefreshAction", setting);
+     //shell_action_set_enabled("CopyAction", setting);
+     shell_action_set_enabled("ReportAction", setting);
+-    shell_action_set_enabled("SyncManagerAction", setting);
+     int ii=5;while(ii-- && gtk_events_pending() && !gtk_main_iteration_do(FALSE)) {;}
+     updating=!setting;
+     if(!updating && closing) cb_quit();
+@@ -1628,25 +1627,7 @@
+ static void
+ check_for_updates(void)
+ {
+-    GKeyFile *key_file = g_key_file_new();
+-
+-    gchar *conf_path = g_build_filename(g_get_user_config_dir(), "hardinfo2",
+-                                        "settings.ini", NULL);
+-
+-    g_key_file_load_from_file(
+-        key_file, conf_path,
+-        G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS, NULL);
+-
+-    gboolean setting = g_key_file_get_boolean(key_file, "Sync", "OnStartup", NULL);
+-    shell_action_set_active("SyncOnStartupAction", setting);
+-
+-    g_free(conf_path);
+-    g_key_file_free(key_file);
+-
+-    //fetching data -u is used
+-    if (setting || params.bench_user_note) {
+-        sync_manager_update_on_startup(0);
+-    }
++    /* Online synchronization is intentionally disabled in EFI Linux recovery. */
+ }
+ 
+ gboolean hardinfo_link(const gchar *uri) {
+@@ -1692,7 +1673,6 @@
+     //shell_action_set_property("CopyAction", "is-important", TRUE);
+     shell_action_set_property("RefreshAction", "is-important", TRUE);
+     shell_action_set_property("ReportAction", "is-important", TRUE);
+-    shell_action_set_property("SyncManagerAction", "is-important", TRUE);
+     shell_action_set_property("UpdateAction", "is-important", TRUE);
+ 
+ 
+diff -urN a/shell/syncmanager-offline.c b/shell/syncmanager-offline.c
+--- a/shell/syncmanager-offline.c	1970-01-01 08:00:00.000000000 +0800
++++ b/shell/syncmanager-offline.c	2026-08-06 11:36:49.492724961 +0800
+@@ -0,0 +1,26 @@
++/* Offline sync manager for the EFI Linux recovery environment. */
++#include <syncmanager.h>
++
++void sync_manager_add_entry(SyncEntry *entry)
++{
++    (void)entry;
++}
++
++void sync_manager_clear_entries(void)
++{
++}
++
++void sync_manager_show(GtkWidget *parent)
++{
++    (void)parent;
++}
++
++gint sync_manager_count_entries(void)
++{
++    return 0;
++}
++
++void sync_manager_update_on_startup(int send_benchmark)
++{
++    (void)send_benchmark;
++}

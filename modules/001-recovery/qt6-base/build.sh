@@ -9,6 +9,7 @@ source "$ROOT/lib/target-build.sh"
 pkgname=qt6-base
 pkgver=6.10.2
 depends=(
+    dbus
     fontconfig
     freetype
     gcc-libs
@@ -16,6 +17,7 @@ depends=(
     libjpeg-turbo
     libpng
     libxkbcommon
+    libxkbcommon-x11
     pcre2
     xcb-util-cursor
     xcb-util-image
@@ -60,9 +62,10 @@ build() {
             -nomake tests \
             -gui \
             -widgets \
-            -no-dbus \
+            -dbus-linked \
             -no-icu \
             -no-opengl \
+            -no-openssl \
             -fontconfig \
             -system-freetype \
             -system-libpng \
@@ -85,7 +88,7 @@ build() {
             -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
             -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
             -DFEATURE_accessibility=OFF \
-            -DFEATURE_network=OFF \
+            -DFEATURE_network=ON \
             -DFEATURE_printdialog=OFF \
             -DFEATURE_printer=OFF \
             -DFEATURE_sessionmanager=OFF \
@@ -98,7 +101,9 @@ build() {
 }
 check() {
     [[ -f "$develdir/usr/lib/libQt6Core.so.6" ]] || die "Qt6 Core runtime is missing"
+    [[ -f "$develdir/usr/lib/libQt6DBus.so.6" ]] || die "Qt6 DBus runtime is missing"
     [[ -f "$develdir/usr/lib/libQt6Gui.so.6" ]] || die "Qt6 GUI runtime is missing"
+    [[ -f "$develdir/usr/lib/libQt6Network.so.6" ]] || die "Qt6 Network runtime is missing"
     [[ -f "$develdir/usr/lib/libQt6Widgets.so.6" ]] || die "Qt6 Widgets runtime is missing"
     [[ -f "$develdir/usr/lib/libQt6XcbQpa.so.6" ]] || die "Qt6 XCB support library is missing"
     [[ -f "$develdir/usr/lib/qt6/plugins/platforms/libqxcb.so" ]] || \
@@ -115,7 +120,9 @@ package() {
         /usr/lib/qt6/plugins/platforms/libqxcb.so
     )
     package_add_library_family keep 'libQt6Core.so.6*'
+    package_add_library_family keep 'libQt6DBus.so.6*'
     package_add_library_family keep 'libQt6Gui.so.6*'
+    package_add_library_family keep 'libQt6Network.so.6*'
     package_add_library_family keep 'libQt6Widgets.so.6*'
     package_add_library_family keep 'libQt6XcbQpa.so.6*'
     package_keep "${keep[@]}"

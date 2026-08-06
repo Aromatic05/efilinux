@@ -20,5 +20,12 @@ udftools
 flashrom
 qt6-base
 uefitool
+mesa-utils
+hardinfo2
+gtkhash
+gigolo
+usbimager
+btop
+grsync-gtk3
 
 recovery-launchers

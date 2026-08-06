@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Midnight Commander
+Comment=Two-panel file manager
+Exec=/opt/recovery/bin/mc
+Icon=system-file-manager
+Categories=System;FileTools;
+Terminal=true
+StartupNotify=false

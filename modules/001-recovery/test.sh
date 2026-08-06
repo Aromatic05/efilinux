@@ -20,7 +20,7 @@ reset_directory "$work"
 unsquashfs -quiet -dest "$image" "$artifact"
 
 mapfile -d '' desktop_files < <(find "$module_root" -type f -name '*.desktop' -print0)
-((${#desktop_files[@]} >= 3)) || die "recovery module exposes too few desktop applications"
+((${#desktop_files[@]} >= 12)) || die "recovery module exposes too few desktop applications"
 desktop-file-validate "${desktop_files[@]}"
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" "${desktop_files[@]}" <<'PY'
@@ -67,6 +67,23 @@ for desktop in desktop_files:
 print(f"recovery desktop integration: {resolved} launchers resolved")
 PY
 
+privileged_helper="$module_root/opt/recovery/libexec/recovery-privileged-launch"
+privileged_policy="$module_root/opt/recovery/share/polkit-1/actions/org.efilinux.recovery.policy"
+gtkhash_launcher="$module_root/opt/recovery/bin/gtkhash"
+[[ ! -e "$module_root/usr/bin/vkgears" ]] || die "Vulkan demo leaked into recovery"
+[[ ! -e "$module_root/usr/bin/vulkaninfo" ]] || die "Vulkan diagnostics leaked into recovery"
+[[ -x "$privileged_helper" ]] || die "recovery privileged helper is missing"
+[[ -f "$privileged_policy" ]] || die "recovery polkit policy is missing"
+grep -Fq '<action id="org.efilinux.recovery.launch-privileged">' "$privileged_policy" ||
+    die "recovery polkit action is missing"
+grep -Fq '<annotate key="org.freedesktop.policykit.exec.path">/opt/recovery/libexec/recovery-privileged-launch</annotate>' "$privileged_policy" ||
+    die "recovery polkit helper path is incorrect"
+grep -Fq 'runtime_parent="$XDG_RUNTIME_DIR/efilinux-recovery"' "$gtkhash_launcher" ||
+    die "GtkHash does not use the user runtime directory"
+if grep -Fq 'runtime_parent=/run/efilinux-recovery' "$gtkhash_launcher"; then
+    die "GtkHash still creates a system-level runtime directory"
+fi
+
 mapfile -d '' library_directories < <(
     find "$module_root" -type f -name '*.so*' -printf '%h\0' | sort -zu
 )
@@ -96,6 +113,8 @@ run_command() {
 
 run_command testdisk /version >/dev/null
 run_command photorec /version >/dev/null
+run_command glxinfo -h | grep -Fq 'Usage: glxinfo' ||
+    die "recovery GLX diagnostics are not runnable"
 run_command fsarchiver --version >/dev/null
 run_command qemu-img --version >/dev/null
 run_command wimlib-imagex --version >/dev/null
@@ -107,6 +126,63 @@ run_command xorriso -version >/dev/null
 run_command cdrskin --version >/dev/null
 run_command UEFIExtract --version >/dev/null
 run_command UEFIFind --version >/dev/null
+run_command fio --version >/dev/null
+run_command btop --version >/dev/null
+run_command mc --version >/dev/null
+run_command ncdu --version >/dev/null
+run_command nmtui --help >/dev/null
+
+compression_source="$work/compression-source.txt"
+compression_output="$work/compression-output.txt"
+printf '%s\n' \
+    'EFI Linux recovery compression compatibility' \
+    'spaces ; semicolons $ dollars and unicode: 恢复' \
+    '0123456789abcdef0123456789abcdef' > "$compression_source"
+
+compression_roundtrip() {
+    local compressor=$1
+    local decompressor=$2
+    local archive=$3
+    shift 3
+    run_command "$compressor" "$@" "$compression_source" > "$archive"
+    run_command "$decompressor" -dc "$archive" > "$compression_output"
+    cmp "$compression_source" "$compression_output" ||
+        die "$compressor compression round trip changed data"
+}
+
+compression_roundtrip bzip2 bzip2 "$work/source.bz2" -c
+compression_roundtrip pigz pigz "$work/source.gz" -c
+compression_roundtrip pbzip2 pbzip2 "$work/source.pbz2" -c
+compression_roundtrip lzip lzip "$work/source.lz" -c
+compression_roundtrip plzip plzip "$work/source.plz" -c
+compression_roundtrip lzop lzop "$work/source.lzo" -c
+run_command lz4 -q -c "$compression_source" > "$work/source.lz4"
+run_command lz4 -q -d -c "$work/source.lz4" > "$compression_output"
+cmp "$compression_source" "$compression_output" ||
+    die "lz4 compression round trip changed data"
+
+preview_source="$work/grsync source;literal"
+preview_destination="$work/grsync destination dollar$"
+mkdir -p "$preview_source" "$preview_destination"
+grpreview=$(run_command grsync --preview "$preview_source" "$preview_destination")
+python3 - "$grpreview" "$preview_source/" "$preview_destination" <<'PYGRSYNC'
+import shlex
+import sys
+
+actual = shlex.split(sys.argv[1])
+expected = [
+    "rsync",
+    "--archive",
+    "--human-readable",
+    "--info=progress2",
+    "--partial",
+    "--dry-run",
+    sys.argv[2],
+    sys.argv[3],
+]
+if actual != expected:
+    raise SystemExit(f"Grsync preview argument mismatch: {actual!r}")
+PYGRSYNC
 
 iso_source="$work/iso-source"
 iso_image="$work/recovery-tools.iso"
@@ -167,24 +243,35 @@ grep -Fq 'label=EFILINUX_TEST' "$work/udfinfo.txt" || \
     grep -Fq 'vid=EFILINUX_TEST' "$work/udfinfo.txt" || \
     die "udfinfo did not report the generated UDF label"
 
-uefitool=$(find_module_command UEFITool)
-mkdir -p "$work/uefitool-home" "$work/uefitool-runtime"
-chmod 0700 "$work/uefitool-runtime"
-set +e
-env -u LD_PRELOAD -u LD_LIBRARY_PATH \
-    HOME="$work/uefitool-home" \
-    XDG_RUNTIME_DIR="$work/uefitool-runtime" \
-    QT_QPA_PLATFORM=offscreen \
-    QT_PLUGIN_PATH="$module_root/opt/recovery/lib/qt6/plugins" \
-    timeout 3 \
-    "$loader" --library-path "$library_path" "$uefitool" \
-    > "$work/uefitool.log" 2>&1
-uefitool_status=$?
-set -e
-[[ $uefitool_status -eq 124 ]] || {
-    cat "$work/uefitool.log" >&2
-    die "UEFITool did not remain operational with the offscreen Qt platform"
+qt_offscreen_smoke() {
+    local name=$1
+    local executable log_file home runtime status
+    executable=$(find_module_command "$name")
+    log_file="$work/$name.log"
+    home="$work/$name-home"
+    runtime="$work/$name-runtime"
+    mkdir -p "$home" "$runtime"
+    chmod 0700 "$runtime"
+    set +e
+    env -u LD_PRELOAD -u LD_LIBRARY_PATH \
+        HOME="$home" \
+        XDG_RUNTIME_DIR="$runtime" \
+        QT_QPA_PLATFORM=offscreen \
+        QT_PLUGIN_PATH="$module_root/opt/recovery/lib/qt6/plugins" \
+        timeout 3 \
+        "$loader" --library-path "$library_path" "$executable" \
+        > "$log_file" 2>&1
+    status=$?
+    set -e
+    [[ $status -eq 124 ]] || {
+        cat "$log_file" >&2
+        die "$name did not remain operational with the offscreen Qt platform"
+    }
 }
+
+qt_offscreen_smoke UEFITool
+qt_offscreen_smoke qphotorec
+qt_offscreen_smoke efibooteditor
 
 python3 - "$module_root" "$EFILINUX_ROOTFS" <<'PY'
 from pathlib import Path
@@ -240,6 +327,6 @@ print(f"recovery module ELF closure: {len(elf_files)} files")
 PY
 
 size=$(stat -c %s "$artifact")
-(( size <= 64 * 1024 * 1024 )) || die "recovery module exceeds 64 MiB: $size"
+(( size <= 128 * 1024 * 1024 )) || die "recovery module exceeds 128 MiB: $size"
 sha256sum "$artifact"
 log "Recovery applications, commands, script interpreters, ELF closure, and size budget passed ($size bytes)"
