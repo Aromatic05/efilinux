@@ -29,10 +29,16 @@ build() {
         --disable-nls --without-bash-malloc --with-installed-readline
     make -j"$EFILINUX_JOBS"
     make DESTDIR="$develdir" install
+    ln -s bash "$develdir/usr/bin/sh"
+}
+check() {
+    [[ -L "$develdir/usr/bin/sh" ]] || die "bash /bin/sh compatibility link is missing"
+    [[ $(readlink "$develdir/usr/bin/sh") == bash ]] ||
+        die "bash /bin/sh compatibility link has the wrong target"
 }
 devel() {
     rm -rf "$develdir/usr/share" "$develdir/usr/include" "$develdir/usr/lib/bash"
     strip_all "$develdir/usr/bin/bash"
 }
-package() { package_keep /usr/bin/bash; }
+package() { package_keep /usr/bin/bash /usr/bin/sh; }
 recipe_main "$@"

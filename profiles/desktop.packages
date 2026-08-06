@@ -1,6 +1,7 @@
 # EFI Linux XFCE desktop image.
 @include graphical-base.packages
 xfce
+xdg-utils
 libnma
 network-manager-applet
 efilinux-xfce-config

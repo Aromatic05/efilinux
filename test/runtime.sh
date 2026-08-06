@@ -37,6 +37,7 @@ assert_link /sbin usr/bin
 assert_link /lib usr/lib
 assert_link /lib64 usr/lib
 assert_link /usr/sbin bin
+assert_link /usr/bin/sh bash
 
 required_applets=(
     ash cat chroot clear cp cttyhack dmesg hostname killall ls mdev mkdir mount mv
@@ -58,12 +59,16 @@ for replaced_applet in ip ping; do
     fi
 done
 
-rescue_links=(ash chroot clear cttyhack hostname killall mdev sh switch_root udhcpc vi)
+rescue_links=(ash chroot clear cttyhack hostname killall mdev switch_root udhcpc vi)
 for applet in "${rescue_links[@]}"; do
     [[ -L "$rootfs/usr/bin/$applet" ]] || die "BusyBox rescue link is missing: $applet"
     [[ $(readlink -- "$rootfs/usr/bin/$applet") == busybox ]] ||
         die "BusyBox rescue link has the wrong target: $applet"
 done
+
+"$loader" --library-path "$library_path" "$rootfs/usr/bin/sh" -c \
+    'command -v realpath >/dev/null' ||
+    die "/bin/sh does not provide the command builtin required by desktop scripts"
 for standard_command in awk cat chmod chown cp cpio cut date dd df diff dmesg du env     expr find free grep gzip head id kill ln logger ls mkdir mkfifo mknod mount mv ps     readlink realpath rm rmdir sed setsid sleep sort stat sync tail tar tee test touch     tr true tty umount uname uniq uptime wc xargs; do
     if [[ -L "$rootfs/usr/bin/$standard_command" ]] &&
         [[ $(readlink -- "$rootfs/usr/bin/$standard_command") == busybox ]]; then

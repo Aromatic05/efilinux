@@ -123,7 +123,7 @@ devel() {
     find "$develdir/usr/bin" -type l -delete
 
     while IFS= read -r applet; do
-        [[ "$applet" == busybox ]] && continue
+        [[ "$applet" == busybox || "$applet" == sh ]] && continue
         ln -s busybox "$develdir/usr/bin/$applet"
     done < <(env -u LD_PRELOAD -u LD_LIBRARY_PATH "$develdir/usr/bin/busybox" --list)
 
@@ -134,7 +134,6 @@ package() {
     package_keep \
         /usr/bin/busybox \
         /usr/bin/ash \
-        /usr/bin/sh \
         /usr/bin/clear \
         /usr/bin/chroot \
         /usr/bin/cttyhack \

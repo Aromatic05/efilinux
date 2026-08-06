@@ -1,6 +1,8 @@
 #!/bin/sh
 
-export LANG="${LANG:-en_US.UTF-8}"
+export LANG=zh_CN.UTF-8
+export LANGUAGE=zh_CN:zh_Hans:zh:en_US:en
+unset LC_ALL
 export XDG_CONFIG_DIRS="/opt/fcitx5/etc/xdg:/etc/xdg"
 export XDG_DATA_DIRS="/opt/fcitx5/share:/usr/local/share:/usr/share"
 export GTK_IM_MODULE=fcitx

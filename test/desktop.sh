@@ -44,7 +44,7 @@ for program in \
     xfce4-power-manager xfce4-power-manager-settings \
     xfce4-screensaver xfce4-screensaver-command \
     xfce4-popup-whiskermenu thunar-volman nm-applet nm-connection-editor \
-    efilinux-volume-control; do
+    efilinux-volume-control xdg-mime xdg-open; do
     require_program "$program"
 done
 
