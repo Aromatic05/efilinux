@@ -1,0 +1,7 @@
+# EFI Linux package manager and build framework.
+# Git pathspecs are relative to the repository root.
+:(top)build.sh
+:(top)config.sh
+:(top)preflight.sh
+:(top)lib/**
+:(top).githooks/**

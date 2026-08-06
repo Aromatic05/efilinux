@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repository_root=$(git rev-parse --show-toplevel)
+scope_file="$repository_root/.githooks/package-manager-scope"
+
+mapfile -t protected_pathspecs < <(
+    sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$scope_file"
+)
+mapfile -d '' -t protected_changes < <(
+    git diff --cached --name-only -z --diff-filter=ACMRD -- "${protected_pathspecs[@]}"
+)
+
+((${#protected_changes[@]})) || exit 0
+
+fail() {
+    printf 'error: %s\n' "$1" >&2
+    printf '%s\n' 'Protected package-manager paths staged for commit:' >&2
+    printf '  %s\n' "${protected_changes[@]}" >&2
+    exit 1
+}
+
+parse_version() {
+    local version=$1
+    [[ $version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || return 1
+    VERSION_MAJOR=${BASH_REMATCH[1]}
+    VERSION_MINOR=${BASH_REMATCH[2]}
+    VERSION_PATCH=${BASH_REMATCH[3]}
+}
+
+version_is_greater() {
+    local old=$1 new=$2
+    local old_major old_minor old_patch new_major new_minor new_patch
+
+    parse_version "$old" || return 1
+    old_major=$VERSION_MAJOR
+    old_minor=$VERSION_MINOR
+    old_patch=$VERSION_PATCH
+    parse_version "$new" || return 1
+    new_major=$VERSION_MAJOR
+    new_minor=$VERSION_MINOR
+    new_patch=$VERSION_PATCH
+
+    ((new_major > old_major)) ||
+        ((new_major == old_major && new_minor > old_minor)) ||
+        ((new_major == old_major && new_minor == old_minor && new_patch > old_patch))
+}
+
+git diff --cached --name-only --diff-filter=AM -- ':(top)lib/version' |
+    grep -Fxq lib/version ||
+    fail 'package-manager changes require a staged lib/version upgrade'
+
+new_version=$(git show :lib/version)
+[[ $new_version != *$'\n'* ]] || fail 'lib/version must contain exactly one line'
+
+if old_version=$(git show HEAD:lib/version 2>/dev/null); then
+    :
+else
+    old_version=0.0.0
+fi
+
+parse_version "$new_version" ||
+    fail 'lib/version must use MAJOR.MINOR.PATCH numeric format'
+version_is_greater "$old_version" "$new_version" ||
+    fail "lib/version must increase from $old_version (staged: $new_version)"

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+message_file=$1
+repository_root=$(git rev-parse --show-toplevel)
+scope_file="$repository_root/.githooks/package-manager-scope"
+
+mapfile -t protected_pathspecs < <(
+    sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$scope_file"
+)
+mapfile -d '' -t protected_changes < <(
+    git diff --cached --name-only -z --diff-filter=ACMRD -- "${protected_pathspecs[@]}"
+)
+
+((${#protected_changes[@]})) || exit 0
+
+if ! grep -Eq '^Package-Manager-Reason: .{10,}$' "$message_file"; then
+    printf '%s\n' \
+        'error: package-manager changes require an explicit commit-message trailer:' \
+        '  Package-Manager-Reason: <specific justification, at least 10 characters>' \
+        'Protected package-manager paths staged for commit:' >&2
+    printf '  %s\n' "${protected_changes[@]}" >&2
+    exit 1
+fi
