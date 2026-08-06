@@ -24,7 +24,7 @@ _zxmod() {
             COMPREPLY=()
             local active_file=${ZXMOD_RUN_ROOT:-/run/zxmod}/active
             if [[ -r $active_file ]]; then
-                while IFS=$'\t' read -r id source identity; do
+                while IFS=$'\t' read -r id source; do
                     [[ $id == "$current"* ]] && COMPREPLY+=("$id")
                 done < "$active_file"
             fi

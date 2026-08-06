@@ -46,11 +46,8 @@ load() {
     [ $# -eq 1 ] || usage
     zxmod_require_root
     zxmod_source=$(zxmod_require_module_file "$1")
-    zxmod_identity=$(zxmod_source_identity "$zxmod_source")
     zxmod_prepare_runtime
-    zxmod_manifest="$ZXMOD_RUN_ROOT/manifest.$$"
-    zxmod_track_temp "$zxmod_manifest"
-    zxmod_read_manifest "$zxmod_source" "$zxmod_manifest"
+    zxmod_read_id "$zxmod_source"
     zxmod_active_has_id "$ZXMOD_RUN_ROOT/active" "$zxmod_id" &&
         zxmod_die "module is already active: $zxmod_id"
 
@@ -68,15 +65,11 @@ load() {
         zxmod_die "cannot record module loop device: $zxmod_id"
     mount -t squashfs -o ro,nodev,nosuid "$zxmod_loop" "$zxmod_mount" ||
         zxmod_die "cannot mount module: $zxmod_source"
-    [ "$(zxmod_source_identity "$zxmod_source")" = "$zxmod_identity" ] ||
-        zxmod_die 'module source changed while loading'
-    zxmod_validate_payload_tree "$zxmod_mount"
-    zxmod_validate_paths "$zxmod_mount" "$ZXMOD_RUN_ROOT/active"
 
     zxmod_candidate="$ZXMOD_RUN_ROOT/active.next.$$"
     zxmod_track_temp "$zxmod_candidate"
     cat "$ZXMOD_RUN_ROOT/active" > "$zxmod_candidate"
-    printf '%s\t%s\t%s\n' "$zxmod_id" "$zxmod_source" "$zxmod_identity" >> "$zxmod_candidate"
+    printf '%s\t%s\n' "$zxmod_id" "$zxmod_source" >> "$zxmod_candidate"
     zxmod_switch_generation "$zxmod_candidate"
     ZXMOD_PENDING_MOUNT=
     ZXMOD_PENDING_LOOP=

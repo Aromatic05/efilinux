@@ -29,14 +29,14 @@ guest_checks="$ROOT/test/helpers/zxmod-guest-checks.sh"
 rm -rf -- "$module_stage"
 rm -f -- "$module_disk"
 mkdir -p "$module_stage/sample/usr/bin" "$module_stage/sample/usr/share/zxmod-test" \
-    "$module_stage/conflict/usr/bin"
+    "$module_stage/conflict/usr/share/zxmod-test"
 cat > "$module_stage/sample/usr/bin/zxmod-module-command" <<'MODULE_COMMAND'
 #!/bin/sh
 printf '%s\n' zxmod-module-command
 MODULE_COMMAND
 chmod 0755 "$module_stage/sample/usr/bin/zxmod-module-command"
 printf 'held module payload\n' > "$module_stage/sample/usr/share/zxmod-test/held.txt"
-printf 'conflicting replacement\n' > "$module_stage/conflict/usr/bin/zxmod"
+printf 'later module override\n' > "$module_stage/conflict/usr/share/zxmod-test/held.txt"
 "$builder" --id sample --version 1.0 --arch "$EFILINUX_ARCH" \
     "$module_stage/sample" "$module_stage/sample.zxm"
 "$builder" --id conflict --version 1.0 --arch "$EFILINUX_ARCH" \
@@ -99,5 +99,5 @@ if ! grep -Fxq 'EFILINUX_ZXMOD_OK' "$normalized_log"; then
     die "zxmod guest checks did not complete"
 fi
 
-log "zxmod load, conflict, read-only view, persistence, unload, and retained descriptor checks passed"
+log "zxmod load, override, read-only view, persistence, unload, and retained descriptor checks passed"
 printf 'Boot log: %s\n' "$boot_log"

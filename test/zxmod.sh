@@ -64,7 +64,7 @@ for unsupported in inspect list enable disable startup; do
 done
 
 mkdir -p "$work/completion/run"
-printf 'sample\t/source/sample.zxm\tdigest\ncompanion\t/source/companion.zxm\tdigest\n' \
+printf 'sample\t/source/sample.zxm\ncompanion\t/source/companion.zxm\n' \
     > "$work/completion/run/active"
 ZXMOD_RUN_ROOT="$work/completion/run" bash --noprofile --norc -c '
     set -euo pipefail
@@ -150,10 +150,10 @@ runtime_output=$(unshare --user --map-root-user --mount --fork bash -ceu '
     awk -F "\t" '\''$1 == "companion" { found=1 } END { exit !found }'\'' \
         "$root/run/active"
 
-    if run_zxmod load "$root/conflict.zxm"; then
-        printf "conflicting module loaded\n" >&2
-        exit 1
-    fi
+    run_zxmod load "$root/conflict.zxm"
+    test "$(cat "$root/base/usr/base-file")" = conflict
+    run_zxmod unload conflict
+    test "$(cat "$root/base/usr/base-file")" = "base file"
 
     run_zxmod unload companion
     test ! -e "$root/base/opt/companion/value"
@@ -174,4 +174,4 @@ if [[ $runtime_status -ne 0 ]]; then
     exit "$runtime_status"
 fi
 
-printf 'zxmod load/unload, completion, and XDG integration passed\n'
+printf 'zxmod direct mount/load/unload, completion, and XDG integration passed\n'

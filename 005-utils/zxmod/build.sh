@@ -12,7 +12,7 @@ pkgname=zxmod
 pkgver=1
 sysroot=false
 
-depends=(doas kmod openssl shared-mime-info squashfs-tools util-linux)
+depends=(doas kmod shared-mime-info squashfs-tools util-linux)
 builddepends=()
 makedepends=(install)
 

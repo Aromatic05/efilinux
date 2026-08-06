@@ -4,8 +4,6 @@ ZXMOD_RUN_ROOT=${ZXMOD_RUN_ROOT:-/run/zxmod}
 ZXMOD_USR_TARGET=${ZXMOD_USR_TARGET:-/usr}
 ZXMOD_OPT_TARGET=${ZXMOD_OPT_TARGET:-/opt}
 ZXMOD_TAB=$(printf '\t')
-ZXMOD_NEWLINE='
-'
 ZXMOD_LOCK_HELD=
 
 zxmod_die() {
@@ -28,31 +26,6 @@ zxmod_validate_id() {
     [ ${#1} -le 64 ] || zxmod_die "module id is too long: $1"
 }
 
-zxmod_validate_arch() {
-    case ${1:-} in
-        ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) zxmod_die "invalid architecture: ${1:-}" ;;
-    esac
-}
-
-zxmod_source_identity() {
-    zxmod_digest_output=$(LC_ALL=C openssl dgst -sha256 -r "$1") ||
-        zxmod_die "cannot hash module source: $1"
-    zxmod_digest=${zxmod_digest_output%% *}
-    [ ${#zxmod_digest} -eq 64 ] || zxmod_die "invalid module source digest: $1"
-    case $zxmod_digest in
-        *[!0-9a-f]*) zxmod_die "invalid module source digest: $1" ;;
-    esac
-    printf '%s\n' "$zxmod_digest"
-}
-
-zxmod_manifest_count() {
-    awk -F= -v key="$1" '$1 == key { count++ } END { print count + 0 }' "$2"
-}
-
-zxmod_manifest_value() {
-    awk -F= -v key="$1" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$2"
-}
-
 zxmod_require_module_file() {
     case $1 in
         *.zxm) ;;
@@ -66,41 +39,10 @@ zxmod_require_module_file() {
     realpath "$zxmod_module_path" || zxmod_die "cannot resolve module path: $1"
 }
 
-zxmod_read_manifest() {
+zxmod_read_id() {
     zxmod_source=$1
-    zxmod_manifest=$2
-
-    LC_ALL=C unsquashfs -cat "$zxmod_source" metadata/manifest > "$zxmod_manifest" 2>/dev/null ||
-        zxmod_die 'module does not contain metadata/manifest'
-    if ! awk -F= '
-        NF < 2 { exit 1 }
-        $1 !~ /^(format|id|arch|version|description)$/ { exit 1 }
-        { next }
-    ' "$zxmod_manifest"; then
-        zxmod_die 'manifest contains malformed or unknown fields'
-    fi
-    for zxmod_key in format id arch version; do
-        [ "$(zxmod_manifest_count "$zxmod_key" "$zxmod_manifest")" -eq 1 ] ||
-            zxmod_die "manifest has duplicate or missing $zxmod_key"
-    done
-    [ "$(zxmod_manifest_count description "$zxmod_manifest")" -le 1 ] ||
-        zxmod_die 'manifest has duplicate description'
-
-    [ "$(zxmod_manifest_value format "$zxmod_manifest")" = 1 ] ||
-        zxmod_die 'unsupported module format'
-    zxmod_id=$(zxmod_manifest_value id "$zxmod_manifest")
-    zxmod_arch=$(zxmod_manifest_value arch "$zxmod_manifest")
-    zxmod_version=$(zxmod_manifest_value version "$zxmod_manifest")
-    zxmod_validate_id "$zxmod_id"
-    zxmod_validate_arch "$zxmod_arch"
-    [ "$zxmod_arch" = "$(uname -m)" ] ||
-        zxmod_die "module architecture $zxmod_arch does not match $(uname -m)"
-    case $zxmod_version in
-        ''|*[!A-Za-z0-9._+:-]*) zxmod_die 'invalid module version' ;;
-    esac
-    LC_ALL=C unsquashfs -s "$zxmod_source" 2>/dev/null |
-        grep -Eq '^Compression[[:space:]]+zstd$' ||
-        zxmod_die 'module payload is not Zstd-compressed SquashFS'
+    zxmod_id=$(LC_ALL=C unsquashfs -cat "$zxmod_source" metadata/manifest 2>/dev/null |
+        sed -n 's/^id=//p' | sed -n '1p')
 }
 
 zxmod_acquire_lock() {
@@ -175,133 +117,8 @@ zxmod_prepare_runtime() {
     zxmod_ensure_target_mount "$ZXMOD_OPT_TARGET" "$ZXMOD_RUN_ROOT/base/opt"
 }
 
-zxmod_normalize_link() {
-    zxmod_relative=$1
-    zxmod_link=$2
-    awk -v relative="$zxmod_relative" -v link="$zxmod_link" 'BEGIN {
-        if (substr(link, 1, 1) == "/") {
-            candidate = substr(link, 2)
-        } else {
-            slash = 0
-            for (i = 1; i <= length(relative); i++) {
-                if (substr(relative, i, 1) == "/")
-                    slash = i
-            }
-            if (slash == 0)
-                base = ""
-            else
-                base = substr(relative, 1, slash - 1)
-            candidate = base "/" link
-        }
-        count = split(candidate, part, "/")
-        depth = 0
-        for (i = 1; i <= count; i++) {
-            if (part[i] == "" || part[i] == ".")
-                continue
-            if (part[i] == "..") {
-                if (depth == 0)
-                    exit 1
-                depth--
-                continue
-            }
-            stack[++depth] = part[i]
-        }
-        if (depth == 0)
-            exit 1
-        output = stack[1]
-        for (i = 2; i <= depth; i++)
-            output = output "/" stack[i]
-        print output
-    }'
-}
-
 zxmod_active_has_id() {
     awk -F '\t' -v id="$2" '$1 == id { found=1 } END { exit !found }' "$1"
-}
-
-zxmod_validate_payload_tree() {
-    zxmod_root=$1
-    for zxmod_top in \
-        "$zxmod_root"/* \
-        "$zxmod_root"/.[!.]* \
-        "$zxmod_root"/..?*; do
-        zxmod_path_exists "$zxmod_top" || continue
-        case $(basename -- "$zxmod_top") in
-            metadata|root) ;;
-            *) zxmod_die "unexpected top-level module path: $(basename -- "$zxmod_top")" ;;
-        esac
-    done
-    [ -d "$zxmod_root/root" ] && [ ! -L "$zxmod_root/root" ] ||
-        zxmod_die 'module payload root is missing or invalid'
-    for zxmod_top in \
-        "$zxmod_root/root"/* \
-        "$zxmod_root/root"/.[!.]* \
-        "$zxmod_root/root"/..?*; do
-        zxmod_path_exists "$zxmod_top" || continue
-        case $(basename -- "$zxmod_top") in
-            usr|opt)
-                [ -d "$zxmod_top" ] && [ ! -L "$zxmod_top" ] ||
-                    zxmod_die 'payload /usr or /opt is not a directory'
-                ;;
-            *) zxmod_die "payload is outside /usr and /opt: $(basename -- "$zxmod_top")" ;;
-        esac
-    done
-}
-
-zxmod_validate_one_path() {
-    zxmod_path=$1
-    zxmod_root=$2
-    zxmod_active_file=$3
-    zxmod_relative=${zxmod_path#"$zxmod_root/root/"}
-
-    case $zxmod_relative in
-        usr|opt) return ;;
-        usr/*|opt/*) ;;
-        *) zxmod_die "unsafe payload path: $zxmod_relative" ;;
-    esac
-    case $zxmod_relative in
-        *'//'|*'/./'*|*'/../'*|*'/..'|*'/'|*"$ZXMOD_NEWLINE"*)
-            zxmod_die "unsafe payload path: $zxmod_relative"
-            ;;
-    esac
-    if [ ! -d "$zxmod_path" ] && [ ! -f "$zxmod_path" ] && [ ! -L "$zxmod_path" ]; then
-        zxmod_die "unsupported payload file type: /$zxmod_relative"
-    fi
-    if [ -L "$zxmod_path" ]; then
-        zxmod_link=$(readlink -- "$zxmod_path")
-        zxmod_normalized=$(zxmod_normalize_link "$zxmod_relative" "$zxmod_link") ||
-            zxmod_die "module link escapes its payload: /$zxmod_relative -> $zxmod_link"
-        case $zxmod_normalized in
-            usr|usr/*|opt|opt/*) ;;
-            *) zxmod_die "module link escapes /usr and /opt: /$zxmod_relative -> $zxmod_link" ;;
-        esac
-    fi
-
-    zxmod_base="$ZXMOD_RUN_ROOT/base/$zxmod_relative"
-    if [ -d "$zxmod_path" ] && [ ! -L "$zxmod_path" ]; then
-        if zxmod_path_exists "$zxmod_base" && { [ ! -d "$zxmod_base" ] || [ -L "$zxmod_base" ]; }; then
-            zxmod_die "module directory conflicts with base system: /$zxmod_relative"
-        fi
-        while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
-            [ -n "$zxmod_active_id" ] || continue
-            zxmod_other="$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_relative"
-            if zxmod_path_exists "$zxmod_other" && { [ ! -d "$zxmod_other" ] || [ -L "$zxmod_other" ]; }; then
-                zxmod_die "module directory conflicts with active module $zxmod_active_id: /$zxmod_relative"
-            fi
-        done < "$zxmod_active_file"
-        return
-    fi
-
-    if zxmod_path_exists "$zxmod_base"; then
-        zxmod_die "module path conflicts with base system: /$zxmod_relative"
-    fi
-    while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
-        [ -n "$zxmod_active_id" ] || continue
-        if zxmod_path_exists "$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_relative"; then
-            zxmod_die "module path conflicts with active module $zxmod_active_id: /$zxmod_relative"
-        fi
-    done < "$zxmod_active_file"
-    return 0
 }
 
 zxmod_run_hook() {
@@ -321,33 +138,6 @@ zxmod_run_hook() {
     return 0
 }
 
-zxmod_validate_path_tree() (
-    zxmod_walk_directory=$1
-    zxmod_walk_root=$2
-    zxmod_walk_active_file=$3
-
-    for zxmod_walk_path in \
-        "$zxmod_walk_directory"/* \
-        "$zxmod_walk_directory"/.[!.]* \
-        "$zxmod_walk_directory"/..?*; do
-        zxmod_path_exists "$zxmod_walk_path" || continue
-        zxmod_validate_one_path \
-            "$zxmod_walk_path" \
-            "$zxmod_walk_root" \
-            "$zxmod_walk_active_file"
-        if [ -d "$zxmod_walk_path" ] && [ ! -L "$zxmod_walk_path" ]; then
-            zxmod_validate_path_tree \
-                "$zxmod_walk_path" \
-                "$zxmod_walk_root" \
-                "$zxmod_walk_active_file"
-        fi
-    done
-)
-
-zxmod_validate_paths() {
-    zxmod_validate_path_tree "$1/root" "$1" "$2"
-}
-
 zxmod_next_generation() {
     zxmod_generation=0
     for zxmod_path in "$ZXMOD_RUN_ROOT/generations"/*; do
@@ -363,10 +153,8 @@ zxmod_generation_lowerdir() {
     zxmod_active_file=$1
     zxmod_subtree=$2
     zxmod_lower="$ZXMOD_RUN_ROOT/base/$zxmod_subtree"
-    while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source zxmod_active_identity; do
+    while IFS="$ZXMOD_TAB" read -r zxmod_active_id zxmod_active_source; do
         [ -n "$zxmod_active_id" ] || continue
-        [ "$(zxmod_source_identity "$zxmod_active_source")" = "$zxmod_active_identity" ] ||
-            zxmod_die "active module source changed: $zxmod_active_id"
         zxmod_module_tree="$ZXMOD_RUN_ROOT/modules/$zxmod_active_id/root/$zxmod_subtree"
         if [ -d "$zxmod_module_tree" ]; then
             zxmod_lower="$zxmod_module_tree:$zxmod_lower"

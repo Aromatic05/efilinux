@@ -54,9 +54,12 @@ test "$(/usr/bin/zxmod-module-command)" = zxmod-module-command ||
 /usr/bin/awk -F '\t' '$1 == "sample" { found=1 } END { exit !found }'     /run/zxmod/active || fail module-active-record
 touch /usr/share/zxmod-test/must-not-write 2>/dev/null && fail usr-view-writable
 exec 3</usr/share/zxmod-test/held.txt || fail held-fd-open
-if zxmod load /mnt/conflict.zxm; then
-    fail conflicting-module-loaded
-fi
+zxmod load /mnt/conflict.zxm || fail override-module-load
+test "$(cat /usr/share/zxmod-test/held.txt)" = 'later module override' ||
+    fail override-module-content
+zxmod unload conflict || fail override-module-unload
+test "$(cat /usr/share/zxmod-test/held.txt)" = 'held module payload' ||
+    fail original-module-restored
 zxmod unload sample || fail module-unload
 test ! -e /usr/bin/zxmod-module-command || fail module-path-remains-after-unload
 IFS= read -r held_payload <&3 || fail held-fd-read
