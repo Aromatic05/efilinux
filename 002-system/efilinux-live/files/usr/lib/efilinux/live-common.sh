@@ -30,6 +30,11 @@ live_mount_virtual_filesystems() {
     mkdir -p /proc /sys /dev /dev/pts /dev/shm /run
     mountpoint -q /proc || mount -t proc proc /proc
     mountpoint -q /sys || mount -t sysfs sysfs /sys
+    if [ -d /sys/firmware/efi ]; then
+        mkdir -p /sys/firmware/efi/efivars
+        mountpoint -q /sys/firmware/efi/efivars ||
+            mount -t efivarfs -o nosuid,nodev,noexec efivarfs /sys/firmware/efi/efivars
+    fi
     mountpoint -q /dev || mount -t devtmpfs devtmpfs /dev
     mkdir -p /dev/pts /dev/shm
     mountpoint -q /dev/pts || \
